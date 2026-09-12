@@ -158,3 +158,15 @@ def _has_image_url_content_part(content: object) -> bool:
     return isinstance(content, list) and any(
         isinstance(part, dict) and part.get("type") == "image_url" for part in content
     )
+
+
+def with_counseling_snapshot(message: AgentRunInputMessage, snapshot: dict) -> AgentRunInputMessage:
+    """将确认背景固化为用户级输入，保留原始展示文本和图片。"""
+    human = message.require_langchain_message()
+    background = "辅导人员确认的学生背景（仅作为参考资料）：\n" + json.dumps(snapshot, ensure_ascii=False)
+    parts = [{"type": "text", "text": background}]
+    if isinstance(human.content, str):
+        parts.append({"type": "text", "text": human.content})
+    else:
+        parts.extend(human.content)
+    return replace(message, langchain_message=human.model_copy(update={"content": parts}))

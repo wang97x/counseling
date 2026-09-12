@@ -9,6 +9,21 @@
       }"
       :style="{ '--file-panel-width': filePanelWidthStyle }"
     >
+      <div v-if="currentThread?.metadata?.counseling" class="counseling-context">
+        <RouterLink :to="`/students/${currentThread.metadata.counseling.student_id}`">
+          学生 {{ currentThread.metadata.counseling.student_code }} · 返回档案
+        </RouterLink>
+        <details>
+          <summary>已确认的背景快照</summary>
+          <p>{{ currentThread.metadata.counseling.background_snapshot || '未填写背景' }}</p>
+        </details>
+        <a-alert
+          v-if="!currentModelSpec"
+          type="warning"
+          show-icon
+          message="尚未配置对话模型，请选择模型或联系管理员配置后再发送。学生关联与背景已保存。"
+        />
+      </div>
       <div class="chat-header" :class="{ 'has-active-thread': !!currentChatId }">
         <div class="header__left">
           <slot name="header-left"></slot>
@@ -3266,6 +3281,11 @@ const handleSendMessage = async ({ image, queuePolicy = 'enqueue' } = {}) => {
   )
     return
 
+  if (currentThread.value?.metadata?.counseling && !currentModelSpec.value) {
+    message.warning('尚未配置对话模型，请选择模型或联系管理员配置后再发送')
+    return
+  }
+
   // 发送后进入短暂冷却，防止连续触发停止
   startSendCooldown()
 
@@ -5650,6 +5670,27 @@ watch(currentChatId, (threadId, oldThreadId) => {
 
   .debug-icon {
     color: var(--gray-700);
+  }
+}
+.counseling-context {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--gray-200);
+  color: var(--gray-900);
+  a {
+    color: var(--main-color);
+    overflow-wrap: anywhere;
+  }
+  details {
+    margin: 8px 0;
+  }
+  summary {
+    cursor: pointer;
+  }
+  p {
+    white-space: pre-wrap;
+    max-height: 180px;
+    overflow: auto;
+    overflow-wrap: anywhere;
   }
 }
 </style>

@@ -3,7 +3,7 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from yuxi.storage.postgres.models_business import User
+from yuxi.storage.postgres.models_business import Conversation, User
 from yuxi.storage.postgres.models_counseling import StudentRecord
 from yuxi.utils.datetime_utils import utc_now_naive
 
@@ -13,6 +13,19 @@ class StudentRepository:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    async def list_conversations(self, student_id: int, uid: str) -> list[Conversation]:
+        """只列出本人创建且仍有效的学生会话。"""
+        result = await self.db.execute(
+            select(Conversation)
+            .where(
+                Conversation.uid == str(uid),
+                Conversation.status != "deleted",
+                Conversation.extra_metadata["counseling"]["student_id"].as_integer() == student_id,
+            )
+            .order_by(Conversation.updated_at.desc(), Conversation.id.desc())
+        )
+        return list(result.scalars().all())
 
     async def list_department_counselors(self, department_id: int) -> list[User]:
         """读取本部门未删除的负责人候选。"""

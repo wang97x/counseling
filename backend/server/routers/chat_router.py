@@ -169,6 +169,8 @@ class ThreadCreate(BaseModel):
     agent_id: str
     metadata: dict | None = None
     project_id: str | None = None
+    student_id: int | None = Field(None, gt=0)
+    background_snapshot: str | None = Field(None, max_length=10000)
 
 
 class ThreadResponse(BaseModel):
@@ -294,6 +296,8 @@ async def create_thread(
         title=thread.title,
         metadata=thread.metadata,
         project_id=thread.project_id,
+        student_id=thread.student_id,
+        background_snapshot=thread.background_snapshot,
         db=db,
         current_uid=str(current_user.uid),
     )

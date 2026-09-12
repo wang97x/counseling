@@ -6,13 +6,24 @@ import { message } from 'ant-design-vue'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import { counselingApi } from '@/apis/counseling_api'
 import { useUserStore } from '@/stores/user'
+import { useAgentStore } from '@/stores/agent'
 
+const agentStore = useAgentStore()
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const canAssign = computed(() => userStore.businessRoles.includes('business_admin'))
 const canManage = computed(() => userStore.businessRoles.includes('counselor'))
 const studentId = computed(() => route.params.studentId)
+const conversations = ref([])
+const conversationsError = ref('')
+const conversationsLoading = ref(false)
+const conversationOpen = ref(false)
+const creatingConversation = ref(false)
+const conversationError = ref('')
+const conversationForm = ref(null)
+const conversationAgents = computed(() => agentStore.agents.filter((item) => !item.is_subagent))
+let detailVersion = 0
 const students = ref([])
 const counselors = ref([])
 const detail = ref(null)
@@ -65,19 +76,85 @@ async function loadCounselors() {
 }
 
 async function loadDetail(id) {
+  const version = ++detailVersion
   loading.value = true
   error.value = ''
   detail.value = null
+  conversations.value = []
+  conversationOpen.value = false
   try {
-    detail.value = await counselingApi.getStudent(id)
+    const result = await counselingApi.getStudent(id)
+    if (version !== detailVersion || String(studentId.value) !== String(id)) return
+    detail.value = result
     editForm.value = {
-      background_summary: detail.value.background_summary,
-      status: detail.value.status
+      background_summary: result.background_summary,
+      status: result.status
+    }
+    void loadConversations(id)
+  } catch (cause) {
+    if (version === detailVersion) error.value = cause.message || '加载档案详情失败'
+  } finally {
+    if (version === detailVersion) loading.value = false
+  }
+}
+
+async function loadConversations(id) {
+  const version = detailVersion
+  conversationsLoading.value = true
+  conversationsError.value = ''
+  try {
+    const result = await counselingApi.listConversations(id)
+    if (version === detailVersion) conversations.value = result
+  } catch (cause) {
+    if (version === detailVersion) conversationsError.value = cause.message || '加载关联会话失败'
+  } finally {
+    if (version === detailVersion) conversationsLoading.value = false
+  }
+}
+
+async function openConversation() {
+  const id = detail.value.id
+  conversationError.value = ''
+  conversationForm.value = {
+    request_id: crypto.randomUUID(),
+    student_id: id,
+    background_snapshot: editForm.value.background_summary,
+    title: `学生 ${detail.value.student_code} · 辅导会话`,
+    agent_id: agentStore.selectedAgentId || undefined
+  }
+  conversationOpen.value = true
+  try {
+    await agentStore.fetchAgents()
+    if (conversationForm.value?.student_id !== id) return
+    if (!conversationAgents.value.some((item) => item.id === conversationForm.value.agent_id)) {
+      conversationForm.value.agent_id = conversationAgents.value[0]?.id
     }
   } catch (cause) {
-    error.value = cause.message || '加载档案详情失败'
+    if (conversationForm.value?.student_id === id) {
+      conversationError.value = cause.message || '加载智能体失败'
+    }
+  }
+}
+
+async function createConversation() {
+  const payload = { ...conversationForm.value }
+  if (!payload.agent_id) {
+    conversationError.value = '请选择可用的智能体'
+    return
+  }
+  creatingConversation.value = true
+  conversationError.value = ''
+  try {
+    const thread = await counselingApi.createConversation(payload)
+    if (String(studentId.value) !== String(payload.student_id)) return
+    conversationOpen.value = false
+    await router.push({ name: 'AgentCompWithThreadId', params: { thread_id: thread.id } })
+  } catch (cause) {
+    if (String(studentId.value) === String(payload.student_id)) {
+      conversationError.value = cause.message || '创建辅导会话失败，请重试'
+    }
   } finally {
-    loading.value = false
+    creatingConversation.value = false
   }
 }
 
@@ -114,12 +191,16 @@ async function createStudent() {
 }
 
 async function saveDetail() {
+  const id = studentId.value
+  const version = detailVersion
   saving.value = true
   try {
-    detail.value = await counselingApi.updateStudent(studentId.value, editForm.value)
+    const result = await counselingApi.updateStudent(id, { ...editForm.value })
+    if (version !== detailVersion) return
+    detail.value = result
     message.success('档案已保存')
   } catch (cause) {
-    message.error(cause.message || '保存档案失败')
+    if (version === detailVersion) message.error(cause.message || '保存档案失败')
   } finally {
     saving.value = false
   }
@@ -130,6 +211,9 @@ watch(
   (id) => {
     if (id) void loadDetail(id)
     else {
+      detailVersion++
+      detail.value = null
+      conversationOpen.value = false
       void loadStudents()
       void loadCounselors()
     }
@@ -201,6 +285,34 @@ watch(
             </a-form-item>
             <a-button type="primary" html-type="submit" :loading="saving">保存档案</a-button>
           </a-form>
+          <section class="student-conversations" aria-label="关联会话">
+            <div class="detail-heading">
+              <h3>关联会话</h3>
+              <a-button :disabled="saving || creatingConversation" @click="openConversation"
+                >新建辅导会话</a-button
+              >
+            </div>
+            <a-alert v-if="conversationsError" type="error" :message="conversationsError">
+              <template #description
+                ><a-button @click="loadConversations(studentId)">重试</a-button></template
+              >
+            </a-alert>
+            <a-skeleton v-else-if="conversationsLoading" active />
+            <a-empty
+              v-else-if="!conversations.length"
+              description="暂无关联会话，确认背景后即可新建"
+            />
+            <ul v-else class="conversation-list">
+              <li v-for="conversation in conversations" :key="conversation.id">
+                <RouterLink
+                  :to="{ name: 'AgentCompWithThreadId', params: { thread_id: conversation.id } }"
+                >
+                  {{ conversation.title }}
+                </RouterLink>
+                <span>{{ new Date(conversation.created_at).toLocaleString() }}</span>
+              </li>
+            </ul>
+          </section>
         </section>
       </template>
       <template v-else>
@@ -262,6 +374,47 @@ watch(
         </div>
       </template>
     </main>
+
+    <a-modal
+      v-model:open="conversationOpen"
+      title="确认学生背景并新建会话"
+      ok-text="确认并进入会话"
+      :confirm-loading="creatingConversation"
+      :cancel-button-props="{ disabled: creatingConversation }"
+      :closable="!creatingConversation"
+      :mask-closable="!creatingConversation"
+      @ok="createConversation"
+    >
+      <template v-if="conversationForm">
+        <p>会话固定关联学生 {{ detail?.student_code }}。以下背景仅保存到本次会话，不会修改档案。</p>
+        <a-form layout="vertical">
+          <a-form-item label="智能体" required>
+            <a-select
+              v-model:value="conversationForm.agent_id"
+              :disabled="creatingConversation"
+              placeholder="请选择智能体"
+            >
+              <a-select-option
+                v-for="agent in conversationAgents"
+                :key="agent.id"
+                :value="agent.id"
+                >{{ agent.name || agent.id }}</a-select-option
+              >
+            </a-select>
+          </a-form-item>
+          <a-form-item label="确认背景快照">
+            <a-textarea
+              v-model:value="conversationForm.background_snapshot"
+              :disabled="creatingConversation"
+              :rows="7"
+              :maxlength="10000"
+              show-count
+            />
+          </a-form-item>
+        </a-form>
+        <a-alert v-if="conversationError" type="error" show-icon :message="conversationError" />
+      </template>
+    </a-modal>
 
     <a-modal
       v-model:open="createOpen"
@@ -393,6 +546,25 @@ watch(
 }
 .status-select {
   width: 180px;
+}
+.student-conversations {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--gray-200);
+}
+.conversation-list {
+  list-style: none;
+  padding: 0;
+  li {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--gray-100);
+  }
+  span {
+    display: block;
+    margin-top: 4px;
+    color: var(--gray-500);
+    font-size: 12px;
+  }
 }
 .counselor-error {
   margin-top: 8px;

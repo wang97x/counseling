@@ -1,7 +1,18 @@
 """真实 HTTP、PostgreSQL 学生档案归属和迁移测试。"""
 
 import os
+import shutil
+import json
 import uuid
+from unittest.mock import AsyncMock, patch
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from yuxi.services import agent_request_queue_service as queue_service
+from yuxi.services.input_message_service import build_chat_input_message
+from yuxi.storage.postgres.models_business import AgentRun, AgentRunRequest, Message
+from yuxi.utils.datetime_utils import utc_now_naive
+from yuxi.workspace.paths import global_user_data_dir
 
 import asyncpg
 import pytest
@@ -126,11 +137,158 @@ async def test_student_owner_and_manager_access_are_isolated(test_client):
         assert (
             await conn.fetchval("SELECT background_summary FROM counseling_students WHERE id = $1", student_id)
         ) == "虚构背景，仅测试隔离"
+
+        agent_slug = f"student-agent-{suffix}"
+        agent = await test_client.post(
+            "/api/agent", headers=owner, json={"name": "虚构辅导测试", "slug": agent_slug, "backend_id": "ChatbotAgent"}
+        )
+        assert agent.status_code == 200, agent.text
+        second = await test_client.post(
+            "/api/counseling/students", headers=manager, json={"student_code": "S-002", "counselor_id": owner_id}
+        )
+        assert second.status_code == 201, second.text
+        second_id = second.json()["id"]
+        payload = {
+            "agent_id": agent_slug,
+            "request_id": uuid.uuid4().hex,
+            "student_id": student_id,
+            "background_snapshot": "人工确认的虚构背景",
+        }
+        created_thread = await test_client.post("/api/chat/thread", headers=owner, json=payload)
+        assert created_thread.status_code == 200, created_thread.text
+        thread = created_thread.json()
+        snapshot = {"student_id": student_id, "student_code": "S-001", "background_snapshot": "人工确认的虚构背景"}
+        assert thread["metadata"]["counseling"] == snapshot
+        repeated = await test_client.post("/api/chat/thread", headers=owner, json=payload)
+        assert repeated.status_code == 200 and repeated.json()["id"] == thread["id"]
+        for changes in ({"student_id": second_id}, {"background_snapshot": "另一份背景"}):
+            conflict = await test_client.post("/api/chat/thread", headers=owner, json={**payload, **changes})
+            assert conflict.status_code == 409, conflict.text
+        for changes in ({"student_id": second_id}, {"metadata": {"counseling": snapshot}}):
+            denied = await test_client.put(f"/api/chat/thread/{thread['id']}", headers=owner, json=changes)
+            assert denied.status_code == 422, denied.text
+        forged = await test_client.post(
+            "/api/chat/thread", headers=owner, json={"agent_id": agent_slug, "metadata": {"counseling": snapshot}}
+        )
+        assert forged.status_code == 400, forged.text
+        missing_confirmation = await test_client.post(
+            "/api/chat/thread", headers=owner, json={"agent_id": agent_slug, "student_id": student_id}
+        )
+        assert missing_confirmation.status_code == 422
+        for headers in (other, manager, tech, foreign_manager, no_role):
+            denied = await test_client.post("/api/chat/thread", headers=headers, json=payload)
+            assert denied.status_code == 404, denied.text
+            denied = await test_client.get(f"/api/chat/thread/{thread['id']}/history", headers=headers)
+            assert denied.status_code == 404, denied.text
+            denied = await test_client.get(f"/api/counseling/students/{student_id}/conversations", headers=headers)
+            assert denied.status_code in {403, 404}, denied.text
+        await test_client.put(
+            f"/api/counseling/students/{student_id}",
+            headers=owner,
+            json={"background_summary": "档案后续变化", "status": "active"},
+        )
+        history = await test_client.get(f"/api/chat/thread/{thread['id']}/history", headers=owner)
+        assert history.status_code == 200, history.text
+        assert history.json()["thread"]["metadata"]["counseling"] == snapshot
+        listed = await test_client.get(f"/api/counseling/students/{student_id}/conversations", headers=owner)
+        assert [item["id"] for item in listed.json()] == [thread["id"]]
+        listed = await test_client.get(f"/api/counseling/students/{second_id}/conversations", headers=owner)
+        assert listed.json() == []
+        failed_run = await test_client.post(
+            "/api/agent/runs",
+            headers=owner,
+            json={
+                "agent_slug": agent_slug,
+                "thread_id": thread["id"],
+                "query": "无模型测试",
+                "model_spec": "missing-counseling-provider/model",
+            },
+        )
+        assert failed_run.status_code == 422, failed_run.text
+        assert "模型" in failed_run.text
+        persisted_metadata = await conn.fetchval(
+            "SELECT extra_metadata FROM conversations WHERE thread_id = $1", thread["id"]
+        )
+        assert json.loads(persisted_metadata)["counseling"] == snapshot
+        assert (
+            await conn.fetchval("SELECT COUNT(*) FROM agent_runs WHERE conversation_thread_id = $1", thread["id"]) == 0
+        )
+        engine = create_async_engine(os.environ["POSTGRES_URL"])
+        request_id = uuid.uuid4().hex
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as db:
+                # 只隔离模型目录解析；接入、消息、请求和 Run 使用真实 PostgreSQL。
+                with patch.object(
+                    queue_service, "resolve_agent_run_config", AsyncMock(return_value=("test:model", "auto"))
+                ):
+                    result = await queue_service.intake_request(
+                        db=db,
+                        request_id=request_id,
+                        uid=thread["uid"],
+                        agent_slug=agent_slug,
+                        thread_id=thread["id"],
+                        input_message=build_chat_input_message("当前问题"),
+                        agent_item=None,
+                        agent_backend=None,
+                        meta={"counseling": {"student_id": second_id, "background_snapshot": "伪造"}},
+                    )
+                run = await db.get(AgentRun, result.run_id)
+                assert run is not None
+                assert run.input_payload["counseling"] == snapshot
+                # 本测试不向 worker 发布任务，同事务结束测试运行，避免留下待执行任务。
+                run.status = "cancelled"
+                run.finished_at = utc_now_naive()
+                await db.commit()
+            async with async_sessionmaker(engine)() as db:
+                request = await db.scalar(select(AgentRunRequest).where(AgentRunRequest.request_id == request_id))
+                persisted_input = await db.get(Message, request.input_message_id)
+                assert request.input_payload["counseling"] == snapshot
+                assert persisted_input.content == "当前问题"
+                model_input = persisted_input.extra_metadata["raw_message"]["content"]
+                assert "人工确认的虚构背景" in model_input[0]["text"]
+                assert "档案后续变化" not in model_input[0]["text"]
+                assert "伪造" not in model_input[0]["text"]
+        finally:
+            await engine.dispose()
+        await test_client.delete(f"/api/chat/thread/{thread['id']}", headers=owner)
+        listed = await test_client.get(f"/api/counseling/students/{student_id}/conversations", headers=owner)
+        assert listed.json() == []
     finally:
+        await conn.execute(
+            "UPDATE messages SET run_id = NULL WHERE conversation_id IN "
+            "(SELECT id FROM conversations WHERE uid IN (SELECT uid FROM users WHERE id = ANY($1::integer[])))",
+            users,
+        )
+        for table in ("agent_run_requests", "agent_runs"):
+            await conn.execute(
+                f"DELETE FROM {table} WHERE uid IN (SELECT uid FROM users WHERE id = ANY($1::integer[]))", users
+            )
+        await conn.execute(
+            "DELETE FROM messages WHERE conversation_id IN "
+            "(SELECT id FROM conversations WHERE uid IN (SELECT uid FROM users WHERE id = ANY($1::integer[])))",
+            users,
+        )
+        await conn.execute(
+            "DELETE FROM conversation_stats WHERE conversation_id IN "
+            "(SELECT id FROM conversations WHERE uid IN (SELECT uid FROM users WHERE id = ANY($1::integer[])))",
+            users,
+        )
+        await conn.execute(
+            "DELETE FROM conversations WHERE uid IN (SELECT uid FROM users WHERE id = ANY($1::integer[]))", users
+        )
+        await conn.execute(
+            "DELETE FROM projects WHERE uid IN (SELECT uid FROM users WHERE id = ANY($1::integer[]))", users
+        )
+        await conn.execute("DELETE FROM agents WHERE slug = $1", f"student-agent-{suffix}")
         await conn.execute("DELETE FROM counseling_students WHERE department_id = ANY($1::integer[])", departments)
         await conn.execute("DELETE FROM users WHERE id = ANY($1::integer[])", users)
         await conn.execute("DELETE FROM departments WHERE id = ANY($1::integer[])", departments)
         await conn.close()
+        owner_uid = f"student_{suffix}_1"
+        test_directory = global_user_data_dir(owner_uid)
+        assert test_directory.name == owner_uid and test_directory.parent.name == "shared"
+        if test_directory.exists():
+            shutil.rmtree(test_directory)
 
 
 async def test_student_migration_is_idempotent_and_checks_status():

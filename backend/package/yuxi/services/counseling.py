@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from yuxi.permissions.business_roles import BusinessCapability, resolve_business_capabilities
 from yuxi.repositories.counseling import StudentRepository
 from yuxi.storage.postgres.models_business import User
+from yuxi.utils.datetime_utils import format_utc_datetime
 
 
 def _metadata(record) -> dict:
@@ -86,3 +87,18 @@ async def update_student(db: AsyncSession, actor: User, student_id: int, backgro
     result = _details(record)
     await db.commit()
     return result
+
+
+async def list_student_conversations(db: AsyncSession, actor: User, student_id: int) -> list[dict]:
+    """校验档案归属后返回可重开的会话元数据。"""
+    await get_student(db, actor, student_id)
+    conversations = await StudentRepository(db).list_conversations(student_id, actor.uid)
+    return [
+        {
+            "id": item.thread_id,
+            "title": item.title,
+            "agent_id": item.agent_id,
+            "created_at": format_utc_datetime(item.created_at),
+        }
+        for item in conversations
+    ]

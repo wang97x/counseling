@@ -94,3 +94,16 @@ async def update_student_route(
         return await update_student(db, actor, student_id, payload.background_summary, payload.status)
     except (PermissionError, LookupError) as exc:
         _raise_counseling_error(exc)
+
+
+@counseling.get("/{student_id}/conversations")
+async def list_student_conversations_route(
+    student_id: int, actor: User = Depends(get_required_user), db: AsyncSession = Depends(get_db)
+):
+    """负责人从档案重开本人关联会话。"""
+    from yuxi.services.counseling import list_student_conversations
+
+    try:
+        return await list_student_conversations(db, actor, student_id)
+    except (PermissionError, LookupError) as exc:
+        _raise_counseling_error(exc)
