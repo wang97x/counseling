@@ -61,7 +61,7 @@ PostgreSQL 保存请求、运行、消息、知识库元数据和 LangGraph chec
 
 开发环境和单机部署使用 Docker Compose，默认启动知识库、图谱和评估所需的依赖。应用通过 `sandbox-provisioner` 访问动态沙盒，底层可以使用 Docker 或 Kubernetes。`memory` 仅用于测试，不提供真实隔离。
 
-开发环境和默认服务拓扑以仓库根目录的 [ARCHITECTURE.md](https://github.com/xerrors/Yuxi/blob/main/ARCHITECTURE.md) 与 [docker-compose.yml](https://github.com/xerrors/Yuxi/blob/main/docker-compose.yml) 为准。
+开发环境和默认服务拓扑以仓库根目录的 [ARCHITECTURE.md](https://github.com/wang97x/counseling/blob/main/ARCHITECTURE.md) 与 [docker-compose.yml](https://github.com/wang97x/counseling/blob/main/docker-compose.yml) 为准。
 
 ## 技术栈
 

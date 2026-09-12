@@ -11,7 +11,6 @@
       <a-result status="error" :title="error.title" :sub-title="error.message">
         <template #extra>
           <a-button type="primary" @click="retryLoad">重试</a-button>
-          <a-button :href="docsUrl" target="_blank" rel="noopener noreferrer">常见问题</a-button>
         </template>
       </a-result>
     </div>
@@ -116,7 +115,7 @@
         <div class="header-actions">
           <a
             class="github-link"
-            href="https://github.com/xerrors/Yuxi"
+            href="https://github.com/wang97x/counseling"
             target="_blank"
             rel="noopener noreferrer"
             aria-label="GitHub"
@@ -151,15 +150,6 @@
               <span>开始体验</span>
               <ArrowRight :size="18" />
             </button>
-            <a
-              class="button-base secondary"
-              :href="docsUrl"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <BookText :size="18" />
-              <span>查看文档</span>
-            </a>
           </div>
         </div>
       </main>
@@ -182,12 +172,11 @@ import { useUserStore } from '@/stores/user'
 import { useInfoStore } from '@/stores/info'
 import { healthApi } from '@/apis/system_api'
 import UserInfoComponent from '@/components/UserInfoComponent.vue'
-import { ArrowRight, BookText } from '@lucide/vue'
+import { ArrowRight } from '@lucide/vue'
 
 const router = useRouter()
 const userStore = useUserStore()
 const infoStore = useInfoStore()
-const docsUrl = 'https://xerrors.github.io/Yuxi/'
 
 // 加载状态
 const isLoading = ref(true)
@@ -699,24 +688,6 @@ onUnmounted(() => {
   }
 }
 
-// 次按钮：玻璃质感，融入流光背景
-.button-base.secondary {
-  background: var(--color-trans-light);
-  backdrop-filter: blur(8px);
-  color: var(--main-700);
-  border-color: var(--main-40);
-
-  :deep(svg) {
-    color: var(--main-600);
-  }
-
-  &:hover {
-    background: var(--main-30);
-    border-color: var(--main-200);
-    color: var(--main-800);
-  }
-}
-
 // 页脚
 .footer {
   position: relative;
@@ -815,19 +786,6 @@ onUnmounted(() => {
   }
   to {
     transform: translate(10px, 14px);
-  }
-}
-
-// 暗色模式：文字与边框颜色随 token 反转自动适配，只需给次按钮换深色玻璃底
-// 注意：:global 包裹嵌套块会被 scoped 编译静默丢弃，必须用 :root.dark 直接嵌套；
-// 暗色下 --light-*/--dark-* 名称互换，--dark-10 才是白色 10% 淡色
-:root.dark {
-  .button-base.secondary {
-    background: var(--dark-10);
-
-    &:hover {
-      background: var(--dark-25);
-    }
   }
 }
 

@@ -23,9 +23,9 @@ Compose 会按 project 自动隔离容器、网络、命名 volume 和本地镜�
 创建 worktree，并复用现有开发 `.env` 中的 API Key：
 
 ```bash
-git worktree add ../Yuxi-feature-a -b feat/example upstream/main
-cd ../Yuxi-feature-a
-cp ../Yuxi/.env .env
+git worktree add ../counseling-feature-a -b feat/example main
+cd ../counseling-feature-a
+cp ../counseling/.env .env
 chmod 600 .env
 ```
 

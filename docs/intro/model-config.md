@@ -29,7 +29,7 @@ docker compose up -d --force-recreate api worker
 
 ## 内置供应商
 
-系统启动时会同步内置供应商模板。模板提供供应商 ID、API 地址、凭证变量名和模型发现地址；是否可用取决于凭证、供应商状态和已启用模型。页面列出的内容是当前实例的实际配置，完整模板由 [`builtin.py`](https://github.com/xerrors/Yuxi/blob/main/backend/package/yuxi/models/providers/builtin.py) 维护。
+系统启动时会同步内置供应商模板。模板提供供应商 ID、API 地址、凭证变量名和模型发现地址；是否可用取决于凭证、供应商状态和已启用模型。页面列出的内容是当前实例的实际配置，完整模板由 [`builtin.py`](https://github.com/wang97x/counseling/blob/main/backend/package/yuxi/models/providers/builtin.py) 维护。
 
 内置供应商模板的完整映射如下。表中类型是模板预置或当前常见用途；模型仍需在供应商中启用，实际可用性以当前实例配置和供应商接口为准。
 

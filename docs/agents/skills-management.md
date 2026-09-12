@@ -151,4 +151,4 @@ Skill 的选择影响 Prompt 和工具激活；共享投影按用户授权集合
 - 脚本按不可信输入处理，不读取或输出运行环境中的秘密。
 - 修改共享 Skill 的依赖、范围或文件后，用一个真实 Agent Run 验证模型可见工具和最终产物。
 
-实现入口见 [Skill 服务](https://github.com/xerrors/Yuxi/blob/main/backend/package/yuxi/agents/skills/service.py)、[运行时解析](https://github.com/xerrors/Yuxi/blob/main/backend/package/yuxi/agents/skills/runtime.py) 和 [Skills middleware](https://github.com/xerrors/Yuxi/blob/main/backend/package/yuxi/agents/middlewares/skills.py)。
+实现入口见 [Skill 服务](https://github.com/wang97x/counseling/blob/main/backend/package/yuxi/agents/skills/service.py)、[运行时解析](https://github.com/wang97x/counseling/blob/main/backend/package/yuxi/agents/skills/runtime.py) 和 [Skills middleware](https://github.com/wang97x/counseling/blob/main/backend/package/yuxi/agents/middlewares/skills.py)。

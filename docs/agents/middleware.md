@@ -73,4 +73,4 @@ Summary 在文件和 Skills 等中间件之后运行。请求达到唯一压力�
 
 先说明它要改变哪一条边界：Prompt、模型调用、工具调用、文件访问、state 或观测。资源筛选和权限收敛放在 Graph 创建前；文件读写和工具结果卸载优先复用现有 filesystem middleware；新增模型可见输入或副作用时补充对应测试和失败案例。
 
-实现入口：[ChatbotAgent graph](https://github.com/xerrors/Yuxi/blob/main/backend/package/yuxi/agents/buildin/chatbot/graph.py)、[中间件目录](https://github.com/xerrors/Yuxi/tree/main/backend/package/yuxi/agents/middlewares)。
+实现入口：[ChatbotAgent graph](https://github.com/wang97x/counseling/blob/main/backend/package/yuxi/agents/buildin/chatbot/graph.py)、[中间件目录](https://github.com/wang97x/counseling/tree/main/backend/package/yuxi/agents/middlewares)。

@@ -4,7 +4,7 @@
 
 知伴最小业务版继续补学生档案页面、团队与个人知识库及会话背景关联，真实模型联调安排在业务版验收之后。范围、取舍和分批验收见[实施提案](./decisions/proposed/2026-09-12-counseling-minimal-release.md)。当前已有基础品牌展示、可兼任的业务角色与学生档案存储和接口；辅导对话、档案页面与知识库业务流程仍待实现。
 
-这里记录尚未完成的方向，不代表已经实现或一定会在某个版本发布。需求和优先级会根据 Issue、讨论和维护资源调整；欢迎在 [GitHub Issues](https://github.com/xerrors/Yuxi/issues) 提交建议。
+这里记录尚未完成的方向，不代表已经实现或一定会在某个版本发布。需求和优先级会根据 Issue、讨论和维护资源调整；欢迎在 [GitHub Issues](https://github.com/wang97x/counseling/issues) 提交建议。
 
 ## 计划中的不兼容方向
 
@@ -31,7 +31,7 @@
 ## 其他
 
 - 继续完善基于 DeepAgents 文件后端的 Memory 方案，并明确它与现有用户级 Memory 的边界。
-- 改进 `ask_user_question`：支持较长文本回答，并让流式输出期间的聊天区域保持跟随最新内容（[#753](https://github.com/xerrors/Yuxi/issues/753)）。
+- 改进 `ask_user_question`：支持较长文本回答，并让流式输出期间的聊天区域保持跟随最新内容。
 
 ## 已知问题
 

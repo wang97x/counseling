@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { withBase } from 'vitepress'
 
-const GITHUB = 'https://github.com/xerrors/Yuxi'
+const GITHUB = 'https://github.com/wang97x/counseling'
 const DEMO = 'https://www.bilibili.com/video/BV1erE26iEgv/'
 const OSS_ASSET_BASE = 'https://xerrors.oss-cn-shanghai.aliyuncs.com/github/yuxi/docs/home'
 const MASCOT_IMAGE = `${OSS_ASSET_BASE}/yuxi-mascot-cutout.png`
@@ -688,10 +688,9 @@ onBeforeUnmount(() => {
               <span>Terminal</span>
               <span>Docker Compose</span>
             </div>
-            <pre><code><span># 获取当前发布版本</span>
-git clone --branch v0.7.3 --depth 1 \
-  https://github.com/xerrors/Yuxi.git
-cd Yuxi
+            <pre><code><span># 获取当前代码</span>
+git clone https://github.com/wang97x/counseling.git
+cd counseling
 
 <span># 初始化并启动</span>
 ./scripts/init.sh
@@ -715,7 +714,7 @@ docker compose up --build -d</code></pre>
             rel="noreferrer"
           >
             <img
-              src="https://contrib.rocks/image?repo=xerrors/Yuxi&max=60&columns=12"
+              src="https://contrib.rocks/image?repo=wang97x/counseling&max=60&columns=12"
               alt="Yuxi 贡献者头像墙"
               width="812"
               height="268"

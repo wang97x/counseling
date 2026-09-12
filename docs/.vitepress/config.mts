@@ -7,14 +7,11 @@ export default defineConfig({
   lang: 'zh-CN',
   title: "Yuxi",
   description: "Yuxi 是一个可私有部署的多租户知识智能体平台，统一 RAG、知识图谱、LangGraph 多智能体、MCP/Skills、沙盒与权限管理。",
-  base: '/Yuxi/',
+  base: '/counseling/',
   srcExclude: ['vibe/**'],
-  sitemap: {
-    hostname: 'https://xerrors.github.io/Yuxi/'
-  },
   head: [
-    ['link', { rel: 'icon', href: '/Yuxi/favicon.svg' }],
-    ['link', { rel: 'alternate icon', href: '/Yuxi/favicon.ico' }],
+    ['link', { rel: 'icon', href: '/counseling/favicon.svg' }],
+    ['link', { rel: 'alternate icon', href: '/counseling/favicon.ico' }],
     ['meta', { name: 'theme-color', content: '#F3BA32' }],
     ['meta', { name: 'keywords', content: 'Yuxi, AI Agent, RAG, knowledge graph, LangGraph, MCP, self-hosted, multi-agent, knowledge base' }],
     ['meta', { property: 'og:type', content: 'website' }],
@@ -45,7 +42,7 @@ export default defineConfig({
       { text: '快速开始', link: '/intro/quick-start' },
       { text: '智能体开发', link: '/agents/agents-config' },
       { text: '机制详解', link: '/mechanisms/' },
-      { text: 'English', link: 'https://github.com/xerrors/Yuxi/blob/main/README.en.md' }
+      { text: 'English', link: 'https://github.com/wang97x/counseling/blob/main/README.en.md' }
     ],
 
     sidebar: [
@@ -124,7 +121,7 @@ export default defineConfig({
     ],
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/xerrors/Yuxi' }
+      { icon: 'github', link: 'https://github.com/wang97x/counseling' }
     ],
 
     footer: {
@@ -133,7 +130,7 @@ export default defineConfig({
     },
 
     editLink: {
-      pattern: 'https://github.com/xerrors/Yuxi/edit/main/docs/:path',
+      pattern: 'https://github.com/wang97x/counseling/edit/main/docs/:path',
       text: '在 GitHub 上编辑此页'
     },
 

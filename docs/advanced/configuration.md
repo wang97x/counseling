@@ -22,7 +22,7 @@ docker compose up -d --force-recreate api worker
 
 ## 管理员系统配置
 
-管理员在“设置 → 基本设置”中修改系统配置。当前配置项由 [`options.py`](https://github.com/xerrors/Yuxi/blob/main/backend/package/yuxi/config/options.py) 定义，包含：
+管理员在“设置 → 基本设置”中修改系统配置。当前配置项由 [`options.py`](https://github.com/wang97x/counseling/blob/main/backend/package/yuxi/config/options.py) 定义，包含：
 
 - 默认对话模型、快速响应模型、嵌入模型和重排模型；
 - 默认 OCR 解析引擎。

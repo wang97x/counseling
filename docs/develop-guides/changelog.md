@@ -487,8 +487,8 @@ v0.7.2.beta1 包含不可逆的数据与文件布局迁移，主要影响历史�
 ## v0.4
 
 ### 新增
-- 新增对于上传附件的智能体中间件，详见[智能体配置文档](https://xerrors.github.io/Yuxi/agents/agents-config)
-- 新增多模态模型支持（当前仅支持图片），详见[智能体配置文档](https://xerrors.github.io/Yuxi/agents/agents-config)
+- 新增对于上传附件的智能体中间件，详见[智能体配置文档](../agents/agents-config.md)
+- 新增多模态模型支持（当前仅支持图片），详见[智能体配置文档](../agents/agents-config.md)
 - 新建 DeepAgents 智能体（深度分析智能体），支持 todo，files 等渲染，支持文件的下载。
 - 新增基于知识库文件生成思维导图功能（[#335](https://github.com/xerrors/Yuxi/pull/335#issuecomment-3530976425)）
 - 新增基于知识库文件生成示例问题功能（[#335](https://github.com/xerrors/Yuxi/pull/335#issuecomment-3530976425)）
@@ -496,10 +496,10 @@ v0.7.2.beta1 包含不可逆的数据与文件布局迁移，主要影响历史�
 - 新增自定义模型支持、新增 dashscope rerank/embeddings 模型的支持
 - 新增文档解析的图片支持，已支持 MinerU Officical、Docs、Markdown Zip格式
 - 新增暗色模式支持并调整整体 UI（[#343](https://github.com/xerrors/Yuxi/pull/343)）
-- 新增知识库评估功能，支持导入评估基准或者自动构建评估基准（目前仅支持Milvus类型知识库）详见[知识库评估文档](https://xerrors.github.io/Yuxi/intro/evaluation)
+- 新增知识库评估功能，支持导入评估基准或者自动构建评估基准（目前仅支持Milvus类型知识库）详见[知识库评估文档](../intro/evaluation.md)
 - 新增同名文件处理逻辑：遇到同名文件则在上传区域提示，是否删除旧文件
 - 新增生产环境部署脚本，固定 python 依赖版本，提升部署稳定性
-- 优化图谱可视化方式，统一图谱数据结构，统一使用基于 G6 的可视化方式，同时支持上传带属性的图谱文件，详见[知识库文档](https://xerrors.github.io/Yuxi/intro/knowledge-base)
+- 优化图谱可视化方式，统一图谱数据结构，统一使用基于 G6 的可视化方式，同时支持上传带属性的图谱文件，详见[知识库文档](../intro/knowledge-base.md)
 - 优化 DBManager / ConversationManager，支持异步操作
 - 优化 知识库详情页面，更加简洁清晰，增强文件下载功能
 

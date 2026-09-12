@@ -4,8 +4,8 @@
 
 ## 开始前
 
-- 先搜索 [Issues](https://github.com/xerrors/Yuxi/issues)，避免重复工作。
-- 较大的功能、公开接口、权限或架构变化，先在 Issue 或 [Discussions](https://github.com/xerrors/Yuxi/discussions) 讨论范围和方案。
+- 先搜索 [Issues](https://github.com/wang97x/counseling/issues)，避免重复工作。
+- 较大的功能、公开接口、权限或架构变化，先在 Issue 中讨论范围和方案。
 - 一个 PR 只解决一个明确问题，不混入无关重构、格式化或顺手优化。
 - 修改不熟悉的模块前，先阅读 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
@@ -50,5 +50,4 @@ git push -u origin docs/improve-guides
 
 ## 问题反馈
 
-- Bug 和功能建议：[GitHub Issues](https://github.com/xerrors/Yuxi/issues)
-- 方案讨论：[GitHub Discussions](https://github.com/xerrors/Yuxi/discussions)
+- Bug、功能建议和方案讨论：[GitHub Issues](https://github.com/wang97x/counseling/issues)

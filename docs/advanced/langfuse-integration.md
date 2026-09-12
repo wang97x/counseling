@@ -61,6 +61,6 @@ PostgreSQL 同时按 LangGraph lifecycle 保存可见 Model 与 Tool 调用的�
 
 ## 代码和测试入口
 
-- [Langfuse 服务](https://github.com/xerrors/Yuxi/blob/main/backend/package/yuxi/services/langfuse_service.py)
-- [反馈服务](https://github.com/xerrors/Yuxi/blob/main/backend/package/yuxi/services/feedback_service.py)
-- [Langfuse 单元测试](https://github.com/xerrors/Yuxi/blob/main/backend/test/unit/services/test_langfuse_service.py)
+- [Langfuse 服务](https://github.com/wang97x/counseling/blob/main/backend/package/yuxi/services/langfuse_service.py)
+- [反馈服务](https://github.com/wang97x/counseling/blob/main/backend/package/yuxi/services/feedback_service.py)
+- [Langfuse 单元测试](https://github.com/wang97x/counseling/blob/main/backend/test/unit/services/test_langfuse_service.py)

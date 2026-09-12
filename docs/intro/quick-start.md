@@ -12,14 +12,14 @@
 
 ## 1. 获取代码
 
-仓库当前默认配置对应 `v0.7.3`。用于重要数据前，请先阅读[生产部署与升级](../advanced/deployment.md)中的备份和迁移说明。
+下面克隆的是当前 `main` 分支。用于重要数据前，请先阅读[生产部署与升级](../advanced/deployment.md)中的备份和迁移说明。
 
 ```bash
-git clone --branch v0.7.3 --depth 1 https://github.com/xerrors/Yuxi.git
-cd Yuxi
+git clone https://github.com/wang97x/counseling.git
+cd counseling
 ```
 
-如果你要参与开发，可以改为克隆 `main`；开发分支的行为可能先于发布版本变化。
+参与开发时，从本地 `main` 创建功能分支；开发分支的行为可能先于发布版本变化。
 
 ## 2. 初始化环境
 

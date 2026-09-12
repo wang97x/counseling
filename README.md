@@ -2,15 +2,11 @@
 
 Yuxi 是一个可私有部署的多租户知识智能体平台。它把知识库检索、知识图谱、LangGraph 多智能体编排、MCP/Skills、沙盒工具和权限管理放进同一个工作区。
 
-[![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=ffffff)](https://github.com/xerrors/Yuxi/blob/main/docker-compose.yml)
-[![Release](https://img.shields.io/github/v/release/xerrors/Yuxi?color=046A82)](https://github.com/xerrors/Yuxi/releases/latest)
-[![License](https://img.shields.io/github/license/xerrors/Yuxi.svg?logo=github)](https://github.com/xerrors/Yuxi/blob/main/LICENSE)
-[![DeepWiki](https://img.shields.io/badge/DeepWiki-blue.svg)](https://deepwiki.com/xerrors/Yuxi)
+[![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=ffffff)](docker-compose.yml)
+[许可证](LICENSE)
 [![Bilibili](https://img.shields.io/badge/知识库演示-00A1D6?logo=bilibili&logoColor=fff)](https://www.bilibili.com/video/BV1erE26iEgv/)
 
-<a href="https://trendshift.io/repositories/24335" target="_blank"><img src="https://trendshift.io/api/badge/repositories/24335" alt="xerrors%2FYuxi | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
-
-[项目主页](https://xerrors.github.io/Yuxi/) · [快速开始](https://xerrors.github.io/Yuxi/intro/quick-start) · [演示视频](https://www.bilibili.com/video/BV1erE26iEgv/) · [版本记录](https://github.com/xerrors/Yuxi/releases) · [English](README.en.md)
+[项目仓库](https://github.com/wang97x/counseling) · [快速开始](docs/intro/quick-start.md) · [English](README.en.md)
 
 ## Yuxi 能做什么
 
@@ -42,8 +38,8 @@ Yuxi 面向需要自己掌握数据、模型和权限的团队：
 ### 1. 获取代码并初始化
 
 ```bash
-git clone --branch v0.7.3 --depth 1 https://github.com/xerrors/Yuxi.git
-cd Yuxi
+git clone https://github.com/wang97x/counseling.git
+cd counseling
 
 # Linux/macOS
 ./scripts/init.sh
@@ -73,13 +69,13 @@ curl --fail http://localhost:5050/api/system/ready
 
 ## 文档导航
 
-- [项目介绍](https://xerrors.github.io/Yuxi/intro/project-overview)：了解能力、概念和系统边界。
-- [快速开始](https://xerrors.github.io/Yuxi/intro/quick-start)：从零启动本地环境。
-- [模型配置](https://xerrors.github.io/Yuxi/intro/model-config)：接入聊天、嵌入和重排模型。
-- [知识库教程](https://xerrors.github.io/Yuxi/intro/knowledge-base)：创建知识库并验证检索。
-- [智能体开发](https://xerrors.github.io/Yuxi/agents/agents-config)：配置 Agent、工具和扩展。
-- [生产部署](https://xerrors.github.io/Yuxi/advanced/deployment)：部署、升级、备份和排障。
-- [版本变更记录](https://xerrors.github.io/Yuxi/develop-guides/changelog)：查看已发布变更。
+- [项目介绍](docs/intro/project-overview.md)：了解能力、概念和系统边界。
+- [快速开始](docs/intro/quick-start.md)：从零启动本地环境。
+- [模型配置](docs/intro/model-config.md)：接入聊天、嵌入和重排模型。
+- [知识库教程](docs/intro/knowledge-base.md)：创建知识库并验证检索。
+- [智能体开发](docs/agents/agents-config.md)：配置 Agent、工具和扩展。
+- [生产部署](docs/advanced/deployment.md)：部署、升级、备份和排障。
+- [版本变更记录](docs/develop-guides/changelog.md)：查看已发布变更。
 
 ## 能力展示
 
@@ -319,8 +315,8 @@ Yuxi 把知识进入系统、Agent 执行任务和团队治理放在一条完整
 
 感谢所有贡献者的支持！
 
-<a href="https://github.com/xerrors/Yuxi/contributors">
-  <img src="https://contrib.rocks/image?repo=xerrors/Yuxi&max=100&columns=10" />
+<a href="https://github.com/wang97x/counseling/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=wang97x/counseling&max=100&columns=10" />
 </a>
 
 ---
@@ -337,5 +333,3 @@ Yuxi 的实现和文档参考了以下优秀的开源项目：
 ## 许可证
 
 Yuxi 本体采用 MIT License，详见 [LICENSE](LICENSE)。Docker Compose 引入的第三方组件遵循各自的许可证；再分发和商业部署前，请按实际镜像版本核对上游许可和源码义务，相关边界见[生产部署指南](docs/advanced/deployment.md)。
-
-[![给 Yuxi 一个 Star](https://xerrors.oss-cn-shanghai.aliyuncs.com/posts/2026/08/20260818-184409-image-da91658b.png)](https://github.com/xerrors/Yuxi)

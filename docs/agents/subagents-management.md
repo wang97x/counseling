@@ -85,4 +85,4 @@
 
 子智能体的 `run_id`、状态、child thread 和产物会显示在主对话的状态面板中。运行中的子智能体通过对应事件流展示进度，完成后从持久化消息读取最终结果。Redis 原始事件只供运行基础设施和前端订阅，不作为主智能体的工具结果。
 
-实现入口见 [子智能体 middleware](https://github.com/xerrors/Yuxi/blob/main/backend/package/yuxi/agents/middlewares/subagent_task.py)、[SubAgentBackend](https://github.com/xerrors/Yuxi/blob/main/backend/package/yuxi/agents/buildin/subagent/graph.py) 和 [AgentRun 服务](https://github.com/xerrors/Yuxi/blob/main/backend/package/yuxi/services/agent_run_service.py)。
+实现入口见 [子智能体 middleware](https://github.com/wang97x/counseling/blob/main/backend/package/yuxi/agents/middlewares/subagent_task.py)、[SubAgentBackend](https://github.com/wang97x/counseling/blob/main/backend/package/yuxi/agents/buildin/subagent/graph.py) 和 [AgentRun 服务](https://github.com/wang97x/counseling/blob/main/backend/package/yuxi/services/agent_run_service.py)。

@@ -193,6 +193,6 @@ docker compose logs --tail=100 sandbox-provisioner
 ## 相关入口
 
 - [沙盒机制详解](../mechanisms/sandbox.md)
-- [Docker Compose](https://github.com/xerrors/Yuxi/blob/main/docker-compose.yml)
-- [生产 Compose](https://github.com/xerrors/Yuxi/blob/main/docker-compose.prod.yml)
-- [provisioner 实现](https://github.com/xerrors/Yuxi/blob/main/docker/sandbox_provisioner/app.py)
+- [Docker Compose](https://github.com/wang97x/counseling/blob/main/docker-compose.yml)
+- [生产 Compose](https://github.com/wang97x/counseling/blob/main/docker-compose.prod.yml)
+- [provisioner 实现](https://github.com/wang97x/counseling/blob/main/docker/sandbox_provisioner/app.py)
