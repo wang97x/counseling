@@ -4,6 +4,7 @@
 
 ## 开始前
 
+- 心理辅导二次开发先读[产品约束](./counseling-product-contract.md)，明确本次对应的 PRD 阶段、人工确认边界及尚未接入的能力；需求和演示不能作为完成证据。
 - 先搜索 [Issues](https://github.com/wang97x/counseling/issues)，确认问题没有重复。
 - 如果任务来自 GitHub Project，读完任务描述、关联 Issue、验收标准和讨论，并确认任务已经分配给你。
 - 需求会改变架构、权限、持久化、运行生命周期、公开接口或模型可见输入时，先在 Issue 中对齐方案，并建立 [工程决策记录](./decisions/README.md)。

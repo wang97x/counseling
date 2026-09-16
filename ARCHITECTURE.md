@@ -6,6 +6,8 @@
 
 ## 鸟瞰
 
+知伴心理辅导业务在下述 Yuxi 基础上扩展。产品目标、人工终审与交付优先级见[心理辅导产品开发约束](docs/develop-guides/counseling-product-contract.md)；本页只描述当前代码边界，PRD 中的目标能力不自动成为运行时事实。
+
 Yuxi 是一个面向 RAG、知识图谱和多智能体工作流的知识库平台。用户通过 Vue 前端管理智能体、知识库、模型、工具、Skills、MCP 与 SubAgents；前端通过 `/api` 调用 FastAPI；后端服务层协调 PostgreSQL、Redis、MinIO、Milvus、Neo4j、LangGraph 和沙盒。
 
 普通智能体请求先在 PostgreSQL 中保存为请求和消息，再立即派发或进入线程级 FIFO 队列。派发后的 `AgentRun` 通过 Redis/ARQ 交给独立 worker 执行，运行事件写入 Redis Stream，最终状态和业务记录写回 PostgreSQL，前端通过 SSE 消费排队与运行事件。
@@ -76,7 +78,9 @@ Yuxi 只交付完整知识能力路径。API 始终注册 `external_kb`、`knowl
 
 `/` 是公开首页；登录后的核心工作区是 `/agent`。`/extensions` 对所有登录用户开放，其中 Skills 对普通用户可见，知识库对管理员及具备个人或团队知识业务能力的用户开放，工具和 MCP 管理能力仅管理员可见；Dashboard 仅超级管理员可访问。知识库页面按共享配置分为“团队／我的”：个人库复用创建者及空共享范围，仅所有者可访问；团队库按读取范围授权，辅导人员只读，业务管理员维护获授权范围内的库。后端权限检查始终是最终边界，前端守卫只负责页面体验。
 
-`/students` 为辅导人员和业务管理员提供学生档案列表。业务管理员创建档案并指定初始负责人，负责人在详情中维护背景摘要与状态；部门和负责人可见性由后端档案接口执行。 负责人从详情确认背景后创建辅导会话，复用原对话页。Conversation 的服务端保留 metadata 固定学生及确认背景；档案编辑不改变已有快照，普通请求接入时将快照固化到 Request、Run 和用户级模型输入。
+`/students` 为辅导人员和业务管理员提供学生档案列表。业务管理员创建档案并指定初始负责人，负责人在详情中维护背景摘要与状态；部门和负责人可见性由后端档案接口执行。负责人从详情确认背景后创建辅导会话，复用原对话页。Conversation 的服务端保留 metadata 固定学生及确认背景；档案编辑不改变已有快照，普通请求接入时将快照固化到 Request、Run 和用户级模型输入。
+
+`StudentRecordListView` 与 `StudentWorkspaceView` 提供档案列表和五标签工作区，`services/counselingWorkspaceService.js` 显式选择真实 API 或演示适配器。真实调用复用 `apis/counseling_api.js` 与现有会话附件接口；摘要生成、草稿保存、归档预览、正式归档和助手对话在 `services/counseling/apiAdapter.js` 中仍返回 `not_supported`。演示状态不构成 PostgreSQL 中的正式辅导记录。
 
 ## 智能体运行链路
 

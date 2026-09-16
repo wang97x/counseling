@@ -104,6 +104,7 @@ export default defineConfig({
       {
         text: '开发指南',
         items: [
+          { text: '心理辅导产品约束', link: '/develop-guides/counseling-product-contract' },
           { text: '参与贡献', link: '/develop-guides/contributing' },
           { text: '并行工作树与隔离环境', link: '/develop-guides/parallel-worktree-environments' },
           { text: '文档编写与维护', link: '/develop-guides/documentation-guidelines' },

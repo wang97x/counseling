@@ -8,6 +8,8 @@
 - 保持 loading、empty、error、断线恢复和终态投影语义一致；不要用乐观 UI 覆盖 PostgreSQL 返回的最终事实。
 - `pnpm run lint:check` 是只读 gate；`pnpm run lint` 才允许本地自动修复。
 
+心理辅导交互遵循[产品约束](../docs/develop-guides/counseling-product-contract.md)：档案为主，对话辅助；五标签内容按实际能力呈现。切换档案隔离草稿和晚到结果，确认归档前展示影响，成功后读取正式结果。草稿保存、生成完成和归档成功分别反馈；演示仅用虚构数据，API 失败不能回退演示。危机提示包含文字、依据和人工处置入口，风险与结案状态分别表达。
+
 提交前运行：
 
 ```bash

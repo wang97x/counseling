@@ -7,6 +7,7 @@
 - 每个事实只有一个负责完整解释的 Owner；其他页面只保留完成当前任务需要的上下文并使用相对链接。先按[层级表](develop-guides/documentation-guidelines.md#信息架构与事实-owner)确定页面位置，再写内容。
 - `intro/` 拥有从零完成结果的教程，`advanced/` 拥有配置和运维参考，`agents/` 拥有 Agent 配置与扩展方法，`mechanisms/` 拥有运行机制、状态、权限、失败和源码定位。实质性混合内容必须拆页。
 - 当前系统边界和主链路属于仓库根 `ARCHITECTURE.md`；测试层级与命令属于[测试规范](develop-guides/testing-guidelines.md)；工程信任闭环属于[工程信任系统](develop-guides/engineering-trust.md)。不要在专题页复制这些完整规则。
+- 心理辅导需求由[产品约束](develop-guides/counseling-product-contract.md)承接 PRD；注明来源章节、工程解释与待决事项。演示、待实现要求和已验证能力分别表述，指标与认证目标不得写成已达成。
 - 非显然取舍属于 `develop-guides/decisions/`，达到门槛的事故因果属于 `develop-guides/postmortems/`，已发布事实属于 changelog，未完成方向属于 roadmap。`docs/vibe/` 只用于被忽略的本地临时计划。
 - 源码、schema、Compose、数据约束和测试拥有可执行事实；外部 Wiki、旧 changelog、历史 PR 和 Agent 自述只能帮助定位，不能覆盖当前 Owner。
 
