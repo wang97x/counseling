@@ -79,13 +79,13 @@ const router = createRouter({
         {
           path: '',
           name: 'StudentRecords',
-          component: () => import('../views/StudentRecordsView.vue'),
+          component: () => import('../views/StudentRecordListView.vue'),
           meta: { keepAlive: false, requiresAuth: true, requiresStudentRecords: true }
         },
         {
           path: ':studentId',
           name: 'StudentRecordDetail',
-          component: () => import('../views/StudentRecordsView.vue'),
+          component: () => import('../views/StudentWorkspaceView.vue'),
           meta: { keepAlive: false, requiresAuth: true, requiresStudentRecords: true }
         }
       ]

@@ -2,7 +2,7 @@
 
 状态：implemented
 类型：feature
-Owner：web/src/views/StudentRecordsView.vue
+Owner：web/src/views/StudentRecordListView.vue
 
 ## 问题
 
