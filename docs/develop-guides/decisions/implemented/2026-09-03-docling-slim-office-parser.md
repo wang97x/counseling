@@ -10,11 +10,11 @@ Yuxi 只使用 Docling 将 DOCX、PPTX、XLSX 和 XLS 转为 Markdown，但完�
 
 ## 决策
 
-依赖固定为 `docling-slim[format-office,format-pdf-pypdfium2]==2.122.0`，并显式声明 backend 使用的 `pylatexenc`。统一解析器按文件扩展名选择 `MsWordDocumentBackend`、`MsPowerpointDocumentBackend` 或 `MsExcelDocumentBackend`，由 `InputDocument` 校验文件并初始化 backend，再调用公开的 `convert()` 返回 `DoclingDocument`。
+依赖固定为 `docling-slim[format-office,format-pdf-pypdfium2]==2.122.0`，并显式声明 backend 使用的 `pylatexenc`。统一解析器为 DOCX、PPTX 和 XLSX 按文件扩展名选择 `MsWordDocumentBackend`、`MsPowerpointDocumentBackend` 或 `MsExcelDocumentBackend`，由 `InputDocument` 校验文件并初始化 backend，再调用公开的 `convert()` 返回 `DoclingDocument`。
 
 对 `InputDocument` 私有 backend 引用的访问只存在于这个适配点，转换结束或失败后统一卸载资源。现有 Markdown 导出、图片上传、顺序替换与失败占位逻辑继续消费 `DoclingDocument`；DOCX 异常仍回退到 `python-docx`，PDF 和图片 OCR 不进入 Office backend。
 
-完整 `docling`、Torch、TorchVision 和 PyTorch 专用索引已从项目依赖删除。镜像补齐 `libreoffice-calc-nogui`，用于将旧 XLS 转换为 XLSX。
+完整 `docling`、Torch、TorchVision 和 PyTorch 专用索引已从项目依赖删除。旧 XLS 后续改为由轻量 `xlrd` 直接提取表格，不再进入 Docling backend；见[按使用场景移除 LibreOffice 运行时](./2026-09-17-remove-libreoffice-runtime.md)。
 
 ## 替代方案
 
@@ -27,7 +27,7 @@ Yuxi 只使用 Docling 将 DOCX、PPTX、XLSX 和 XLS 转为 Markdown，但完�
 
 - Office 转换集中在一个直接 backend 适配器，删除未使用的模型与 pipeline 装配层。
 - 新 API 镜像为 1,159,075,226 bytes，原镜像为 1,435,192,473 bytes，减少 276,117,247 bytes（19.2%）。
-- XLS 的 shipping 环境必须提供 LibreOffice Calc；Slim 版本升级必须重新运行真实格式 fixture。
+- Slim 版本升级必须重新运行 DOCX、PPTX 和 XLSX 真实格式 fixture；XLS 由独立的 `xlrd` fixture 约束。
 - `InputDocument._backend` 是上游私有成员，版本升级需要在这一处重新确认初始化和卸载语义。
 
 ## 验证
