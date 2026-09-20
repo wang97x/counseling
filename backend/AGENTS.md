@@ -1,44 +1,17 @@
 # Backend 约定
 
-本目录承载 FastAPI 适配层、业务服务、repositories、Agent runtime 与持久化实现。先阅读根 [AGENTS.md](../AGENTS.md) 和 [ARCHITECTURE.md](../ARCHITECTURE.md)。
+本目录承载 FastAPI 适配层、业务服务、repositories、Agent runtime 与持久化实现。默认只读本文件、受影响源码与相关测试；修改陌生模块或跨服务链路时读取根 [架构文档](../ARCHITECTURE.md) 的相关章节，修改心理辅导链路时读取[产品约束](../docs/develop-guides/counseling-product-contract.md)的相关章节。
 
-## 边界与所有权
+## 边界与实现
 
-- `server/routers` 只处理 HTTP 模型、认证依赖、状态码和响应装配；跨 repository 的用例进入 `package/yuxi/services`。
-- PostgreSQL 是 Request、Run、Message、权限和业务终态的 Owner；Redis/ARQ 是投递与短期事件平面。
-- 写入事实、提交事务、发布队列/事件的顺序必须显式；通知不能早于 owning transaction 的 commit point。
-- 跨 repository 用例只有一个事务 Owner；需要经 HTTP 返回的一次性 secret 必须可由幂等请求安全重放，不能先不可逆消费再祈望响应送达。凭据撤销必须保留足以阻止同一幂等请求复活 secret 的 tombstone。
-- parser、HTTP、模型/tool JSON、持久化、worker、process、wire 和用户路径是运行时校验边界；已由 Python 类型和同进程调用保证的内部值不重复 hostile validation。
-- 核心启动依赖失败要阻止 readiness；可选集成降级要记录组件名、失败类型与当前能力。
-- AgentRun 的状态转换、lease、输出和终态投影由 repository/service 统一维护，调用方不得直接拼装并行真相。
+- `server/routers` 只处理 HTTP 模型、认证依赖、状态码和响应装配；跨 repository 用例进入 `package/yuxi/services`，并只有一个事务 Owner。
+- PostgreSQL 拥有 Request、Run、Message、权限和业务终态；Redis/ARQ 只承担投递与短期事件。写入、提交和发布顺序必须显式。
+- parser、HTTP、模型/tool JSON、持久化、worker、process、wire 和用户路径是校验边界。权限、路径隔离及副作用在 executor/repository fail-closed。
+- AgentRun 状态、lease、输出和终态投影由 repository/service 维护；并发、事务、Schema 和 PostgreSQL 专属语义使用真实 PostgreSQL 验证。
+- 心理辅导正式记录与草稿分离；生成、附件和归档绑定有权档案及对应 request/run。个人笔记不进入模型，风险提示不执行自主干预。
+- Python 使用 3.12+ 语法。保持主流程线性；只为复用、隔离副作用或降低认知负担拆函数，不新增一次性抽象和静默 fallback。
+- Schema 演进必须幂等并有真实 PostgreSQL 测试。新增函数或类使用简洁中文 docstring。
 
-## 实现
+## 验证路由
 
-心理辅导业务遵循[产品约束](../docs/develop-guides/counseling-product-contract.md)，新增链路须满足：
-
-- 草稿与正式记录分离；确认归档由 service 协调、repository 落库，校验档案归属、权限和确认版本，保留来源与修订，处理重复提交和并发冲突。
-- 录音、转写、摘要及产物绑定所属档案/记录；经 Agent 生成的任务与产物另绑定对应 request/run，普通上传不要求创建 Run。检索、导出、附件和后台执行都校验可见性。
-- 个人笔记排除在模型输入、检索及工具返回之外；知识优先级不能覆盖授权或机构危机协议。
-- 风险提示交给辅导师处理；禁止自主干预或从未命中规则推导安全。正式归档及数据用途规则须用真实持久化结果验证。
-- 复用现有学生、角色与会话模型；新增督导、字段加密、保留策略须先解决产品约束中的对应待决事项。
-
-- Python 使用 3.12+ 语法；保持主流程线性，优先早返回和清晰主路径，避免细碎 helper、静默 fallback、一次性抽象、不必要的嵌套和多层调用链。
-- 遵循向下规则：公开、高层方法在上，实现细节逐层下沉；拆函数只用于明确复用、隔离副作用或实质降低认知负担。
-- 常量和具名值放在最小合理作用域：跨函数复用、协议标识或配置约束用模块级常量；仅服务单个函数的局部规则留在函数内。
-- 命名表达业务意图；不导入其他模块下划线开头的私有标识，确有共享需求时改为公开命名。
-- 删除本次修改产生的未使用 import、变量、函数和分支；不清理修改前已存在的无关死代码，发现坏味道只说明不擅自处理。
-- 小型状态、进度或摘要需求直接读取来源并返回最小结果，不重建事件流或调试视图。
-- 新增函数/类使用简洁中文 docstring；不同语义的代码段之间留空行保持可读。异常只在当前层能增加稳定语义、执行清理或决定策略时捕获。
-- Schema 演进必须幂等、可在现有数据上执行，并有真实 PostgreSQL 测试；不可逆操作明确数据影响。
-
-## 验证
-
-```bash
-docker compose exec api uv run --group test pytest test/unit -m "not slow"
-docker compose exec api uv run --group test pytest test/integration
-docker compose exec api uv run --group test pytest test/e2e -m e2e
-docker compose exec api uv run ruff check package
-docker compose exec api uv run ruff format package --check
-```
-
-并发、事务、锁、lease、schema 与 PostgreSQL 专属语义必须在真实 PostgreSQL 上验证；API 行为通过真实 HTTP integration 证明；关键 Run/worker/文件副作用通过 E2E 证明。
+纯逻辑运行相关 unit；真实 API、权限和持久化运行 integration；Run、worker、队列、文件副作用和恢复运行 E2E。需要完整命令时再读取[测试规范](../docs/develop-guides/testing-guidelines.md)，不要默认运行全部层级。

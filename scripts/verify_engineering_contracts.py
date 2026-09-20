@@ -68,12 +68,16 @@ WORKSPACE_HOST_PATH_EXPORTS = frozenset(
 )
 DIRECT_WEB_API_LITERAL = re.compile(r"(?P<quote>['\"`])/api(?:[/ ?]|(?P=quote))")
 AGENTS_FILE_BUDGETS = {
-    "AGENTS.md": 5000,
-    "backend/AGENTS.md": 2400,
-    "web/AGENTS.md": 1000,
-    "docs/AGENTS.md": 3200,
+    "AGENTS.md": 2800,
+    "backend/AGENTS.md": 1100,
+    "web/AGENTS.md": 700,
+    "docs/AGENTS.md": 1000,
 }
 AGENTS_LINK_PATTERN = re.compile(r"\[[^\]]+\]\(([^)\s]+)\)")
+AGENTS_REMOVED_LOAD_RULES = (
+    re.compile(r"^## 每次任务先加载什么\s*$", re.MULTILINE),
+    re.compile(r"^本目录[^\n]*。先阅读根 \[AGENTS\.md\]", re.MULTILINE),
+)
 EXTERNAL_LINK_PREFIXES = ("http://", "https://", "mailto:")
 DOCUMENT_PROSE_CONTRAST = re.compile(
     r"(?:不是|并非)[^。\n]{0,160}(?:而是|而在于)"
@@ -836,6 +840,11 @@ def _validate_agents_files(root: Path, errors: list[str]) -> list[dict[str, Any]
                     errors.append(f"AGENTS 指令引用失效：{relative} -> {link}")
         if len(text) > budget:
             errors.append(f"AGENTS 指令超出字符预算：{relative} {len(text)} > {budget}")
+        for pattern in AGENTS_REMOVED_LOAD_RULES:
+            if pattern.search(text):
+                errors.append(
+                    f"AGENTS 指令重新引入已移除的全量加载规则：{relative}"
+                )
         projection.append({"path": relative, "chars": len(text), "budget": budget})
     return projection
 

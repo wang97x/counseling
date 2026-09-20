@@ -160,7 +160,7 @@ jobs:
     def _write_valid_agents_files(self) -> None:
         self._write(
             "AGENTS.md",
-            "# 根约定\n\n见 [架构](ARCHITECTURE.md) 与 [决策](docs/develop-guides/decisions/README.md)。\n",
+            "# 根约定\n\n默认只读取当前任务需要的规则。见 [架构](ARCHITECTURE.md) 与 [决策](docs/develop-guides/decisions/README.md)。\n",
         )
         self._write("ARCHITECTURE.md", "# 架构\n")
         self._write("docs/develop-guides/decisions/README.md", "# 决策记录\n")
@@ -635,6 +635,32 @@ jobs:
                         for error in self._errors()
                     )
                 )
+
+    def test_agents_unconditional_context_loading_is_rejected(self) -> None:
+        examples = (
+            "## 每次任务先加载什么\n",
+            "本目录承载服务。先阅读根 [AGENTS.md](../AGENTS.md) 和架构文档。\n",
+        )
+        for prose in examples:
+            with self.subTest(prose=prose):
+                path = self.root / "backend/AGENTS.md"
+                path.write_text(
+                    f"# Backend 约定\n\n{prose}\n",
+                    encoding="utf-8",
+                )
+
+                self.assertTrue(
+                    any("重新引入已移除" in error for error in self._errors())
+                )
+
+    def test_agents_conditional_context_loading_is_allowed(self) -> None:
+        path = self.root / "backend/AGENTS.md"
+        path.write_text(
+            "# Backend 约定\n\n跨服务时先阅读根 [AGENTS.md](../AGENTS.md) 的相关章节。\n",
+            encoding="utf-8",
+        )
+
+        self.assertEqual(self._errors(), [])
 
     def test_document_contrastive_negation_is_rejected(self) -> None:
         examples = (

@@ -50,9 +50,11 @@ Yuxi Spec Loop 把非平凡工程请求从“实现建议”收敛为“可以�
 
 确定性 replay 与真实 provider probe 是互补证据：前者适合 PR 阻断并证明 shipping composition，后者校准外部漂移。缺少密钥或环境时写 `Not run`，不把 optional skip 计为产品通过。
 
-### 6. Independent review
+### 6. Risk-routed review
 
-commit 前由不继承开发上下文的全新 Reviewer 读取完整需求、decision、完整 diff、实际测试结果和未验证范围。Reviewer 检查目标/非目标、Owner、oracle 独立性、负控、复杂度和当前文档，但不能替代直接证据。
+commit 前按根 `AGENTS.md` 选择 Review 等级。不改变行为、契约或治理语义的文案、链接、机械等价修改和测试整理可由提交者执行相关 gate 与 diff 自检；单一语义 Owner 内的普通代码修改使用全新上下文 Reviewer，并只传递目标、非目标、验收、适用指令、完整 diff、测试结果和未验证范围组成的 review packet。
+
+权限、持久化、事务、Run/worker/队列、文件隔离、正式归档、模型可见输入、外部副作用、公开兼容、长期治理或跨 Owner 变更执行完整 Review，且优先于豁免和轻量条件。Reviewer 在 review packet 基础上读取命中的专题规范、相关源码链路和 decision，检查 Owner、oracle 独立性、负控、复杂度与当前文档，并可把轻量 Review 升级为完整 Review。Review 不能替代直接证据。
 
 ### 7. Converge
 
@@ -81,4 +83,4 @@ commit 前由不继承开发上下文的全新 Reviewer 读取完整需求、dec
 - [测试规范](./testing-guidelines.md) 拥有测试分层和运行命令。
 - [工程决策记录](./decisions/README.md) 保存问题、决定、替代、后果与验证。
 - [事故复盘](./postmortems/README.md) 只保存达到门槛的逃逸事故及其防复发机制。
-- PR 描述记录本次变更实际执行的命令、结果、Reviewer 结论与未验证范围。
+- PR 描述记录本次变更实际执行的命令、结果、Review 等级与依据、Reviewer 结论或豁免原因，以及未验证范围。
