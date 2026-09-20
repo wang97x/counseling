@@ -74,6 +74,7 @@ dependencies = [
     "tqdm>=4.66.4",
     "typer>=0.16.0",
     "wcmatch>=8.0.0",
+    "xlrd>=2.0.2,<3",
     # Markdown 解析语义切分相关依赖
     "markdown-it-py>=3.0.0",
     "mdit-py-plugins>=0.4.0",

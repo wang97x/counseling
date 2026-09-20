@@ -35,7 +35,6 @@ _OFFICE_BACKENDS = {
     ".docx": (InputFormat.DOCX, MsWordDocumentBackend),
     ".pptx": (InputFormat.PPTX, MsPowerpointDocumentBackend),
     ".xlsx": (InputFormat.XLSX, MsExcelDocumentBackend),
-    ".xls": (InputFormat.XLS, MsExcelDocumentBackend),
 }
 _docling_office_lock = threading.Lock()
 
@@ -187,7 +186,10 @@ async def parse_resolved_document(source: str, params: dict | None = None) -> st
         elif file_ext == ".csv":
             result = await asyncio.to_thread(_convert_csv_to_markdown, file_path_obj)
 
-        elif file_ext in [".xls", ".xlsx"]:
+        elif file_ext == ".xls":
+            result = await asyncio.to_thread(_convert_xls_to_markdown, file_path_obj)
+
+        elif file_ext == ".xlsx":
             result = await asyncio.to_thread(_convert_with_docling, file_path_obj, params=params)
 
         elif file_ext == ".json":
@@ -378,3 +380,57 @@ def _convert_csv_to_markdown(file_path: Path) -> str:
         row_dataframe = dataframe.iloc[[i]]
         tables.append(row_dataframe.to_markdown(index=False))
     return "\n\n".join(tables)
+
+
+def _convert_xls_to_markdown(file_path: Path) -> str:
+    """使用 xlrd 直接提取旧 XLS 工作表。"""
+    import xlrd
+
+    workbook = xlrd.open_workbook(str(file_path), on_demand=True)
+    tables: list[str] = []
+    try:
+        for sheet in workbook.sheets():
+            rows: list[list[str]] = []
+            for row_index in range(sheet.nrows):
+                values = [
+                    _format_xls_cell(sheet.cell(row_index, column_index), workbook.datemode)
+                    for column_index in range(sheet.ncols)
+                ]
+                while values and not values[-1]:
+                    values.pop()
+                if any(values):
+                    rows.append(values)
+            if not rows:
+                continue
+            width = max(len(row) for row in rows)
+            normalized_rows = [row + [""] * (width - len(row)) for row in rows]
+            header = normalized_rows[0]
+            separator = ["---"] * width
+            table_lines = [
+                f"## {sheet.name}",
+                "",
+                f"| {' | '.join(header)} |",
+                f"| {' | '.join(separator)} |",
+                *(f"| {' | '.join(row)} |" for row in normalized_rows[1:]),
+            ]
+            tables.append("\n".join(table_lines))
+    finally:
+        workbook.release_resources()
+    return "\n\n".join(tables)
+
+
+def _format_xls_cell(cell, datemode: int) -> str:
+    """把 xlrd 单元格转成稳定的 Markdown 文本。"""
+    import xlrd
+
+    if cell.ctype in {xlrd.XL_CELL_EMPTY, xlrd.XL_CELL_BLANK}:
+        return ""
+    if cell.ctype == xlrd.XL_CELL_DATE:
+        value = xlrd.xldate_as_datetime(cell.value, datemode).isoformat(sep=" ")
+    elif cell.ctype == xlrd.XL_CELL_BOOLEAN:
+        value = "TRUE" if cell.value else "FALSE"
+    elif cell.ctype == xlrd.XL_CELL_NUMBER and float(cell.value).is_integer():
+        value = str(int(cell.value))
+    else:
+        value = str(cell.value)
+    return value.replace("\\", "\\\\").replace("|", "\\|").replace("\r\n", "<br>").replace("\n", "<br>")

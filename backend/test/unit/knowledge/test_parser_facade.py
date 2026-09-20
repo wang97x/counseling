@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import re
-import shutil
 import time
 import zipfile
 from pathlib import Path
@@ -11,6 +10,7 @@ from types import SimpleNamespace
 
 import pandas as pd
 import pytest
+import xlrd
 import yuxi.knowledge.parser.factory as factory_module
 import yuxi.knowledge.parser.unified as parser_unified
 from docx import Document
@@ -278,22 +278,34 @@ async def test_parse_document_docx_returns_markdown_text(tmp_path: Path, monkeyp
         ("测试文档.docx", ("20XX个人述职报告", "测试表格")),
         ("测试演示.pptx", ("BUSINESS REPORT TEMPLATE", "工作内容回顾")),
         ("测试表格.xlsx", ("个人所得税计算",)),
-        ("测试旧表格.xls", ("Docling Slim", "53")),
     ],
 )
 def test_slim_office_backends_convert_real_fixtures(
     filename: str,
     expected_fragments: tuple[str, ...],
 ) -> None:
-    if filename.endswith(".xls") and shutil.which("libreoffice") is None:
-        pytest.skip("旧版 Excel fixture 需要 LibreOffice 转换器")
-
     document = parser_unified._convert_office_document(PARSER_FIXTURES / filename)
 
     markdown = document.export_to_markdown()
 
     assert markdown.strip()
     assert all(fragment in markdown for fragment in expected_fragments)
+
+
+def test_xls_parser_reads_real_fixture_without_external_converter() -> None:
+    markdown = parser_unified._convert_xls_to_markdown(PARSER_FIXTURES / "测试旧表格.xls")
+
+    assert markdown.strip()
+    assert "Docling Slim" in markdown
+    assert "53" in markdown
+
+
+def test_xls_parser_rejects_corrupt_file(tmp_path: Path) -> None:
+    corrupt_file = tmp_path / "corrupt.xls"
+    corrupt_file.write_bytes(b"not-an-xls")
+
+    with pytest.raises(xlrd.biffh.XLRDError, match="Unsupported format|Expected BOF record"):
+        parser_unified._convert_xls_to_markdown(corrupt_file)
 
 
 def test_slim_office_backend_unloads_after_conversion_error(
