@@ -169,7 +169,6 @@ async def resolve_thread_artifact_view(
             return await render_file_preview(
                 normalized,
                 raw_content,
-                office_cache_key=f"artifact:{current_uid}:{normalized}",
             )
         except OfficePreviewConversionError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc

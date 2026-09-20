@@ -77,6 +77,35 @@ test('normalizePreviewResponse 解包 JSON artifact 的统一预览结构', asyn
   assert.equal(parsed.status, 'ready')
 })
 
+test('normalizePreviewResponse 保留 Office 的 HTML 预览类型', async () => {
+  const response = new Response(
+    JSON.stringify({
+      content: '<html><body>辅导记录</body></html>',
+      preview_type: 'html',
+      supported: true
+    }),
+    { headers: { 'content-type': 'application/json' } }
+  )
+
+  const parsed = await normalizePreviewResponse(response, { path: '/outputs/record.docx' })
+
+  assert.equal(parsed.previewType, 'html')
+  assert.equal(parsed.content, '<html><body>辅导记录</body></html>')
+  assert.equal(parsed.status, 'ready')
+})
+
+test('Agent 文件预览将 Office HTML 放入 sandbox iframe', () => {
+  const source = readFileSync(
+    new URL('../../src/components/AgentFilePreview.vue', import.meta.url),
+    'utf8'
+  )
+
+  assert.match(source, /props\.file\?\.previewType === 'html'/)
+  assert.match(source, /v-else-if="isHtmlFile && htmlPreviewMode === 'render'"/)
+  assert.match(source, /:srcdoc="htmlPreviewSrcdoc"/)
+  assert.match(source, /sandbox="allow-scripts"/)
+})
+
 test('normalizePreviewResponse 不支持格式时标记 status 为 unsupported', async () => {
   const binaryResponse = new Response(new Uint8Array([0, 1, 2, 3]), {
     headers: { 'content-type': 'application/octet-stream' }

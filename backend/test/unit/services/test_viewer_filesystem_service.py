@@ -135,6 +135,29 @@ async def test_viewer_reads_live_file_without_revision(realtime_viewer):
 
 
 @pytest.mark.asyncio
+async def test_viewer_office_preview_uses_shared_html_renderer(realtime_viewer, monkeypatch):
+    path = "/projects/11111111-1111-4111-8111-111111111111/report.docx"
+    realtime_viewer.files[path] = b"docx bytes"
+    captured = {}
+
+    async def render_preview(file_path, raw_content):
+        captured.update(path=file_path, raw_content=raw_content)
+        return {"preview_type": "html", "supported": True, "content": "<html>preview</html>"}
+
+    monkeypatch.setattr(svc, "render_file_preview", render_preview)
+
+    result = await svc.read_viewer_file_content(
+        thread_id="thread-1",
+        path="/report.docx",
+        current_user=SimpleNamespace(uid="user-1"),
+        db=object(),
+    )
+
+    assert result["preview_type"] == "html"
+    assert captured == {"path": "/report.docx", "raw_content": b"docx bytes"}
+
+
+@pytest.mark.asyncio
 async def test_viewer_rejects_other_workdir_runtime_identity(realtime_viewer):
     with pytest.raises(HTTPException) as exc:
         await svc.read_viewer_file_content(

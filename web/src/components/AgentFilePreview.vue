@@ -383,7 +383,6 @@ import { escapeHtml } from '@/utils/html'
 import {
   getCodeLanguageByPath,
   getPreviewFileExtension,
-  isHtmlPreview,
   isMarkdownPreview
 } from '@/utils/file_preview'
 
@@ -530,10 +529,7 @@ const canEdit = computed(() => {
 const savedContent = computed(() => formatContent(props.file?.content))
 const draftChanged = computed(() => draftContent.value !== savedContent.value)
 const isHtmlFile = computed(
-  () =>
-    ['text', 'html'].includes(props.file?.previewType) &&
-    typeof props.file?.content === 'string' &&
-    isHtmlPreview(props.filePath)
+  () => props.file?.previewType === 'html' && typeof props.file?.content === 'string'
 )
 const htmlPreviewSrcdoc = computed(() =>
   buildHtmlPreviewSrcdoc(props.file?.content, htmlPreviewScale.value)

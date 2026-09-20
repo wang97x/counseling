@@ -13,11 +13,9 @@ from yuxi.workspace.preview import preview_workspace_file
 async def render_file_preview(
     path: str,
     raw_content: bytes,
-    *,
-    office_cache_key: str,
 ) -> dict | StreamingResponse:
     """把持久文件预览结果转换为 Workspace/Viewer HTTP 响应。"""
-    result = await preview_workspace_file(path, raw_content, office_cache_key=office_cache_key)
+    result = await preview_workspace_file(path, raw_content)
     return _preview_response(result)
 
 

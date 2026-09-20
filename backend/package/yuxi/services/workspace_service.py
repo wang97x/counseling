@@ -163,7 +163,6 @@ async def read_workspace_file_content(*, path: str, current_user: User) -> dict 
         return await render_file_preview(
             path,
             raw_content,
-            office_cache_key=f"workspace:{current_user.uid}:{workspace_path}",
         )
     except OfficePreviewConversionError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

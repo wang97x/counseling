@@ -55,17 +55,6 @@ class FakeMinioClient:
     async def adownload_file(self, bucket_name: str, object_name: str) -> bytes:
         return self.objects[(bucket_name, object_name)]
 
-    async def aupload_file(
-        self,
-        bucket_name: str,
-        object_name: str,
-        data: bytes,
-        content_type: str | None = None,
-    ) -> SimpleNamespace:
-        assert content_type == "application/pdf"
-        self.objects[(bucket_name, object_name)] = data
-        return SimpleNamespace(url=f"http://localhost:9000/{bucket_name}/{object_name}")
-
 
 def make_file_record(**overrides) -> SimpleNamespace:
     values = {
@@ -111,37 +100,36 @@ def test_office_file_entry_exposes_logical_file_availability(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_read_office_pdf_preview_converts_and_caches_pdf(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_read_office_preview_returns_html_without_persistent_cache(monkeypatch: pytest.MonkeyPatch) -> None:
     stub_file_record(monkeypatch, make_file_record())
     minio_client = FakeMinioClient()
     minio_client.objects[("knowledgebases", "db1/upload/demo.docx")] = b"office"
     convert_calls = 0
 
-    async def fake_convert(filename: str, content: bytes) -> bytes:
+    async def fake_convert(filename: str, content: bytes) -> str:
         nonlocal convert_calls
         convert_calls += 1
         assert filename == "demo.docx"
         assert content == b"office"
-        return b"%PDF-1.4\nconverted"
+        return "<html>converted</html>"
 
     monkeypatch.setattr(preview, "get_minio_client", lambda: minio_client)
-    monkeypatch.setattr(preview, "convert_office_to_pdf", fake_convert)
+    monkeypatch.setattr(preview, "convert_office_to_html", fake_convert)
 
     response = await preview.read_knowledge_file_preview("db1", "file1")
-    cached_response = await preview.read_knowledge_file_preview("db1", "file1")
+    second_response = await preview.read_knowledge_file_preview("db1", "file1")
 
-    assert response["preview_type"] == "pdf"
+    assert response["preview_type"] == "html"
     assert response["supported"] is True
-    assert response["binary"] is True
-    assert response["content"] == b"%PDF-1.4\nconverted"
-    assert response["media_type"] == "application/pdf"
-    assert cached_response["content"] == b"%PDF-1.4\nconverted"
-    assert minio_client.objects[("knowledgebases", "db1/preview/file1.pdf")] == b"%PDF-1.4\nconverted"
-    assert convert_calls == 1
+    assert response["content"] == "<html>converted</html>"
+    assert "binary" not in response
+    assert second_response["content"] == "<html>converted</html>"
+    assert set(minio_client.objects) == {("knowledgebases", "db1/upload/demo.docx")}
+    assert convert_calls == 2
 
 
 @pytest.mark.asyncio
-async def test_non_docx_pptx_office_files_do_not_get_pdf_preview(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_non_docx_pptx_office_files_do_not_get_html_preview(monkeypatch: pytest.MonkeyPatch) -> None:
     stub_file_record(monkeypatch, make_file_record(filename="demo.xlsx"))
     minio_client = FakeMinioClient()
     minio_client.objects[("knowledgebases", "db1/upload/demo.docx")] = b"PK\x03\x04excel"

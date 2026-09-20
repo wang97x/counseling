@@ -122,13 +122,12 @@ async def test_artifact_preview_uses_shared_file_renderer(live_files, monkeypatc
     path = "/home/gem/user-data/projects/11111111-1111-4111-8111-111111111111/report.docx"
     live_files.add_runtime_file(path, b"docx bytes")
     captured = {}
-    sentinel = {"preview_type": "pdf", "supported": True}
+    sentinel = {"preview_type": "html", "supported": True}
 
-    async def render_preview(file_path, raw_content, *, office_cache_key):
+    async def render_preview(file_path, raw_content):
         captured.update(
             path=file_path,
             raw_content=raw_content,
-            office_cache_key=office_cache_key,
         )
         return sentinel
 
@@ -146,7 +145,6 @@ async def test_artifact_preview_uses_shared_file_renderer(live_files, monkeypatc
     assert captured == {
         "path": path,
         "raw_content": b"docx bytes",
-        "office_cache_key": f"artifact:user-1:{path}",
     }
 
 

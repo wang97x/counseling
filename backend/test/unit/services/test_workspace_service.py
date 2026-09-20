@@ -123,7 +123,7 @@ async def test_read_workspace_file_content_returns_unsupported_for_unreadable_fi
 
 
 @pytest.mark.asyncio
-async def test_read_workspace_file_content_returns_pdf_preview_for_office_file(
+async def test_read_workspace_file_content_returns_html_preview_for_office_file(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -133,22 +133,18 @@ async def test_read_workspace_file_content_returns_pdf_preview_for_office_file(
     target = root / "demo.docx"
     target.write_bytes(b"office")
 
-    async def fake_convert(filename: str, content: bytes) -> bytes:
+    async def fake_convert(filename: str, content: bytes) -> str:
         assert filename == "demo.docx"
         assert content == b"office"
-        return b"%PDF-1.4\npreview"
+        return "<html>preview</html>"
 
-    monkeypatch.setenv("YUXI_RUNTIME_DIR", str(tmp_path / "runtime"))
-    monkeypatch.setattr(file_preview, "convert_office_to_pdf", fake_convert)
+    monkeypatch.setattr(file_preview, "convert_office_to_html", fake_convert)
 
     result = await svc.read_workspace_file_content(path="/demo.docx", current_user=user)
-    body = b""
-    async for chunk in result.body_iterator:
-        body += chunk
 
-    assert result.media_type == "application/pdf"
-    assert result.headers["x-yuxi-preview-type"] == "pdf"
-    assert body == b"%PDF-1.4\npreview"
+    assert result["preview_type"] == "html"
+    assert result["supported"] is True
+    assert result["content"] == "<html>preview</html>"
 
 
 @pytest.mark.asyncio
@@ -177,16 +173,13 @@ async def test_read_workspace_file_content_rejects_xlsx_preview(
     ],
 )
 @pytest.mark.asyncio
-async def test_preview_workspace_file_caches_office_pdf_conversion(
+async def test_preview_workspace_file_converts_office_without_runtime_cache(
     tmp_path: Path,
     monkeypatch,
     filename: str,
     content: bytes,
 ) -> None:
-    save_dir = tmp_path / "saves"
-    runtime_dir = tmp_path / "runtime"
-    monkeypatch.setenv("YUXI_USER_DATA_DIR", str(save_dir / "threads"))
-    monkeypatch.setenv("YUXI_RUNTIME_DIR", str(runtime_dir))
+    monkeypatch.setenv("YUXI_USER_DATA_DIR", str(tmp_path / "saves" / "threads"))
     user = _user()
     root = _workspace_root(user)
     target = root / filename
@@ -194,31 +187,21 @@ async def test_preview_workspace_file_caches_office_pdf_conversion(
 
     convert_calls = 0
 
-    async def fake_convert(name: str, _raw: bytes) -> bytes:
+    async def fake_convert(name: str, _raw: bytes) -> str:
         nonlocal convert_calls
         assert name == filename
         convert_calls += 1
-        return b"%PDF-1.4\npreview"
+        return "<html>preview</html>"
 
-    monkeypatch.setattr(file_preview, "convert_office_to_pdf", fake_convert)
+    monkeypatch.setattr(file_preview, "convert_office_to_html", fake_convert)
 
-    async def read_pdf() -> bytes:
+    async def read_html() -> str:
         response = await svc.read_workspace_file_content(path=f"/{filename}", current_user=user)
-        assert response.media_type == "application/pdf"
-        assert response.headers["x-yuxi-preview-type"] == "pdf"
-        body = b""
-        async for chunk in response.body_iterator:
-            body += chunk
-        return body
+        assert response["preview_type"] == "html"
+        return response["content"]
 
-    assert await read_pdf() == b"%PDF-1.4\npreview"
-    assert await read_pdf() == b"%PDF-1.4\npreview"
-    assert convert_calls == 1
-    assert list((runtime_dir / "cache" / "office-previews").rglob("*.pdf"))
-    assert not list(save_dir.rglob(".office_preview_cache"))
-
-    target.write_bytes(content + b"-v2")
-    assert await read_pdf() == b"%PDF-1.4\npreview"
+    assert await read_html() == "<html>preview</html>"
+    assert await read_html() == "<html>preview</html>"
     assert convert_calls == 2
 
 

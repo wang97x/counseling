@@ -145,7 +145,6 @@ async def read_viewer_file_content(*, thread_id: str, path: str, current_user, d
         return await render_file_preview(
             path,
             raw_content,
-            office_cache_key=f"viewer:{access.uid}:{access.workdir_path}:{path}",
         )
     except OfficePreviewConversionError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
