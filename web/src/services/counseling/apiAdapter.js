@@ -1,6 +1,6 @@
 import { counselingApi } from '../../apis/counseling_api.js'
 import { threadApi } from '../../apis/agent_api.js'
-import { filterApiStudents, mapApiStudent, toApiStudentPatch } from './apiMapping.js'
+import { filterApiStudents, mapApiConversation, mapApiStudent, toApiStudentPatch } from './apiMapping.js'
 import { validateCounselingUpload } from './uploadValidation.js'
 
 const unsupported = (capability) => ({
@@ -49,18 +49,11 @@ export function createCounselingApiAdapter() {
           student: mapApiStudent({ ...detail, conversation_count: items.length }),
           background: detail.background_summary || detail.notes || '尚未录入背景信息',
           todos: [],
-          timeline: items.map((item) => ({
-            id: String(item.id),
-            occurredAt: item.created_at || '',
-            title: item.title || '辅导会话',
-            summary: item.summary || '暂无摘要',
-            source: 'manual',
-          })),
+          timeline: items.map(mapApiConversation),
           goals: [],
           assessments: [],
           crises: [],
           uploads: [],
-          assistantMessages: [],
         },
       }
     },
@@ -107,7 +100,6 @@ export function createCounselingApiAdapter() {
     async saveDraft() { return unsupported('summary_draft') },
     async buildArchivePreview() { return unsupported('archive_preview') },
     async archiveSummary() { return unsupported('archive') },
-    async sendAssistantMessage() { return unsupported('counseling_assistant') },
     async resetDemo() { return unsupported('demo_reset') },
   }
 }

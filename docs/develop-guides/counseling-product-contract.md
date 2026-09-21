@@ -137,9 +137,9 @@ PRD 第 8、10 章的数字是目标值，验收前需固定测试数据、环�
 此处仅为 2026-09-19 的源码核对入口，状态为 `Inspected`，不替代业务验收：
 
 - [学生档案模型](https://github.com/wang97x/counseling/blob/main/backend/package/yuxi/storage/postgres/models_counseling.py)及对应 service/repository 提供最小档案、负责人和部门边界。现有 `StudentRecord`、`/students` 命名继续使用，不能因 PRD 使用“来访者”而直接重命名持久化结构。
-- [工作台服务](https://github.com/wang97x/counseling/blob/main/web/src/services/counselingWorkspaceService.js)显式选择真实 API 或演示适配器。[真实 API 适配器](https://github.com/wang97x/counseling/blob/main/web/src/services/counseling/apiAdapter.js)中的摘要生成、草稿保存、归档预览、归档和助手对话仍返回 `not_supported`。
+- [工作台服务](https://github.com/wang97x/counseling/blob/main/web/src/services/counselingWorkspaceService.js)显式选择真实 API 或演示适配器。[真实 API 适配器](https://github.com/wang97x/counseling/blob/main/web/src/services/counseling/apiAdapter.js)通过关联 Conversation 进入既有 Agent 页面；摘要生成、草稿保存、归档预览和归档仍返回 `not_supported`。
 - 当前 `StudentWorkspaceView` 仍采用概览、时间线、目标、量表、危机五标签，并通过关联 Conversation 跳转通用 Agent 页面；这与目标单页档案及业务生成任务存在差距。
-- 当前前端角色仍混合业务角色和平台角色，业务管理员可见部分 Yuxi 技术入口；目标三角色模型和 Yuxi 无角色边界尚未实现。
+- 当前前端通过统一能力映射隔离业务入口和 Yuxi 技术入口，但仍保留迁移前平台角色与 `technical_admin` 兼容路径；目标三角色数据迁移及后端逐项授权尚未完成。
 - 五标签页面及演示交互不能证明文件生成、正式归档、历史不可变、量表计分或危机识别已接入后端。演示仅用虚构数据，真实接口失败不得回退演示数据。
 
 具体功能实现时，更新其源码、测试和机制说明；产品约束保持目标边界，验证方法见[心理辅导业务验证](./testing-guidelines.md#心理辅导业务验证)。

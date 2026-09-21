@@ -3,15 +3,13 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowLeft, Bot, CalendarClock, CheckCircle2, ClipboardList, FileUp,
-  HeartPulse, History, ListChecks, MessageCirclePlus, PencilLine, RotateCcw, ShieldAlert, Target,
+  HeartPulse, History, ListChecks, PencilLine, RotateCcw, ShieldAlert, Target,
 } from '@lucide/vue'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import AssessmentTrend from '@/components/counseling/AssessmentTrend.vue'
-import CounselingAssistantDrawer from '@/components/counseling/CounselingAssistantDrawer.vue'
 import RecordUploadFlow from '@/components/counseling/RecordUploadFlow.vue'
 import RiskTag from '@/components/counseling/RiskTag.vue'
 import { counselingWorkspaceService } from '@/services/counselingWorkspaceService.js'
-import { buildNextStepTopics } from '@/services/counseling/nextStepTopics.js'
 import { COUNSELING_TABS } from '@/types/counseling.js'
 import { createLatestOperation, isCurrentStudentRequest } from '@/utils/counselingRequestGuard.js'
 import { useAgentStore } from '@/stores/agent'
@@ -25,8 +23,6 @@ const workspace = ref(null)
 const loading = ref(false)
 const error = ref('')
 const uploadOpen = ref(false)
-const assistantOpen = ref(false)
-const assistantBusy = ref(false)
 const editOpen = ref(false)
 const editBusy = ref(false)
 const conversationOpen = ref(false)
@@ -48,7 +44,6 @@ const tabItems = [
 ]
 const activeTab = computed(() => COUNSELING_TABS.includes(String(route.query.tab)) ? String(route.query.tab) : 'overview')
 const studentId = computed(() => String(route.params.studentId || ''))
-const nextStepTopics = computed(() => buildNextStepTopics(workspace.value))
 
 async function loadWorkspace(id = studentId.value) {
   const version = ++requestVersion
@@ -161,41 +156,8 @@ function handleArchived(nextWorkspace) {
   workspace.value = nextWorkspace
 }
 
-async function sendAssistant({ content, intent }) {
-  assistantBusy.value = true
-  const id = studentId.value
-  workspace.value.assistantMessages.push({
-    id: 'local-user-' + Date.now(), role: 'user', content, createdAt: new Date().toISOString(),
-  })
-  try {
-    const result = await service.sendAssistantMessage(id, content, { intent, tab: activeTab.value })
-    if (id !== studentId.value) return
-    if (result.status === 'not_supported') {
-      workspace.value.assistantMessages.push({
-        id: 'unsupported-' + Date.now(),
-        role: 'assistant',
-        content: result.message,
-        createdAt: new Date().toISOString(),
-      })
-      return
-    }
-    if (result.status !== 'ok') throw new Error(result.message || '助手暂时不可用')
-    if (id === studentId.value) workspace.value.assistantMessages.push(result.data)
-  } catch (cause) {
-    if (id === studentId.value) {
-      workspace.value.assistantMessages.push({
-        id: 'error-' + Date.now(), role: 'assistant',
-        content: cause.message || '助手暂时不可用', createdAt: new Date().toISOString(),
-      })
-    }
-  } finally {
-    assistantBusy.value = false
-  }
-}
-
 watch(studentId, (id) => {
   uploadOpen.value = false
-  assistantOpen.value = false
   editOpen.value = false
   conversationOpen.value = false
   editOperations.invalidate()
@@ -220,13 +182,10 @@ watch(studentId, (id) => {
         <a-button v-if="service.mode === 'api'" class="header-secondary" aria-label="编辑档案" title="编辑档案" :disabled="!workspace" @click="openEdit">
           <template #icon><PencilLine :size="15" /></template><span>编辑档案</span>
         </a-button>
-        <a-button v-if="service.mode === 'api'" class="header-secondary" aria-label="新建会话" title="新建会话" :disabled="!workspace" @click="openConversationCreator">
-          <template #icon><MessageCirclePlus :size="15" /></template><span>新建会话</span>
-        </a-button>
         <a-button type="primary" aria-label="上传谈话记录" title="上传谈话记录" :disabled="!workspace" @click="uploadOpen = true">
           <template #icon><FileUp :size="15" /></template><span>上传谈话记录</span>
         </a-button>
-        <a-button aria-label="打开档案助手" title="打开档案助手" :disabled="!workspace" @click="assistantOpen = true">
+        <a-button v-if="service.mode === 'api'" aria-label="打开下一步助手" title="打开下一步助手" :disabled="!workspace" @click="openConversationCreator">
           <template #icon><Bot :size="15" /></template><span>助手</span>
         </a-button>
       </template>
@@ -266,9 +225,9 @@ watch(studentId, (id) => {
               <div><span>最近动态</span><strong>{{ workspace.student.recentActivity }}</strong></div>
             </div>
           </div>
-          <button type="button" class="next-session" aria-label="打开下一步助手" @click="assistantOpen = true">
+          <button v-if="service.mode === 'api'" type="button" class="next-session" aria-label="打开下一步助手" @click="openConversationCreator">
             <CalendarClock :size="20" />
-            <div><span>下一步助手</span><strong>{{ workspace.todos.find((item) => item.status === 'todo')?.title || '回顾当前阶段' }}</strong><small>查看推荐话题或自己定义</small></div>
+            <div><span>下一步助手</span><strong>{{ workspace.todos.find((item) => item.status === 'todo')?.title || '回顾当前阶段' }}</strong><small>基于当前档案开始新一步</small></div>
           </button>
         </section>
 
@@ -291,7 +250,7 @@ watch(studentId, (id) => {
             <p class="large-copy">{{ workspace.background }}</p>
             <div class="quick-actions">
               <button type="button" @click="uploadOpen = true"><FileUp :size="18" /><span><strong>上传记录</strong><small>生成可审阅摘要</small></span></button>
-              <button type="button" @click="assistantOpen = true"><Bot :size="18" /><span><strong>下一步助手</strong><small>选择推荐或自定义话题</small></span></button>
+              <button v-if="service.mode === 'api'" type="button" @click="openConversationCreator"><Bot :size="18" /><span><strong>下一步助手</strong><small>进入档案关联对话</small></span></button>
               <button type="button" @click="setTab('timeline')"><History :size="18" /><span><strong>查看变化</strong><small>回顾历次辅导</small></span></button>
             </div>
           </article>
@@ -324,9 +283,9 @@ watch(studentId, (id) => {
             <article v-for="record in workspace.timeline" :key="record.id">
               <div class="timeline-mark"></div>
               <div class="timeline-card">
-                <header><div><span>{{ record.occurredAt }}</span><h4>{{ record.title }}</h4></div><a-tag>{{ record.source === 'upload' ? '文件归档' : '手动记录' }}</a-tag></header>
+                <header><div><span>{{ record.occurredAt }}</span><h4>{{ record.title }}</h4></div><a-tag>{{ record.source === 'upload' ? '文件归档' : record.source === 'assistant' ? '助手对话' : '手动记录' }}</a-tag></header>
                 <p>{{ record.summary }}</p>
-                <a-button v-if="service.mode === 'api'" size="small" @click="router.push({ name: 'AgentCompWithThreadId', params: { thread_id: record.id }, query: { student_id: studentId } })">重开关联会话</a-button>
+                <a-button v-if="record.conversationId" size="small" @click="router.push({ name: 'AgentCompWithThreadId', params: { thread_id: record.conversationId }, query: { student_id: studentId } })">继续对话</a-button>
                 <div v-if="record.moodBefore != null" class="mood-change">
                   <span>谈话前 {{ record.moodBefore }}</span><i>→</i><span>谈话后 {{ record.moodAfter }}</span>
                 </div>
@@ -398,9 +357,10 @@ watch(studentId, (id) => {
       </a-form>
     </a-modal>
 
-    <a-modal v-model:open="conversationOpen" title="新建辅导会话" :confirm-loading="conversationBusy" @ok="createConversation">
+    <a-modal v-model:open="conversationOpen" title="下一步助手" ok-text="进入对话" :confirm-loading="conversationBusy" @ok="createConversation">
       <a-alert v-if="conversationError" type="error" show-icon :message="conversationError" class="conversation-alert" />
       <a-form layout="vertical">
+        <a-alert type="info" show-icon message="新对话会成为当前学生档案时间轴上的一个节点。" class="conversation-alert" />
         <a-form-item label="背景快照">
           <a-textarea :value="workspace?.background" :rows="4" disabled />
         </a-form-item>
@@ -420,16 +380,6 @@ watch(studentId, (id) => {
       :thread-id="service.mode === 'api' ? String(workspace?.timeline?.[0]?.id || '') : ''"
       @close="uploadOpen = false"
       @archived="handleArchived"
-    />
-    <CounselingAssistantDrawer
-      :open="assistantOpen"
-      :student="workspace?.student"
-      :messages="workspace?.assistantMessages || []"
-      :busy="assistantBusy"
-      :mode="service.mode"
-      @close="assistantOpen = false"
-      :next-step-topics="nextStepTopics"
-      @send="sendAssistant"
     />
   </div>
 </template>

@@ -23,7 +23,7 @@ export const COUNSELING_UPLOAD_MAX_BYTES = 5 * 1024 * 1024
  */
 
 /** @typedef {{id:string,title:string,status:'todo'|'done',dueAt?:string}} WorkspaceTodo */
-/** @typedef {{id:string,occurredAt:string,title:string,summary:string,moodBefore?:number,moodAfter?:number,source:'manual'|'upload'}} SessionRecord */
+/** @typedef {{id:string,occurredAt:string,title:string,summary:string,moodBefore?:number,moodAfter?:number,source:'manual'|'upload'|'assistant',conversationId?:string}} SessionRecord */
 /** @typedef {{id:string,title:string,progress:number,status:'active'|'done',homework?:string}} Goal */
 /** @typedef {{name:string,points:Array<{date:string,value:number}>,interpretation:string}} AssessmentSeries */
 /** @typedef {{id:string,occurredAt:string,level:RiskLevel,signal:string,response:string,status:'monitoring'|'closed'}} CrisisEvent */
@@ -56,7 +56,6 @@ export const COUNSELING_UPLOAD_MAX_BYTES = 5 * 1024 * 1024
  * @property {AssessmentSeries[]} assessments
  * @property {CrisisEvent[]} crises
  * @property {UploadedRecord[]} uploads
- * @property {Array<{id:string,role:'user'|'assistant',content:string,createdAt:string}>} assistantMessages
  */
 
 export {}

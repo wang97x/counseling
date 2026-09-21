@@ -18,6 +18,18 @@ export function mapApiStudent(item) {
   }
 }
 
+/** 将档案关联会话映射为可继续的时间轴节点。 */
+export function mapApiConversation(item) {
+  return {
+    id: String(item.id),
+    conversationId: String(item.id),
+    occurredAt: item.created_at || '',
+    title: item.title || '辅导会话',
+    summary: item.summary || '暂无摘要',
+    source: 'assistant',
+  }
+}
+
 /** 在当前列表接口不支持查询参数时执行前端可见筛选。 */
 export function filterApiStudents(items, filters = {}) {
   const query = String(filters.query || '').trim().toLowerCase()

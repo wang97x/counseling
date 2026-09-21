@@ -1,14 +1,13 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
-import { filterApiStudents, mapApiStudent, toApiStudentPatch } from '../../src/services/counseling/apiMapping.js'
+import { filterApiStudents, mapApiConversation, mapApiStudent, toApiStudentPatch } from '../../src/services/counseling/apiMapping.js'
 import { validateCounselingUpload } from '../../src/services/counseling/uploadValidation.js'
 import {
   createLatestOperation,
   isCurrentCounselingOperation,
   isCurrentStudentRequest,
 } from '../../src/utils/counselingRequestGuard.js'
-import { buildNextStepTopics } from '../../src/services/counseling/nextStepTopics.js'
 import { processCounselingRecordUpload } from '../../src/services/counseling/recordUploadFlow.js'
 import {
   createCounselingDemoAdapter,
@@ -135,30 +134,6 @@ test('无既有量表的演示档案按预览新增观察序列', async () => {
   assert.equal(archived.data.assessments[0].points.length, 1)
 })
 
-test('演示助手不把用户自由文本写入 localStorage', async () => {
-  const storage = memoryStorage()
-  const service = createCounselingDemoAdapter({ storage })
-  const secret = '真实敏感内容-不得持久化'
-  assert.equal((await service.sendAssistantMessage('demo-001', secret)).status, 'ok')
-  assert.doesNotMatch(storage.getItem(STORAGE_KEY), new RegExp(secret))
-})
-
-test('下一步助手基于待办、目标和风险提供三个可执行话题', () => {
-  const workspace = createCounselingDemoSeed().workspaces['demo-001']
-  const topics = buildNextStepTopics(workspace)
-  assert.deepEqual(topics.map((item) => item.id), ['todo', 'goal', 'risk'])
-  assert.match(topics[0].prompt, new RegExp(workspace.todos[0].title))
-  assert.match(topics[1].prompt, new RegExp(workspace.goals[0].title))
-  assert.match(topics[2].prompt, /不要把建议表述为已完成处置/)
-  assert.deepEqual(buildNextStepTopics(null), [])
-  const sparseTopics = buildNextStepTopics({
-    student: { riskLevel: 'unknown', chiefConcern: '适应新环境' },
-    todos: [], goals: [], timeline: [],
-  })
-  assert.equal(sparseTopics.length, 3)
-  assert.deepEqual(sparseTopics.map((item) => item.id), ['change', 'prepare', 'focus'])
-})
-
 test('API 映射保留 closed 与负责人边界，不伪造风险和未接入字段', () => {
   const owner = mapApiStudent({
     id: 9,
@@ -180,6 +155,21 @@ test('API 映射保留 closed 与负责人边界，不伪造风险和未接入�
   assert.deepEqual(toApiStudentPatch({ chiefConcern: '更新背景', status: 'closed' }), {
     background_summary: '更新背景',
     status: 'closed',
+  })
+})
+
+test('档案关联会话映射到可继续的时间轴节点', () => {
+  assert.deepEqual(mapApiConversation({
+    id: 'thread-1',
+    title: '第 2 次辅导材料',
+    created_at: '2026-09-17T12:00:00Z',
+  }), {
+    id: 'thread-1',
+    conversationId: 'thread-1',
+    occurredAt: '2026-09-17T12:00:00Z',
+    title: '第 2 次辅导材料',
+    summary: '暂无摘要',
+    source: 'assistant',
   })
 })
 
@@ -289,6 +279,14 @@ test('工作台使用 URL 标签恢复并隔离学生切换时的旧响应', () 
   assert.match(source, /conversationOpen\.value = false/)
   assert.match(source, /editBusy\.value = false/)
   assert.match(source, /conversationBusy\.value = false/)
+  assert.match(source, /@click="openConversationCreator"/)
+  assert.match(source, /<a-button v-if="service\.mode === 'api'" aria-label="打开下一步助手"/)
+  assert.match(source, /<button v-if="service\.mode === 'api'" type="button" class="next-session"/)
+  assert.match(source, /<button v-if="service\.mode === 'api'" type="button" @click="openConversationCreator"/)
+  assert.doesNotMatch(source, /新建会话/)
+  assert.match(source, /record\.source === 'assistant' \? '助手对话'/)
+  assert.match(source, /record\.conversationId/)
+  assert.match(source, />继续对话</)
 
   const listSource = readFileSync(new URL('../../src/views/StudentRecordListView.vue', import.meta.url), 'utf8')
   assert.match(listSource, /Number\(item\.counselorId\) === Number\(userStore\.userId\)/)
@@ -299,6 +297,8 @@ test('工作台使用 URL 标签恢复并隔离学生切换时的旧响应', () 
   assert.match(listSource, /v-if="service\.mode === 'demo'" value="paused"/)
   assert.match(listSource, /aria-label="刷新档案列表"/)
   assert.match(listSource, /font-size: 0/)
+  const apiAdapter = readFileSync(new URL('../../src/services/counseling/apiAdapter.js', import.meta.url), 'utf8')
+  assert.match(apiAdapter, /timeline: items\.map\(mapApiConversation\)/)
 
   const uploadSource = readFileSync(new URL('../../src/components/counseling/RecordUploadFlow.vue', import.meta.url), 'utf8')
   assert.match(uploadSource, /\['上传记录', '附件已加入'\]/)

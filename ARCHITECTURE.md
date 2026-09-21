@@ -80,7 +80,7 @@ Yuxi 只交付完整知识能力路径。API 始终注册 `external_kb`、`knowl
 
 `/students` 为辅导人员和业务管理员提供学生档案列表。业务管理员创建档案并指定初始负责人，负责人在详情中维护背景摘要与状态；部门和负责人可见性由后端档案接口执行。负责人从详情确认背景后创建辅导会话，复用原对话页。Conversation 的服务端保留 metadata 固定学生及确认背景；档案编辑不改变已有快照，普通请求接入时将快照固化到 Request、Run 和用户级模型输入。
 
-`StudentRecordListView` 与 `StudentWorkspaceView` 提供档案列表和五标签工作区，`services/counselingWorkspaceService.js` 显式选择真实 API 或演示适配器。真实调用复用 `apis/counseling_api.js` 与现有会话附件接口；摘要生成、草稿保存、归档预览、正式归档和助手对话在 `services/counseling/apiAdapter.js` 中仍返回 `not_supported`。演示状态不构成 PostgreSQL 中的正式辅导记录。
+`StudentRecordListView` 与 `StudentWorkspaceView` 提供档案列表和五标签工作区，`services/counselingWorkspaceService.js` 显式选择真实 API 或演示适配器。真实调用复用 `apis/counseling_api.js` 与现有会话附件接口；档案助手通过关联 Conversation 进入既有 Agent 页面，摘要生成、草稿保存、归档预览和正式归档在 `services/counseling/apiAdapter.js` 中仍返回 `not_supported`。演示模式不提供关联会话入口，演示状态不构成 PostgreSQL 中的正式辅导记录。
 
 ## 智能体运行链路
 

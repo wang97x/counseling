@@ -43,9 +43,6 @@ export function createCounselingDemoSeed() {
           { id: 'crisis-1', occurredAt: '2026-09-04', level: 'watch', signal: '连续失眠与明显疲惫', response: '已共同确认支持资源和紧急联系人，持续观察。', status: 'monitoring' },
         ],
         uploads: [],
-        assistantMessages: [
-          { id: 'msg-1', role: 'assistant', content: '我会只基于林同学当前档案中的演示资料协助准备。', createdAt: stamp() },
-        ],
       },
       'demo-002': {
         student: student({
@@ -59,7 +56,7 @@ export function createCounselingDemoSeed() {
         goals: [{ id: 'goal-3', title: '恢复可获得的同伴支持', progress: 20, status: 'active', homework: '联系一位可信任同学' }],
         assessments: [{ name: '主观低落（0–10）', points: [{ date: '09-08', value: 7 }, { date: '09-15', value: 9 }], interpretation: '近期上升，需要人工复核风险。' }],
         crises: [{ id: 'crisis-2', occurredAt: '2026-09-15', level: 'high', signal: '表达无望感，风险内容待进一步核对', response: '已记录支持资源；本演示不代表危机干预已完成。', status: 'monitoring' }],
-        uploads: [], assistantMessages: [],
+        uploads: [],
       },
       'demo-003': {
         student: student({
@@ -69,7 +66,7 @@ export function createCounselingDemoSeed() {
         }),
         background: '已完成阶段性辅导，保留结案前的目标与量表趋势。',
         todos: [], timeline: [], goals: [{ id: 'goal-4', title: '形成可执行的生涯探索计划', progress: 100, status: 'done', homework: '按月回顾计划' }],
-        assessments: [], crises: [], uploads: [], assistantMessages: [],
+        assessments: [], crises: [], uploads: [],
       },
     },
   }
@@ -221,19 +218,6 @@ export function createCounselingDemoAdapter({ storage = defaultStorage() } = {})
       }
       write(state)
       return { status: 'ok', data: clone(workspace) }
-    },
-
-    async sendAssistantMessage(studentId, content, context = {}) {
-      workspaceOrThrow(read(), studentId)
-      const reply = context.intent === 'prepare'
-        ? '建议先核对最近待办与风险观察，再从上次家庭作业的执行感受开始。'
-        : context.intent === 'next_step'
-          ? '建议把这个话题拆成三步：先核对事实与近期变化，再明确一个本次可执行动作，最后约定下次复盘点。所有建议都需要辅导人员结合原始记录确认。'
-        : context.intent === 'adjust'
-          ? '可以把摘要中的事实观察与推测分开，并保留需要当面核对的表述。'
-          : '当前回答仅基于此学生的演示档案，不包含外部知识库结论。'
-      const assistantMessage = { id: 'msg-a-' + Date.now(), role: 'assistant', content: reply, createdAt: stamp() }
-      return { status: 'ok', data: clone(assistantMessage) }
     },
 
     async resetDemo() {
