@@ -1,6 +1,6 @@
 <template>
   <div class="basic-settings-section">
-    <template v-if="userStore.isAdmin">
+    <template v-if="userStore.canUseTechnicalConsole">
       <template v-if="userStore.isSuperAdmin">
         <div class="section-title">默认项配置</div>
         <div class="settings-panel">
@@ -55,8 +55,8 @@
     </template>
 
     <!-- 服务链接部分 -->
-    <div v-if="userStore.isAdmin" class="section-title">服务链接</div>
-    <div v-if="userStore.isAdmin">
+    <div v-if="userStore.canUseTechnicalConsole" class="section-title">服务链接</div>
+    <div v-if="userStore.canUseTechnicalConsole">
       <p class="section-description">
         快速访问系统相关的外部服务，需要将 localhost 替换为实际的 IP 地址。
       </p>

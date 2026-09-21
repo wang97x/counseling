@@ -138,7 +138,7 @@
                 <span>仅自己可用，保存在个人 Skill 持久源，不进入平台数据库。</span>
               </button>
               <button
-                v-if="userStore.isAdmin"
+                v-if="userStore.canUseTechnicalConsole"
                 type="button"
                 class="install-target-option"
                 :class="{ selected: installTarget === 'shared' }"

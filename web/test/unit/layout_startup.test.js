@@ -5,7 +5,7 @@ import { createRenderer, h, ssrContextKey } from 'vue'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createServer } from 'vite'
 
-test('布局导航不等待品牌或知识库，卸载后清理状态同步计时器', async (t) => {
+test('超级管理员布局只加载可见模块且不启动会话状态同步', async (t) => {
   globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {} }
   globalThis.window = { addEventListener() {}, removeEventListener() {} }
   const server = await createServer({
@@ -32,6 +32,11 @@ test('布局导航不等待品牌或知识库，卸载后清理状态同步计�
     }
     const { useAgentStore } = await server.ssrLoadModule('/src/stores/agent.js')
     useAgentStore().isInitialized = true
+    const { useUserStore } = await server.ssrLoadModule('/src/stores/user.js')
+    const userStore = useUserStore()
+    userStore.token = 'layout-test-token'
+    userStore.userId = 1
+    userStore.userRole = 'superadmin'
     const { default: Layout } = await server.ssrLoadModule('/src/layouts/AppLayout.vue')
     const renderer = createRenderer({
       createElement: () => ({}),
@@ -61,13 +66,13 @@ test('布局导航不等待品牌或知识库，卸载后清理状态同步计�
     await Promise.resolve()
     assert.ok(calls.includes('loadInfoConfig'))
     assert.ok(calls.includes('loadDatabases'))
-    assert.ok(calls.includes('loadThreads'))
-    assert.ok(calls.includes('loadProjects'))
+    assert.equal(calls.includes('loadThreads'), false)
+    assert.equal(calls.includes('loadProjects'), false)
     assert.ok(calls.includes('refreshConfig'))
-    assert.equal(interval.mock.callCount(), 1)
+    assert.equal(interval.mock.callCount(), 0)
     app.unmount()
     app = null
-    assert.equal(clear.mock.calls[0].arguments[0], 123)
+    assert.equal(clear.mock.callCount(), 0)
   } finally {
     app?.unmount()
     disposePinia(pinia)

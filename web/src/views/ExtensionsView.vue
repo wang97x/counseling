@@ -13,7 +13,7 @@
     <div v-if="!isDetailPage" class="extensions-content">
       <div
         v-if="
-          (userStore.isAdmin ||
+          (userStore.canUseTechnicalConsole ||
             userStore.canManagePersonalKnowledge ||
             userStore.canManageTeamKnowledge) &&
           activeTab === 'knowledge'
@@ -22,13 +22,13 @@
       >
         <DataBaseView ref="knowledgeRef" embedded />
       </div>
-      <div v-if="userStore.isAdmin && activeTab === 'tools'" class="tab-panel">
+      <div v-if="userStore.canUseTechnicalConsole && activeTab === 'tools'" class="tab-panel">
         <ToolsCardList ref="toolsRef" />
       </div>
-      <div v-if="activeTab === 'skills'" class="tab-panel">
+      <div v-if="userStore.canUseTechnicalConsole && activeTab === 'skills'" class="tab-panel">
         <SkillCardList ref="skillsRef" />
       </div>
-      <div v-if="userStore.isAdmin && activeTab === 'mcp'" class="tab-panel">
+      <div v-if="userStore.canUseTechnicalConsole && activeTab === 'mcp'" class="tab-panel">
         <McpCardList ref="mcpRef" />
       </div>
     </div>
@@ -62,13 +62,12 @@ const adminExtensionTabs = computed(() => [
   { key: 'tools', label: '工具' },
   { key: 'mcp', label: 'MCP' }
 ])
-const userExtensionTabs = [{ key: 'skills', label: '技能' }]
 const extensionTabs = computed(() =>
-  userStore.isAdmin
+  userStore.canUseTechnicalConsole
     ? adminExtensionTabs.value
     : userStore.canManagePersonalKnowledge || userStore.canManageTeamKnowledge
-      ? [{ key: 'knowledge', label: '知识库' }, ...userExtensionTabs]
-      : userExtensionTabs
+      ? [{ key: 'knowledge', label: '知识库' }]
+      : []
 )
 const allowedTabKeys = computed(() => extensionTabs.value.map((tab) => tab.key))
 const defaultTabKey = computed(() => extensionTabs.value[0]?.key || 'skills')
@@ -108,7 +107,7 @@ const activeChildLoading = computed(() => {
 })
 
 watch(
-  () => [route.query.tab, userStore.isAdmin, userStore.canManagePersonalKnowledge, userStore.canManageTeamKnowledge],
+  () => [route.query.tab, userStore.canUseTechnicalConsole, userStore.canManagePersonalKnowledge, userStore.canManageTeamKnowledge],
   ([tab]) => {
     const nextTab = normalizeTab(tab)
     if (activeTab.value !== nextTab) activeTab.value = nextTab

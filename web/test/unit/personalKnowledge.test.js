@@ -7,6 +7,7 @@ import {
   buildDatabaseRequest
 } from '../../src/utils/databaseCreateForm.js'
 import { isPersonalKnowledgeConfig } from '../../src/utils/shareConfig.js'
+import { resolveFrontendAccess } from '../../src/utils/frontendAccess.js'
 
 const source = (path) => readFileSync(new URL('../../src/' + path, import.meta.url), 'utf8')
 
@@ -48,10 +49,13 @@ test('登录、刷新与退出同步业务角色，显式空角色不能继承�
       getCurrentUser: async () => profile
     },
     useAgentStore: () => ({ reset() {} }),
+    resolveFrontendAccess,
     console
   })
   await user.login({})
   assert.equal(user.canManagePersonalKnowledge.value, true)
+  assert.equal(user.defaultHome.value, '/students')
+  assert.equal(user.canUseTechnicalConsole.value, false)
   profile = { id: 2, role: 'user', business_roles: [] }
   await user.getCurrentUser()
   assert.equal(user.canManagePersonalKnowledge.value, false)
@@ -110,13 +114,19 @@ test('知识库与文件请求不要求平台管理员，下载保留blob响应�
 
 test('辅导入口不开放工具和评估，个人库隐藏共享编辑并强制私有提交', () => {
   assert.match(source('views/ExtensionsView.vue'), /userStore\.canManagePersonalKnowledge/)
-  assert.match(source('views/ExtensionsView.vue'), /userStore\.isAdmin && activeTab === 'tools'/)
+  assert.match(
+    source('views/ExtensionsView.vue'),
+    /userStore\.canUseTechnicalConsole && activeTab === 'tools'/,
+  )
   const routes = source('router/index.js')
   assert.match(
     routes,
     /name: 'ExtensionKnowledgeBaseDetail'[\s\S]*?requiresKnowledgeManagement: true/
   )
-  assert.match(routes, /name: 'ExtensionEvaluationBenchmarkDetail'[\s\S]*?requiresAdmin: true/)
+  assert.match(
+    routes,
+    /name: 'ExtensionEvaluationBenchmarkDetail'[\s\S]*?requiresTechnicalConsole: true/,
+  )
   const create = source('components/knowledge/DatabaseCreateFlowModal.vue')
   assert.match(create, /const isPersonal = computed\(\(\) => props\.defaultPersonal\)/)
   assert.match(create, /isPersonal\.value \? createPersonalShareConfig\(\) : shareConfig\.value/)

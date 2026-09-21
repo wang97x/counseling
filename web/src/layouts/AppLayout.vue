@@ -58,7 +58,7 @@ const projectPendingId = ref(null)
 
 // Provide settings modal methods to child components
 const openSettingsModal = (tab) => {
-  settingsInitialTab.value = tab || (userStore.isAdmin ? 'base' : 'account')
+  settingsInitialTab.value = tab || (userStore.canUseTechnicalConsole ? 'base' : 'account')
   showSettingsModal.value = true
 }
 
@@ -90,16 +90,15 @@ const handleGlobalKeydown = (e) => {
 
 onMounted(() => {
   window.addEventListener('keydown', handleGlobalKeydown)
-  // 各 Store 自行处理错误，导航不等待无依赖的品牌、知识库或配置请求。
+  // 各 Store 自行处理错误；按角色加载实际可见模块，避免辅导员启动技术控制台请求。
   void infoStore.loadInfoConfig()
-  void getRemoteDatabase()
-  void initAgentNavigation()
-  void getRemoteConfig()
-  // 仅管理员加载任务中心数据
+  if (userStore.canAccessKnowledge) void getRemoteDatabase()
+  if (userStore.canUsePlatformWorkspace || route.path.startsWith('/agent/')) void initAgentNavigation()
+  if (userStore.canUseTechnicalConsole) void getRemoteConfig()
   if (userStore.isAdmin) {
     taskerStore.loadTasks()
   }
-  startThreadStatusSync()
+  if (userStore.canUsePlatformWorkspace || route.path.startsWith('/agent/')) startThreadStatusSync()
 })
 
 // 低频刷新侧边栏线程状态，让后台线程完成时也能从 loading 转为 ready/done。
@@ -138,37 +137,19 @@ const organizationName = computed(() => {
   return infoStore.organization.name || infoStore.branding.name || '知伴'
 })
 
-// 下面是导航菜单部分，添加智能体项
 const mainList = computed(() => {
-  const items = [
-    {
-      name: '新建对话',
-      path: '/agent',
-      icon: MessageCirclePlus,
-      activeIcon: MessageCirclePlus,
-      action: true,
-      exactActive: true
-    }
-  ]
+  const items = []
 
-  items.push({
-    name: '智能体',
-    path: '/agent-manage',
-    icon: Box,
-    activeIcon: Box
-  })
+  if (userStore.isSuperAdmin) {
+    items.push({
+      name: '数据总览',
+      path: '/dashboard',
+      icon: BarChart3,
+      activeIcon: BarChart3
+    })
+  }
 
-  items.push({
-    name: '个人空间',
-    path: '/workspace',
-    icon: HardDrive,
-    activeIcon: HardDrive
-  })
-
-  if (
-    userStore.businessRoles.includes('counselor') ||
-    userStore.businessRoles.includes('business_admin')
-  ) {
+  if (userStore.canAccessStudentRecords) {
     items.push({
       name: '学生档案',
       path: '/students',
@@ -177,20 +158,41 @@ const mainList = computed(() => {
     })
   }
 
-  items.push({
-    name: '知识库 · 技能',
-    path: '/extensions',
-    activePaths: ['/extensions'],
-    icon: LibraryBig,
-    activeIcon: LibraryBig
-  })
-
-  if (userStore.isSuperAdmin) {
+  if (userStore.canUseTechnicalConsole) {
     items.push({
-      name: '数据总览',
-      path: '/dashboard',
-      icon: BarChart3,
-      activeIcon: BarChart3
+      name: '智能体与模型',
+      path: '/agent-manage',
+      icon: Box,
+      activeIcon: Box
+    })
+  }
+
+  if (userStore.canUsePlatformWorkspace) {
+    items.push(
+      {
+        name: '新建对话',
+        path: '/agent',
+        icon: MessageCirclePlus,
+        activeIcon: MessageCirclePlus,
+        action: true,
+        exactActive: true
+      },
+      {
+        name: '个人空间',
+        path: '/workspace',
+        icon: HardDrive,
+        activeIcon: HardDrive
+      }
+    )
+  }
+
+  if (userStore.canAccessKnowledge || userStore.canUseTechnicalConsole) {
+    items.push({
+      name: userStore.canUseTechnicalConsole ? '知识库 · 扩展' : '知识库',
+      path: '/extensions',
+      activePaths: ['/extensions'],
+      icon: LibraryBig,
+      activeIcon: LibraryBig
     })
   }
 
@@ -361,7 +363,7 @@ provide('settingsModal', {
   <div class="app-layout" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
     <div class="header">
       <div class="sidebar-brand" @click.stop>
-        <router-link v-if="!sidebarCollapsed" to="/" class="brand-link">
+        <router-link v-if="!sidebarCollapsed" :to="userStore.defaultHome" class="brand-link">
           <img :src="infoStore.organization.avatar" class="brand-avatar" />
           <span class="brand-name">{{ organizationName }}</span>
         </router-link>
@@ -377,6 +379,7 @@ provide('settingsModal', {
         </button>
         <div v-if="!sidebarCollapsed" class="sidebar-header-actions" aria-label="侧边栏操作">
           <button
+            v-if="userStore.canUsePlatformWorkspace"
             type="button"
             class="sidebar-header-action"
             :class="{ active: conversationSearchOpen }"
@@ -418,7 +421,7 @@ provide('settingsModal', {
         </RouterLink>
 
         <button
-          v-if="sidebarCollapsed"
+          v-if="userStore.canUsePlatformWorkspace && sidebarCollapsed"
           type="button"
           class="nav-item"
           :class="{ active: conversationSearchOpen }"
@@ -453,7 +456,7 @@ provide('settingsModal', {
       </div>
       <div class="fill">
         <ConversationNavSection
-          v-if="!sidebarCollapsed"
+          v-if="userStore.canUsePlatformWorkspace && !sidebarCollapsed"
           class="sidebar-conversations"
           :current-chat-id="activeConversationThreadId"
           :chats-list="threads"
@@ -475,7 +478,7 @@ provide('settingsModal', {
         />
       </div>
       <div class="foo">
-        <div class="github nav-item" @click.stop>
+        <div v-if="userStore.canUsePlatformWorkspace" class="github nav-item" @click.stop>
           <a-tooltip placement="right" :open="sidebarCollapsed ? undefined : false">
             <template #title>项目仓库</template>
             <a href="https://github.com/wang97x/counseling" target="_blank" rel="noopener noreferrer" class="github-link">
@@ -519,6 +522,7 @@ provide('settingsModal', {
     </router-view>
 
     <GlobalSearchModal
+      v-if="userStore.canUsePlatformWorkspace"
       v-model:open="conversationSearchOpen"
       :modes="['conversation', 'file']"
       default-mode="conversation"

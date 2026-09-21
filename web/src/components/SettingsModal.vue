@@ -32,7 +32,7 @@
             class="sider-item"
             :class="{ activesec: activeTab === 'apiKeys' }"
             @click="activeTab = 'apiKeys'"
-            v-if="userStore.isLoggedIn"
+            v-if="userStore.canUseTechnicalConsole"
           >
             <Key class="icon" :size="18" />
             <span>API Keys</span>
@@ -41,7 +41,7 @@
             class="sider-item"
             :class="{ activesec: activeTab === 'base' }"
             @click="activeTab = 'base'"
-            v-if="userStore.isAdmin"
+            v-if="userStore.canUseTechnicalConsole"
           >
             <Settings class="icon" :size="18" />
             <span>基本设置</span>
@@ -50,7 +50,7 @@
             class="sider-item"
             :class="{ activesec: activeTab === 'ocr' }"
             @click="activeTab = 'ocr'"
-            v-if="userStore.isAdmin"
+            v-if="userStore.canUseTechnicalConsole"
           >
             <ScanText class="icon" :size="18" />
             <span>OCR 配置</span>
@@ -59,7 +59,7 @@
             class="sider-item"
             :class="{ activesec: activeTab === 'user' }"
             @click="activeTab = 'user'"
-            v-if="userStore.isAdmin"
+            v-if="userStore.canManagePlatformUsers"
           >
             <User class="icon" :size="18" />
             <span>用户管理</span>
@@ -68,7 +68,7 @@
             class="sider-item"
             :class="{ activesec: activeTab === 'department' }"
             @click="activeTab = 'department'"
-            v-if="userStore.isSuperAdmin"
+            v-if="userStore.canManagePlatformUsers"
           >
             <Users class="icon" :size="18" />
             <span>部门管理</span>
@@ -77,7 +77,7 @@
             class="sider-item"
             :class="{ activesec: activeTab === 'agentEnv' }"
             @click="activeTab = 'agentEnv'"
-            v-if="userStore.isLoggedIn"
+            v-if="userStore.canUseTechnicalConsole"
           >
             <SquareTerminal class="icon" :size="18" />
             <span>环境变量</span>
@@ -99,7 +99,7 @@
           class="nav-item"
           :class="{ active: activeTab === 'apiKeys' }"
           @click="activeTab = 'apiKeys'"
-          v-if="userStore.isLoggedIn"
+          v-if="userStore.canUseTechnicalConsole"
         >
           API Keys
         </div>
@@ -107,7 +107,7 @@
           class="nav-item"
           :class="{ active: activeTab === 'agentEnv' }"
           @click="activeTab = 'agentEnv'"
-          v-if="userStore.isLoggedIn"
+          v-if="userStore.canUseTechnicalConsole"
         >
           沙盒环境变量
         </div>
@@ -115,7 +115,7 @@
           class="nav-item"
           :class="{ active: activeTab === 'base' }"
           @click="activeTab = 'base'"
-          v-if="userStore.isAdmin"
+          v-if="userStore.canUseTechnicalConsole"
         >
           基本设置
         </div>
@@ -123,7 +123,7 @@
           class="nav-item"
           :class="{ active: activeTab === 'ocr' }"
           @click="activeTab = 'ocr'"
-          v-if="userStore.isAdmin"
+          v-if="userStore.canUseTechnicalConsole"
         >
           OCR 配置
         </div>
@@ -131,7 +131,7 @@
           class="nav-item"
           :class="{ active: activeTab === 'user' }"
           @click="activeTab = 'user'"
-          v-if="userStore.isAdmin"
+          v-if="userStore.canManagePlatformUsers"
         >
           用户管理
         </div>
@@ -139,7 +139,7 @@
           class="nav-item"
           :class="{ active: activeTab === 'department' }"
           @click="activeTab = 'department'"
-          v-if="userStore.isSuperAdmin"
+          v-if="userStore.canManagePlatformUsers"
         >
           部门管理
         </div>
@@ -157,33 +157,33 @@
 
           <div
             v-show="activeTab === 'apiKeys'"
-            v-if="userStore.isLoggedIn && loadedTabs.has('apiKeys')"
+            v-if="userStore.canUseTechnicalConsole && loadedTabs.has('apiKeys')"
           >
             <ApiKeyManagementComponent />
           </div>
 
           <div
             v-show="activeTab === 'agentEnv'"
-            v-if="userStore.isLoggedIn && loadedTabs.has('agentEnv')"
+            v-if="userStore.canUseTechnicalConsole && loadedTabs.has('agentEnv')"
           >
             <AgentEnvSettingsCard />
           </div>
 
-          <div v-show="activeTab === 'base'" v-if="userStore.isAdmin && loadedTabs.has('base')">
+          <div v-show="activeTab === 'base'" v-if="userStore.canUseTechnicalConsole && loadedTabs.has('base')">
             <BasicSettingsSection />
           </div>
 
-          <div v-show="activeTab === 'ocr'" v-if="userStore.isAdmin && loadedTabs.has('ocr')">
+          <div v-show="activeTab === 'ocr'" v-if="userStore.canUseTechnicalConsole && loadedTabs.has('ocr')">
             <OCRSettingsSection />
           </div>
 
-          <div v-show="activeTab === 'user'" v-if="userStore.isAdmin && loadedTabs.has('user')">
+          <div v-show="activeTab === 'user'" v-if="userStore.canManagePlatformUsers && loadedTabs.has('user')">
             <UserManagementComponent />
           </div>
 
           <div
             v-show="activeTab === 'department'"
-            v-if="userStore.isSuperAdmin && loadedTabs.has('department')"
+            v-if="userStore.canManagePlatformUsers && loadedTabs.has('department')"
           >
             <DepartmentManagementComponent />
           </div>
@@ -248,9 +248,9 @@ const visible = computed({
 
 const availableTabs = computed(() => {
   const tabs = []
-  if (userStore.isLoggedIn) tabs.push('account', 'apiKeys', 'agentEnv')
-  if (userStore.isAdmin) tabs.push('base', 'ocr', 'user')
-  if (userStore.isSuperAdmin) tabs.push('department')
+  if (userStore.isLoggedIn) tabs.push('account')
+  if (userStore.canUseTechnicalConsole) tabs.push('apiKeys', 'agentEnv', 'base', 'ocr')
+  if (userStore.canManagePlatformUsers) tabs.push('user', 'department')
   return tabs
 })
 
@@ -259,7 +259,7 @@ const setActiveTab = (preferredTab) => {
     activeTab.value = preferredTab
     return
   }
-  activeTab.value = userStore.isAdmin ? 'base' : availableTabs.value[0]
+  activeTab.value = userStore.canUseTechnicalConsole ? 'base' : availableTabs.value[0]
 }
 
 const handleClose = () => {

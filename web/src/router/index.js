@@ -1,8 +1,11 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import BlankLayout from '@/layouts/BlankLayout.vue'
 import { useUserStore } from '@/stores/user'
-import { useAgentStore } from '@/stores/agent'
 import { sanitizeRedirect } from '@/utils/oidcAutoStart'
+import {
+  resolveFrontendNavigationRedirect
+} from '@/utils/frontendAccess'
+import { counselingApi } from '@/apis/counseling_api'
 
 const AppLayout = () => import('@/layouts/AppLayout.vue')
 
@@ -38,7 +41,7 @@ const router = createRouter({
       path: '/auth/cli/authorize',
       name: 'CLIAuthAuthorize',
       component: () => import('@/views/CLIAuthAuthorizeView.vue'),
-      meta: { requiresAuth: true }
+      meta: { requiresAuth: true, requiresPlatformWorkspace: true }
     },
     {
       path: '/agent',
@@ -49,13 +52,13 @@ const router = createRouter({
           path: '',
           name: 'AgentComp',
           component: () => import('../views/AgentView.vue'),
-          meta: { keepAlive: true, requiresAuth: true }
+          meta: { keepAlive: true, requiresAuth: true, requiresPlatformWorkspace: true }
         },
         {
           path: ':thread_id',
           name: 'AgentCompWithThreadId',
           component: () => import('../views/AgentView.vue'),
-          meta: { keepAlive: true, requiresAuth: true }
+          meta: { keepAlive: true, requiresAuth: true, requiresLinkedConversation: true }
         }
       ]
     },
@@ -68,7 +71,7 @@ const router = createRouter({
           path: '',
           name: 'WorkspaceComp',
           component: () => import('../views/WorkspaceView.vue'),
-          meta: { keepAlive: true, requiresAuth: true }
+          meta: { keepAlive: true, requiresAuth: true, requiresPlatformWorkspace: true }
         }
       ]
     },
@@ -86,7 +89,7 @@ const router = createRouter({
           path: ':studentId',
           name: 'StudentRecordDetail',
           component: () => import('../views/StudentWorkspaceView.vue'),
-          meta: { keepAlive: false, requiresAuth: true, requiresStudentRecords: true }
+          meta: { keepAlive: false, requiresAuth: true, requiresStudentDetail: true }
         }
       ]
     },
@@ -112,7 +115,7 @@ const router = createRouter({
           path: '',
           name: 'AgentManageComp',
           component: () => import('../views/AgentManageView.vue'),
-          meta: { keepAlive: false, requiresAuth: true }
+          meta: { keepAlive: false, requiresAuth: true, requiresTechnicalConsole: true }
         }
       ]
     },
@@ -127,7 +130,8 @@ const router = createRouter({
           component: () => import('../views/ExtensionsView.vue'),
           meta: {
             keepAlive: false,
-            requiresAuth: true
+            requiresAuth: true,
+            requiresExtensionsAccess: true
           },
           children: [
             {
@@ -147,7 +151,7 @@ const router = createRouter({
               meta: {
                 keepAlive: false,
                 requiresAuth: true,
-                requiresAdmin: true
+                requiresTechnicalConsole: true
               }
             },
             {
@@ -157,7 +161,7 @@ const router = createRouter({
               meta: {
                 keepAlive: false,
                 requiresAuth: true,
-                requiresAdmin: true
+                requiresTechnicalConsole: true
               }
             },
             {
@@ -166,7 +170,8 @@ const router = createRouter({
               component: () => import('../components/extensions/SkillDetailView.vue'),
               meta: {
                 keepAlive: false,
-                requiresAuth: true
+                requiresAuth: true,
+                requiresTechnicalConsole: true
               }
             }
           ]
@@ -186,9 +191,6 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   // 检查路由是否需要认证
   const requiresAuth = to.matched.some((record) => record.meta.requiresAuth === true)
-  const requiresAdmin = to.matched.some((record) => record.meta.requiresAdmin)
-  const requiresSuperAdmin = to.matched.some((record) => record.meta.requiresSuperAdmin)
-
   const userStore = useUserStore()
 
   // 如果有 token 但用户信息未加载，先获取用户信息
@@ -203,9 +205,6 @@ router.beforeEach(async (to) => {
   }
 
   const isLoggedIn = userStore.isLoggedIn
-  const isAdmin = userStore.isAdmin
-  const isSuperAdmin = userStore.isSuperAdmin
-
   // 如果路由需要认证但用户未登录
   if (requiresAuth && !isLoggedIn) {
     // 保存尝试访问的路径，登录后跳转
@@ -213,54 +212,17 @@ router.beforeEach(async (to) => {
     return '/login'
   }
 
-  if (
-    to.matched.some((record) => record.meta.requiresKnowledgeManagement) &&
-    !isAdmin &&
-    !userStore.canManagePersonalKnowledge &&
-    !userStore.canManageTeamKnowledge
+  const accessRedirect = await resolveFrontendNavigationRedirect(
+    to,
+    userStore.frontendAccess,
+    counselingApi.listConversations
   )
-    return '/agent'
-
-  if (
-    to.matched.some((record) => record.meta.requiresStudentRecords) &&
-    !userStore.businessRoles.includes('counselor') &&
-    !userStore.businessRoles.includes('business_admin')
-  )
-    return '/agent'
-
-  // 如果路由需要管理员权限但用户不是管理员
-  if (requiresAdmin && !isAdmin) {
-    // 如果是普通用户，跳转到聊天页空态
-    try {
-      const agentStore = useAgentStore()
-      // 等待 store 初始化完成
-      if (!agentStore.isInitialized) {
-        await agentStore.initialize()
-      }
-      return '/agent'
-    } catch (error) {
-      console.error('获取智能体信息失败:', error)
-      return '/agent'
-    }
-  }
-
-  // 如果路由需要超级管理员权限但用户不是超级管理员
-  if (requiresSuperAdmin && !isSuperAdmin) {
-    try {
-      const agentStore = useAgentStore()
-      if (!agentStore.isInitialized) {
-        await agentStore.initialize()
-      }
-      return '/agent'
-    } catch (error) {
-      console.error('获取智能体信息失败:', error)
-      return '/agent'
-    }
-  }
+  if (accessRedirect && accessRedirect !== to.path) return accessRedirect
 
   // 如果用户已登录但访问登录页，按 redirect 参数跳转
   if (to.path === '/login' && isLoggedIn) {
-    return sanitizeRedirect(to.query.redirect)
+    const redirect = sanitizeRedirect(to.query.redirect)
+    return redirect === '/' ? userStore.defaultHome : redirect
   }
 
   // 其他情况正常导航

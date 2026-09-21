@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { authApi } from '@/apis/auth_api'
 import { useAgentStore } from './agent'
+import { resolveFrontendAccess } from '@/utils/frontendAccess'
 
 export const useUserStore = defineStore('user', () => {
   // 状态
@@ -22,6 +23,16 @@ export const useUserStore = defineStore('user', () => {
   const isSuperAdmin = computed(() => userRole.value === 'superadmin')
   const canManagePersonalKnowledge = computed(() => businessRoles.value.includes('counselor'))
   const canManageTeamKnowledge = computed(() => businessRoles.value.includes('business_admin'))
+  const frontendAccess = computed(() => resolveFrontendAccess(userRole.value, businessRoles.value))
+  const canAccessStudentRecords = computed(() => frontendAccess.value.canAccessStudentRecords)
+  const canAccessStudentDetail = computed(() => frontendAccess.value.canAccessStudentDetail)
+  const canCreateStudentRecord = computed(() => frontendAccess.value.canCreateStudentRecord)
+  const canAccessKnowledge = computed(() => frontendAccess.value.canAccessKnowledge)
+  const canUseTechnicalConsole = computed(() => frontendAccess.value.canUseTechnicalConsole)
+  const canUsePlatformWorkspace = computed(() => frontendAccess.value.canUsePlatformWorkspace)
+  const canAccessLinkedConversation = computed(() => frontendAccess.value.canAccessLinkedConversation)
+  const canManagePlatformUsers = computed(() => frontendAccess.value.canManagePlatformUsers)
+  const defaultHome = computed(() => frontendAccess.value.defaultHome)
 
   // 动作
   function applySession(data) {
@@ -237,6 +248,16 @@ export const useUserStore = defineStore('user', () => {
     isSuperAdmin,
     canManagePersonalKnowledge,
     canManageTeamKnowledge,
+    frontendAccess,
+    canAccessStudentRecords,
+    canAccessStudentDetail,
+    canCreateStudentRecord,
+    canAccessKnowledge,
+    canUseTechnicalConsole,
+    canUsePlatformWorkspace,
+    canAccessLinkedConversation,
+    canManagePlatformUsers,
+    defaultHome,
 
     // 方法
     login,
@@ -258,7 +279,7 @@ export const useUserStore = defineStore('user', () => {
 // 检查当前用户是否有管理员权限
 export const checkAdminPermission = () => {
   const userStore = useUserStore()
-  if (!userStore.isAdmin) {
+  if (!userStore.canUseTechnicalConsole) {
     throw new Error('需要管理员权限')
   }
   return true

@@ -101,9 +101,10 @@ defineProps({
 
 // 用户角色显示文本
 const userRoleText = computed(() => {
+  if (userStore.isSuperAdmin) return '超级管理员'
+  if (userStore.businessRoles.includes('business_admin')) return '业务管理员'
+  if (userStore.businessRoles.includes('counselor')) return '辅导员'
   switch (userStore.userRole) {
-    case 'superadmin':
-      return '超级管理员'
     case 'admin':
       return '管理员'
     case 'user':

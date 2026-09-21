@@ -281,7 +281,6 @@ import { ref, reactive, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useInfoStore } from '@/stores/info'
-import { useAgentStore } from '@/stores/agent'
 import { message } from 'ant-design-vue'
 import { healthApi } from '@/apis/system_api'
 import { authApi } from '@/apis/auth_api'
@@ -298,7 +297,6 @@ const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
 const infoStore = useInfoStore()
-const agentStore = useAgentStore()
 
 // 品牌展示数据
 const loginBgImage = computed(() => {
@@ -461,14 +459,7 @@ const handleLogin = async () => {
 
     // 根据用户角色决定重定向目标
     if (redirectPath === '/') {
-      // 统一跳转到聊天页面（管理员与普通用户共享同一聊天界面）
-      try {
-        await agentStore.initialize()
-        router.push('/agent')
-      } catch (error) {
-        console.error('获取智能体信息失败:', error)
-        router.push('/agent')
-      }
+      router.push(userStore.defaultHome)
     } else {
       // 跳转到其他预设的路径
       router.push(redirectPath)
@@ -628,7 +619,8 @@ const checkServerHealth = async () => {
 onMounted(async () => {
   // 如果已登录，按 redirect 参数跳转（不固定跳首页）
   if (userStore.isLoggedIn) {
-    router.push(sanitizeRedirect(route.query.redirect))
+    const redirect = sanitizeRedirect(route.query.redirect)
+    router.push(redirect === '/' ? userStore.defaultHome : redirect)
     return
   }
 

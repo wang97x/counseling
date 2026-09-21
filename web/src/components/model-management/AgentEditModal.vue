@@ -184,7 +184,7 @@ const isEditingBuiltinAgent = computed(() => isBuiltinAgent({ id: editingAgentId
 const canEditAgentShareConfig = computed(() => !isEditingBuiltinAgent.value)
 const getAgentShareAllowedLevels = () => {
   if (isEditingBuiltinAgent.value) return ['global']
-  if (userStore.isAdmin) return ['global', 'department', 'user']
+  if (userStore.canUseTechnicalConsole) return ['global', 'department', 'user']
   return ['user']
 }
 

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { runInNewContext } from 'node:vm'
 import test from 'node:test'
 import { isKnowledgeBaseInScope } from '../../src/utils/shareConfig.js'
+import { resolveFrontendAccess } from '../../src/utils/frontendAccess.js'
 
 const source = (path) => readFileSync(new URL('../../src/' + path, import.meta.url), 'utf8')
 
@@ -44,11 +45,14 @@ test('业务管理员身份与辅导员身份独立，空业务角色不能继�
       getCurrentUser: async () => profile
     },
     useAgentStore: () => ({ reset() {} }),
+    resolveFrontendAccess,
     console
   })
   await user.login({})
   assert.equal(user.canManageTeamKnowledge.value, true)
   assert.equal(user.canManagePersonalKnowledge.value, false)
+  assert.equal(user.defaultHome.value, '/students')
+  assert.equal(user.canUseTechnicalConsole.value, false)
   profile = { id: 2, role: 'user', business_roles: ['counselor'] }
   await user.getCurrentUser()
   assert.equal(user.canManageTeamKnowledge.value, false)

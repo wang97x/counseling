@@ -138,7 +138,11 @@ async function createConversation() {
     if (!isCurrentStudentRequest(id, version, studentId.value, requestVersion) || !conversationOperations.isCurrent(operation)) return
     if (result.status !== 'ok') throw new Error(result.message || '创建辅导会话失败')
     conversationOpen.value = false
-    await router.push({ name: 'AgentCompWithThreadId', params: { thread_id: result.data.id } })
+    await router.push({
+      name: 'AgentCompWithThreadId',
+      params: { thread_id: result.data.id },
+      query: { student_id: id },
+    })
   } catch (cause) {
     if (isCurrentStudentRequest(id, version, studentId.value, requestVersion) && conversationOperations.isCurrent(operation)) {
       conversationError.value = cause.message || '创建辅导会话失败'
@@ -322,7 +326,7 @@ watch(studentId, (id) => {
               <div class="timeline-card">
                 <header><div><span>{{ record.occurredAt }}</span><h4>{{ record.title }}</h4></div><a-tag>{{ record.source === 'upload' ? '文件归档' : '手动记录' }}</a-tag></header>
                 <p>{{ record.summary }}</p>
-                <a-button v-if="service.mode === 'api'" size="small" @click="router.push({ name: 'AgentCompWithThreadId', params: { thread_id: record.id } })">重开关联会话</a-button>
+                <a-button v-if="service.mode === 'api'" size="small" @click="router.push({ name: 'AgentCompWithThreadId', params: { thread_id: record.id }, query: { student_id: studentId } })">重开关联会话</a-button>
                 <div v-if="record.moodBefore != null" class="mood-change">
                   <span>谈话前 {{ record.moodBefore }}</span><i>→</i><span>谈话后 {{ record.moodAfter }}</span>
                 </div>
