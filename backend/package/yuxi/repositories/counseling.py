@@ -3,7 +3,7 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from yuxi.storage.postgres.models_business import Conversation, User
+from yuxi.storage.postgres.models_business import Conversation
 from yuxi.storage.postgres.models_counseling import StudentRecord
 from yuxi.utils.datetime_utils import utc_now_naive
 
@@ -27,24 +27,6 @@ class StudentRepository:
         )
         return list(result.scalars().all())
 
-    async def list_department_counselors(self, department_id: int) -> list[User]:
-        """读取本部门未删除的负责人候选。"""
-        result = await self.db.execute(
-            select(User)
-            .where(User.department_id == department_id, User.is_deleted == 0)
-            .order_by(User.username, User.id)
-        )
-        return list(result.scalars().all())
-
-    async def eligible_counselor(self, counselor_id: int, department_id: int) -> User | None:
-        """锁定同部门且未删除的待分配用户。"""
-        result = await self.db.execute(
-            select(User)
-            .where(User.id == counselor_id, User.department_id == department_id, User.is_deleted == 0)
-            .with_for_update()
-        )
-        return result.scalar_one_or_none()
-
     async def create(self, department_id: int, student_code: str, counselor_id: int) -> StudentRecord:
         """创建空背景的档案并等待调用方提交。"""
         record = StudentRecord(department_id=department_id, student_code=student_code, counselor_id=counselor_id)
@@ -62,7 +44,7 @@ class StudentRepository:
         return list(result.scalars().all())
 
     async def list_for_manager(self, department_id: int) -> list[StudentRecord]:
-        """读取部门内用于分配的档案元数据。"""
+        """读取业务管理员可见的部门档案元数据。"""
         result = await self.db.execute(
             select(StudentRecord.id, StudentRecord.student_code, StudentRecord.counselor_id, StudentRecord.status)
             .where(StudentRecord.department_id == department_id)

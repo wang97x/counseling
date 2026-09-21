@@ -19,7 +19,8 @@ class BusinessCapability(StrEnum):
     """后续业务入口使用的最小授权能力。"""
 
     MANAGE_ASSIGNED_STUDENTS = "students.manage_assigned"
-    ASSIGN_STUDENTS = "students.assign"
+    CREATE_OWN_STUDENT_RECORD = "students.create_own"
+    VIEW_DEPARTMENT_STUDENTS = "students.view_department"
     MANAGE_PERSONAL_KNOWLEDGE = "knowledge.personal.manage"
     READ_AUTHORIZED_TEAM_KNOWLEDGE = "knowledge.team.read_authorized"
     MANAGE_TEAM_KNOWLEDGE = "knowledge.team.manage"
@@ -36,13 +37,14 @@ BUSINESS_ROLE_CAPABILITIES = {
     BusinessRole.COUNSELOR: frozenset(
         {
             BusinessCapability.MANAGE_ASSIGNED_STUDENTS,
+            BusinessCapability.CREATE_OWN_STUDENT_RECORD,
             BusinessCapability.MANAGE_PERSONAL_KNOWLEDGE,
             BusinessCapability.READ_AUTHORIZED_TEAM_KNOWLEDGE,
         }
     ),
     BusinessRole.BUSINESS_ADMIN: frozenset(
         {
-            BusinessCapability.ASSIGN_STUDENTS,
+            BusinessCapability.VIEW_DEPARTMENT_STUDENTS,
             BusinessCapability.MANAGE_TEAM_KNOWLEDGE,
         }
     ),

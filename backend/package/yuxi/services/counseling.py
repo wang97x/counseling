@@ -22,28 +22,15 @@ def _details(record) -> dict:
     return {**_metadata(record), "background_summary": record.background_summary}
 
 
-async def list_counselor_options(db: AsyncSession, actor: User) -> list[dict]:
-    """只向分配人员提供本部门可担任负责人的用户。"""
-    if BusinessCapability.ASSIGN_STUDENTS not in resolve_business_capabilities(actor):
-        raise PermissionError("需要学生分配权限")
-    users = await StudentRepository(db).list_department_counselors(actor.department_id)
-    return [
-        {"id": user.id, "username": user.username}
-        for user in users
-        if BusinessCapability.MANAGE_ASSIGNED_STUDENTS in resolve_business_capabilities(user)
-    ]
-
-
-async def create_student(db: AsyncSession, actor: User, student_code: str, counselor_id: int) -> dict:
-    """由同部门业务管理员为辅导人员创建空档案。"""
-    if BusinessCapability.ASSIGN_STUDENTS not in resolve_business_capabilities(actor):
-        raise PermissionError("需要学生分配权限")
+async def create_student(db: AsyncSession, actor: User, student_code: str) -> dict:
+    """由辅导员为自己创建空档案。"""
+    if BusinessCapability.CREATE_OWN_STUDENT_RECORD not in resolve_business_capabilities(actor):
+        raise PermissionError("需要辅导员建档权限")
+    if actor.department_id is None:
+        raise ValueError("辅导员必须归属部门后才能建档")
     repository = StudentRepository(db)
-    counselor = await repository.eligible_counselor(counselor_id, actor.department_id)
-    if counselor is None or BusinessCapability.MANAGE_ASSIGNED_STUDENTS not in resolve_business_capabilities(counselor):
-        raise ValueError("负责人必须是本部门在职辅导人员")
     try:
-        record = await repository.create(actor.department_id, student_code, counselor_id)
+        record = await repository.create(actor.department_id, student_code, actor.id)
         result = _metadata(record)
         await db.commit()
     except IntegrityError as exc:
@@ -56,7 +43,7 @@ async def list_students(db: AsyncSession, actor: User) -> list[dict]:
     """按角色读取本部门分配元数据或本人档案列表。"""
     capabilities = resolve_business_capabilities(actor)
     repository = StudentRepository(db)
-    if BusinessCapability.ASSIGN_STUDENTS in capabilities:
+    if BusinessCapability.VIEW_DEPARTMENT_STUDENTS in capabilities:
         records = await repository.list_for_manager(actor.department_id)
     elif BusinessCapability.MANAGE_ASSIGNED_STUDENTS in capabilities:
         records = await repository.list_for_owner(actor.department_id, actor.id)

@@ -13,11 +13,9 @@ const router = useRouter()
 const service = counselingWorkspaceService
 const userStore = useUserStore()
 const students = ref([])
-const canAssign = userStore.businessRoles.includes('business_admin')
 const createOpen = ref(false)
 const createBusy = ref(false)
-const counselors = ref([])
-const createForm = reactive({ student_code: '', counselor_id: undefined })
+const createForm = reactive({ student_code: '' })
 const loading = ref(false)
 const error = ref('')
 const filters = reactive({ query: '', riskLevel: undefined, status: undefined, appointment: undefined })
@@ -40,18 +38,9 @@ async function loadStudents() {
   }
 }
 
-async function openCreate() {
+function openCreate() {
   createOpen.value = true
   createForm.student_code = ''
-  createForm.counselor_id = undefined
-  try {
-    const result = await service.listCounselors()
-    if (result.status !== 'ok') throw new Error(result.message || '加载负责人失败')
-    counselors.value = result.data
-  } catch (cause) {
-    counselors.value = []
-    message.error(cause.message || '加载负责人失败')
-  }
 }
 
 async function createStudent() {
@@ -60,13 +49,9 @@ async function createStudent() {
     message.error('学生编号须为 1–64 位字母、数字、下划线或连字符')
     return
   }
-  if (!createForm.counselor_id) {
-    message.error('请选择负责人')
-    return
-  }
   createBusy.value = true
   try {
-    const result = await service.createStudent({ student_code: code, counselor_id: createForm.counselor_id })
+    const result = await service.createStudent({ student_code: code })
     if (result.status !== 'ok') throw new Error(result.message || '创建档案失败')
     createOpen.value = false
     message.success('学生档案已创建')
@@ -120,7 +105,7 @@ onMounted(loadStudents)
         <a-button aria-label="刷新档案列表" title="刷新档案列表" :disabled="loading" @click="loadStudents">
           <template #icon><RefreshCw :size="15" /></template>刷新
         </a-button>
-        <a-button v-if="service.mode === 'api' && canAssign" type="primary" aria-label="新建档案" title="新建档案" @click="openCreate">
+        <a-button v-if="service.mode === 'api' && userStore.canCreateStudentRecord" type="primary" aria-label="新建档案" title="新建档案" @click="openCreate">
           <template #icon><Plus :size="15" /></template>新建档案
         </a-button>
       </template>
@@ -219,13 +204,7 @@ onMounted(loadStudents)
         <a-form-item label="学生编号" required>
           <a-input v-model:value="createForm.student_code" placeholder="字母、数字、下划线或连字符" />
         </a-form-item>
-        <a-form-item label="负责人" required>
-          <a-select v-model:value="createForm.counselor_id" placeholder="选择本部门辅导人员">
-            <a-select-option v-for="item in counselors" :key="item.id" :value="item.id">
-              {{ item.username }}
-            </a-select-option>
-          </a-select>
-        </a-form-item>
+        <a-alert type="info" show-icon message="档案创建后由你负责，仅你可以打开并维护档案正文。" />
       </a-form>
     </a-modal>
   </div>

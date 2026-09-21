@@ -20,6 +20,8 @@ def test_legacy_platform_roles_map_without_expanding_student_access():
     technical_capabilities = resolve_business_capabilities(SimpleNamespace(role="superadmin"))
     assert BusinessCapability.MANAGE_ASSIGNED_STUDENTS not in admin_capabilities
     assert BusinessCapability.MANAGE_ASSIGNED_STUDENTS not in technical_capabilities
+    assert BusinessCapability.CREATE_OWN_STUDENT_RECORD not in admin_capabilities
+    assert BusinessCapability.CREATE_OWN_STUDENT_RECORD not in technical_capabilities
 
 
 def test_multiple_business_roles_merge_capabilities_without_role_inheritance():
@@ -32,6 +34,7 @@ def test_multiple_business_roles_merge_capabilities_without_role_inheritance():
     assert resolve_business_capabilities(user) == frozenset(
         {
             BusinessCapability.MANAGE_ASSIGNED_STUDENTS,
+            BusinessCapability.CREATE_OWN_STUDENT_RECORD,
             BusinessCapability.MANAGE_PERSONAL_KNOWLEDGE,
             BusinessCapability.READ_AUTHORIZED_TEAM_KNOWLEDGE,
             BusinessCapability.MANAGE_SYSTEM,

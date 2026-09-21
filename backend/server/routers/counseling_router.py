@@ -7,18 +7,17 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.utils.auth_middleware import get_db, get_required_user
-from yuxi.services.counseling import create_student, get_student, list_counselor_options, list_students, update_student
+from yuxi.services.counseling import create_student, get_student, list_students, update_student
 from yuxi.storage.postgres.models_business import User
 
 counseling = APIRouter(prefix="/counseling/students", tags=["counseling"])
 
 
 class StudentCreate(BaseModel):
-    """创建档案时只提交部门内部编号和负责人。"""
+    """辅导员创建本人负责的档案。"""
 
     model_config = ConfigDict(extra="forbid")
     student_code: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
-    counselor_id: int = Field(gt=0)
 
 
 class StudentUpdate(BaseModel):
@@ -46,9 +45,9 @@ def _raise_counseling_error(exc: Exception) -> None:
 async def create_student_route(
     payload: StudentCreate, actor: User = Depends(get_required_user), db: AsyncSession = Depends(get_db)
 ):
-    """业务管理员在本部门指定初始负责人。"""
+    """辅导员为自己创建档案。"""
     try:
-        return await create_student(db, actor, payload.student_code, payload.counselor_id)
+        return await create_student(db, actor, payload.student_code)
     except (PermissionError, ValueError, FileExistsError) as exc:
         _raise_counseling_error(exc)
 
@@ -58,15 +57,6 @@ async def list_students_route(actor: User = Depends(get_required_user), db: Asyn
     """按角色列出可见档案的最小元数据。"""
     try:
         return await list_students(db, actor)
-    except PermissionError as exc:
-        _raise_counseling_error(exc)
-
-
-@counseling.get("/counselors")
-async def list_counselors_route(actor: User = Depends(get_required_user), db: AsyncSession = Depends(get_db)):
-    """获取当前部门可选的初始负责人。"""
-    try:
-        return await list_counselor_options(db, actor)
     except PermissionError as exc:
         _raise_counseling_error(exc)
 

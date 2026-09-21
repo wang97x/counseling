@@ -14,10 +14,6 @@ export function createCounselingApiAdapter() {
   return {
     mode: 'api',
 
-    async listCounselors() {
-      return { status: 'ok', data: await counselingApi.listCounselors() }
-    },
-
     async createStudent(payload) {
       return { status: 'ok', data: await counselingApi.createStudent(payload) }
     },

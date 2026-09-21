@@ -109,7 +109,6 @@ export function createCounselingDemoAdapter({ storage = defaultStorage() } = {})
   return {
     mode: 'demo',
 
-    async listCounselors() { return unsupportedDemo('counselor_assignment') },
     async createStudent() { return unsupportedDemo('student_creation') },
     async createConversation() { return unsupportedDemo('conversation_creation') },
 

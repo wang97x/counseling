@@ -54,47 +54,49 @@ async def test_student_owner_and_manager_access_are_isolated(test_client):
                     f"student_dept_{suffix}_{number}",
                 )
             )
-        manager_id, manager = await actor(departments[0], "admin", '["business_admin"]')
+        _, manager = await actor(departments[0], "admin", '["business_admin"]')
         owner_id, owner = await actor(departments[0], "user", '["counselor"]')
         other_id, other = await actor(departments[0], "user", '["counselor"]')
-        tech_id, tech = await actor(departments[0], "superadmin", '["technical_admin"]')
+        _, tech = await actor(departments[0], "superadmin", '["technical_admin"]')
         _, foreign_manager = await actor(departments[1], "admin", '["business_admin"]')
         _, no_role = await actor(departments[0], "user", "[]")
+        _, no_department_counselor = await actor(None, "user", '["counselor"]')
 
-        denied = await test_client.post(
-            "/api/counseling/students",
-            headers=manager,
-            json={"student_code": "S-001", "counselor_id": tech_id},
-        )
-        assert denied.status_code == 422, denied.text
-        denied = await test_client.post(
-            "/api/counseling/students",
-            headers=foreign_manager,
-            json={"student_code": "S-001", "counselor_id": owner_id},
-        )
-        assert denied.status_code == 422, denied.text
-        for headers in (owner, tech, no_role):
+        for headers in (manager, foreign_manager, tech, no_role):
             denied = await test_client.post(
                 "/api/counseling/students",
                 headers=headers,
-                json={"student_code": "S-001", "counselor_id": owner_id},
+                json={"student_code": "S-001"},
             )
             assert denied.status_code == 403, denied.text
+        denied = await test_client.post(
+            "/api/counseling/students",
+            headers=no_department_counselor,
+            json={"student_code": "S-001"},
+        )
+        assert denied.status_code == 400, denied.text
+        assert denied.json()["detail"] == "当前用户未绑定部门"
 
         created = await test_client.post(
             "/api/counseling/students",
-            headers=manager,
-            json={"student_code": "S-001", "counselor_id": owner_id},
+            headers=owner,
+            json={"student_code": "S-001"},
         )
         assert created.status_code == 201, created.text
         student_id = created.json()["id"]
         assert "background_summary" not in created.json()
         duplicate = await test_client.post(
             "/api/counseling/students",
-            headers=manager,
-            json={"student_code": "S-001", "counselor_id": other_id},
+            headers=owner,
+            json={"student_code": "S-001"},
         )
         assert duplicate.status_code == 409, duplicate.text
+        forged_owner = await test_client.post(
+            "/api/counseling/students",
+            headers=owner,
+            json={"student_code": "S-002", "counselor_id": other_id},
+        )
+        assert forged_owner.status_code == 422, forged_owner.text
 
         updated = await test_client.put(
             f"/api/counseling/students/{student_id}",
@@ -144,7 +146,7 @@ async def test_student_owner_and_manager_access_are_isolated(test_client):
         )
         assert agent.status_code == 200, agent.text
         second = await test_client.post(
-            "/api/counseling/students", headers=manager, json={"student_code": "S-002", "counselor_id": owner_id}
+            "/api/counseling/students", headers=owner, json={"student_code": "S-002"}
         )
         assert second.status_code == 201, second.text
         second_id = second.json()["id"]
