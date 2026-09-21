@@ -11,6 +11,8 @@ __pycache__/
 ### Vue gitignore
 dist
 node_modules
+.vite/
+docs/.vitepress/.temp/
 
 ### common gitignore
 .DS_Store
