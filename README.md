@@ -6,7 +6,7 @@ Yuxi 是一个可私有部署的多租户知识智能体平台。它把知识库
 [许可证](LICENSE)
 [![Bilibili](https://img.shields.io/badge/知识库演示-00A1D6?logo=bilibili&logoColor=fff)](https://www.bilibili.com/video/BV1erE26iEgv/)
 
-[项目仓库](https://github.com/wang97x/counseling) · [快速开始](docs/intro/quick-start.md) · [English](README.en.md)
+[项目仓库](https://github.com/wang97x/counseling) · [快速开始](docs/intro/quick-start.md)
 
 ## Yuxi 能做什么
 

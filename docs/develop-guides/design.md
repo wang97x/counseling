@@ -59,7 +59,7 @@
 - 晚到结果必须回到原学生与原任务，不因当前页面切换而写入另一档案。重复回调不得产生多个正式版本。
 - 当前未接入的能力显示真实空状态或不可用原因，不以演示结果冒充已持久化事实。
 
-学生详情当前已收敛为学生信息、待确认草稿和统一时间线组成的手工优先工作台；文件生成与关联 Conversation 不在 P0 主路径。其余目标边界与迁移验收见[档案优先的心理辅导业务架构提案](./decisions/proposed/2026-09-19-record-first-counseling-architecture.md)。
+学生详情当前已收敛为学生信息、待确认草稿和统一时间线组成的[手工优先工作台](./decisions/implemented/2026-09-24-manual-first-counseling-workspace.md)；文件生成与关联 Conversation 不在 P0 主路径。后续记录生成与正式归档由[档案归档提案](./decisions/proposed/2026-09-21-counseling-p0-record-archive.md)跟踪。
 
 界面不是接口字段的可视化投影。设计前先明确：目标用户、主要任务、需要做出的判断、成功与异常状态，以及哪些信息只是实现细节。
 

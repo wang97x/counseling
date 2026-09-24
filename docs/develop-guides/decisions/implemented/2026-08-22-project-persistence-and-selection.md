@@ -3,6 +3,7 @@
 状态：implemented
 类型：feature
 Owner：backend/package/yuxi/services/project_service.py
+取代：2026-08-19-test-conversation-cleanup.md
 
 ## 问题
 
@@ -16,7 +17,7 @@ Owner：backend/package/yuxi/services/project_service.py
 
 所有 Conversation 只绑定不可变 `project_id`，并通过非空列与 `(project_id, uid)` 复合外键拒绝缺失或跨用户绑定；Conversation 不保存 `workdir_path`。v0.7.1 发布 schema 尚无该路径列，因此一次性迁移直接为每个顶层 Conversation 创建 implicit managed Project，SubAgent Conversation 继承父 Conversation 的 Project，不保留当前开发分支曾引入的 path-only 中间态。统一 resolver 始终从 Project 读取 Workdir。AgentRun 不保存 `project_id`；Resume 使用原 Conversation，SubAgent Conversation 继承父 Conversation 的绑定。
 
-新建对话草稿态提供“自动创建新项目”、选择已有 Project、新建 Project和添加历史项目。默认项在首次发送时创建 implicit managed Project；用户显式打开“新建 Project”时必须从 Workspace 选择一个目录并创建 selectable linked Project，不再暴露 managed/linked 模式选项。除 Workspace 根目录外的任意已有目录都可选择，也可在统一 Workspace 选择器中即时新建目录。“添加历史项目”只把所选 Conversation 的统一解析 Workdir 预填到同一个新建表单，不创建、不修改 Conversation，也不使用对话标题作为 Project 名称；用户命名并确认后仍调用普通 Project 创建接口。项目选择只在 Conversation 创建前出现，已有 Conversation 不可改绑。Project 的重命名、软删除和侧边栏分组由 [Project 对话分组与生命周期管理](./2026-08-30-project-conversation-sidebar-management.md) 继续拥有；GC、多 Workdir、ACL 和跨用户共享不属于当前范围。
+新建对话草稿态提供“自动创建新项目”、选择已有 Project、新建 Project和添加历史项目。默认项在首次发送时创建 implicit managed Project；用户显式打开“新建 Project”时必须从 Workspace 选择一个目录并创建 selectable linked Project，不再暴露 managed/linked 模式选项。除 Workspace 根目录外的任意已有目录都可选择，也可在统一 Workspace 选择器中即时新建目录。“添加历史项目”只把所选 Conversation 的统一解析 Workdir 预填到同一个新建表单，不创建、不修改 Conversation，也不使用对话标题作为 Project 名称；用户命名并确认后仍调用普通 Project 创建接口。项目选择只在 Conversation 创建前出现，已有 Conversation 不可改绑。Project 的重命名、软删除和侧边栏分组由 [Project 对话生命周期闭合](./2026-09-01-project-conversation-lifecycle-closure.md)继续拥有；GC、多 Workdir、ACL 和跨用户共享不属于当前范围。
 
 统一 Workspace tree 从 Project repository 读取当前用户 selectable Project 的 Workdir。`/projects` 子树只返回这些目录、其祖先和其内部内容；implicit Project 与未归属任何 selectable Project 的匿名目录不返回。若 `projects` 根本身被选为 Project，则其完整子树可见。该规则同样作用于递归 tree，不在前端按 UUID 外观猜测。
 

@@ -3,6 +3,7 @@
 状态：implemented
 类型：feature
 Owner：backend/package/yuxi/knowledge/base.py
+取代：2026-08-24-knowledge-virtual-folder-migration.md
 
 ## 问题
 

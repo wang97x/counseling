@@ -3,6 +3,7 @@
 状态：implemented
 类型：process
 Owner：.github/workflows/system-tests.yml
+取代：2026-08-26-beta2-version-bump-coverage.md
 
 ## 问题
 

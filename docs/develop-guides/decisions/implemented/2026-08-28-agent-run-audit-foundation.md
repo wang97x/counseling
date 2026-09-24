@@ -3,6 +3,7 @@
 状态：implemented
 类型：feature
 Owner：backend/package/yuxi/storage/postgres/models_business.py
+取代：2026-08-24-agent-run-langfuse-jump.md、2026-08-28-model-message-incremental-audit.md、2026-08-30-tool-message-incremental-audit.md、2026-09-03-message-audit-boundary-hardening.md
 
 ## 问题
 
@@ -28,6 +29,8 @@ AgentRun 直接保存可空 `langfuse_trace_id`。Langfuse 启用时，当前 le
 - 让 callback 的 `last_trace_id` 覆盖预创建 ID：会让 AgentRun 与最终 Message 形成两个可漂移事实，因此拒绝。
 
 ## 后果
+
+Model/AIMessage、ToolMessage 的增量写入、卸载后 State 对账和消息审计边界均属于同一审计事实链。具体投影与终态修复由 repository/service 和负向测试拥有；本记录保留“不从相邻 Run 或流式占位猜测事实”的长期约束，不再为每种消息类型保留独立 Decision。
 
 配置 Langfuse 的 Run 在模型开始前就具有稳定 Trace 关联；模型报错、执行中取消或中断且没有最终 AIMessage 时，仍可从 AgentRun 解析跳转。历史记录保持原有 Message metadata fallback。
 

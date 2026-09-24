@@ -3,6 +3,7 @@
 状态：implemented
 类型：simplification
 Owner：web/src/apis/base.js
+取代：2026-09-03-remove-content-guard.md、2026-09-03-remove-secondary-redundancy.md
 
 相关事实由下列源码 Owner 分别持有：
 
@@ -12,6 +13,7 @@ Owner：web/src/apis/base.js
 - 下载与 Agent 字段归一化：`web/src/utils/file_utils.js`、`web/src/utils/agentConfigUtils.js`
 - MySQL 展示与连接：`web/src/components/ToolCallingResult/tools/mysqlResultFormatter.js`、`backend/package/yuxi/agents/skills/buildin/mysql-reporter/scripts/_mysql_common.py`
 - 后端运行时能力：各 service、repository、model factory 与持久化模型
+- Tool 参数解析与 Run 取消：`web/src/components/ToolCallingResult/toolRegistry.js`、`backend/package/yuxi/services/run_queue_service.py`
 - Shipping 配置与 Docs 工具链：`docker-compose.yml`、`docker-compose.prod.yml`、`docs/package.json`、`.github/workflows/deploy.yml`
 
 ## 问题
@@ -26,7 +28,8 @@ Owner：web/src/apis/base.js
 - 下载 parser 优先解析 `filename*` UTF-8，失败时告警并回退普通 `filename`；普通文件名解码 percent encoding，失败时保留原值。Agent ID 保持 `agent_id`、`slug`、`id` 优先级并保留已有 slug，MySQL formatter 保持空值、JSON、对象和 primitive 展示。
 - 后端测试直接读取持久化模型、能力常量或生产入口，不为测试保留第二套 API。等价 linked workdir 包装由通用规范化函数取代；附件 parser 只在真实解析分支惰性导入。
 - MySQL Reporter 保留三个独立 PEP 723 入口，共享同目录配置、异常和连接重试；Skill 投影复制完整目录。
-- 删除无消费者的 Sigma/Graphology 依赖及锁文件项、旧样式和 Compose no-op 变量。Docs Pages 使用仓库现有 pnpm lockfile 执行 frozen install 与 build。
+- Tool 参数由 `toolRegistry.js` 的单一 parser 拥有；Run 取消信号的 best-effort 发布与批量并发由 `run_queue_service.py` 拥有，并保持 PostgreSQL 事务先提交。系统配置、Web 设置、消息错误和正式文档导航不再声明内容审查能力。
+- 删除无消费者的 Sigma/Graphology 依赖及锁文件项、旧样式和 Compose no-op 变量。Docs Pages 使用仓库现有 pnpm lockfile 执行 frozen install 与 build，`docs/vibe/` 不进入正式页面集。
 - Request/Run 状态、SSE、权限、lease、恢复扫描、持久化边界和各测试层独立 oracle 不因减少行数而合并。
 
 ## 替代方案
@@ -47,7 +50,7 @@ Owner：web/src/apis/base.js
 
 ## 验证
 
-旧能力不存在：全仓负向搜索确认已删除组件、样式、依赖、export、Python helper、测试专用包装、路径别名、no-op 环境变量、npm Pages 路径、重复协议实现和第二测试根均不存在；没有兼容 re-export、空壳或重复 fixture。
+旧能力不存在：全仓负向搜索确认已删除组件、样式、依赖、export、Python helper、测试专用包装、路径别名、no-op 环境变量、npm Pages 路径、重复协议实现、内容审查入口和第二测试根均不存在；没有兼容 re-export、空壳或重复 fixture。
 
 重新引入条件：只有出现仓库内或已文档化的外部消费者，并能证明独立运行时语义及对应负向测试时，才重新引入被删除表面；测试便利性本身不是条件。
 
@@ -58,4 +61,4 @@ Owner：web/src/apis/base.js
 - E2E 为 9 passed、2 skipped、7 failed；六项失败来自 deterministic replay 服务不可连接，一项为既有 evaluation metadata 断言缺失。multimodal E2E 共享 helper 后 collect-only 收集 2 项。
 - 变更 Python 文件的 Ruff lint 与 format check 通过；package 全量 format check 只报告两个未修改的既有文件。
 - 开发 Compose `config --quiet` 通过；生产 Compose 在缺少 `.env.prod` 时以 `--no-interpolate` 验证结构通过，完整生产变量插值未在本地验证。
-- 工程契约检查及其 61 项 verifier unit、Docs frozen install/build、workflow YAML、全仓负向搜索和 `git diff --check` 通过。
+- 工程契约检查及其 verifier unit、Docs frozen install/build、workflow YAML、全仓负向搜索和 `git diff --check` 通过。

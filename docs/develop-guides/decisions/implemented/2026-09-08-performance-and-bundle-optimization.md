@@ -3,6 +3,7 @@
 状态：implemented
 类型：bug-fix
 Owner：web/vite.config.js
+取代：2026-08-19-frontend-detail-optimizations.md、2026-08-20-agent-panel-sections.md、2026-08-21-agent-panel-filesystem-refresh.md、2026-08-22-chat-input-extra-region.md、2026-08-23-web-presentation-and-streaming-details.md、2026-08-24-dashboard-architecture-and-thread-analytics.md、2026-08-24-message-debug-panel.md、2026-08-24-user-management-server-pagination.md、2026-08-25-dashboard-analysis-ui.md、2026-08-25-mention-chip-deletion-boundary.md、2026-08-25-state-panel-display.md、2026-08-26-lucide-vue-package-migration.md、2026-08-27-extension-detail-and-evaluation-workspace.md、2026-09-04-docs-home-brand-refresh.md、2026-09-05-frontend-optimization.md、2026-09-07-stream-tools-and-opencode-session.md、2026-09-08-thinking-tool-result-rendering.md、2026-09-10-pdf-preview-worker-assets.md
 
 ## 问题
 
@@ -16,13 +17,15 @@ Owner：web/vite.config.js
 
 缓存预算：`markdownRenderCache.js` 按最近使用顺序淘汰，同时限制条数和原文、HTML 的合计字符量，超大条目不缓存。字符预算约束保留的字符串，不代表浏览器总堆内存；渲染结果保持不变。
 
-依赖兼容：文档的 `pnpm-workspace.yaml` 为 VitePress 1.x 选择 Vite 7 / Rollup 装配，保留其插件钩子和现代浏览器目标，精确版本由锁文件拥有。PDF 解析直接使用已有 pypdf，保持逐页去空白、双换行连接的语义，删除无其他消费者的 LangChain Community / Classic；SQLAlchemy 从 ORM 导出导入。PDF 路径部分取代[依赖漏洞与未使用依赖收敛](./2026-09-05-dependency-vulnerability-remediation.md)中的 PyPDFLoader 决定。
+依赖兼容：文档的 `pnpm-workspace.yaml` 为 VitePress 1.x 选择 Vite 7 / Rollup 装配，保留其插件钩子和现代浏览器目标，精确版本由锁文件拥有。PDF 解析直接使用已有 pypdf，保持逐页去空白、双换行连接的语义，删除无其他消费者的 LangChain Community / Classic；SQLAlchemy 从 ORM 导出导入。依赖审计门禁由[依赖供应链审计](./2026-08-18-dependency-supply-chain-gates.md)拥有。
 
 ## 替代方案
 
 手工维护精简模型清单会与依赖快照漂移；采用构建期投影。全面替换图谱、UI 库或引入请求框架会扩大维护范围；采用现有模块的按需加载与 Store 内调度。提高 chunk 阈值或轮询间隔分别保留下载成本和请求竞态，不能解决对应问题。文档依赖随上游兼容性更新，不强制与 Web 使用同一 Vite 主版本。
 
 ## 后果
+
+对话展示、流式工具结果、推理分组、调试面板、状态面板、PDF worker 资源、Dashboard 展示、图标包迁移和局部输入交互均由当前 Web 组件、模块边界与 unit/build 证据拥有，不再各自保留 Decision。只有改变持久状态、权限、协议或失败恢复边界时才重新拆分记录。
 
 首次进入私有布局或面板需要额外下载模块；失败恢复使用页面刷新，会丢失未保存状态。保留完整 Shiki 语言支持及现有图谱、UI 库，剩余大 chunk 警告不屏蔽。任务读取失败保留最近成功数据并显示错误；局部更新使旧列表失效，摘要由后续轮询收敛。
 

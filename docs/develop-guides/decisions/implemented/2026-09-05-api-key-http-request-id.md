@@ -3,6 +3,7 @@
 状态：implemented
 类型：bug-fix
 Owner：web/src/components/ApiKeyManagementComponent.vue
+取代：无
 
 ## 问题
 

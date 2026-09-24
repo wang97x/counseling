@@ -3,6 +3,7 @@
 状态：implemented
 类型：simplification
 Owner：docker-compose.yml
+取代：无
 
 ## 问题
 

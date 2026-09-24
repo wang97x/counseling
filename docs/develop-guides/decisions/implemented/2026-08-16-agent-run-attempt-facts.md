@@ -3,6 +3,7 @@
 状态：implemented
 类型：architecture
 Owner：backend/package/yuxi/repositories/agent_run_repository.py
+取代：无
 
 ## 问题
 

@@ -3,6 +3,7 @@
 状态：implemented
 类型：process
 Owner：docs/develop-guides/engineering-trust.md
+取代：无
 
 ## 问题
 

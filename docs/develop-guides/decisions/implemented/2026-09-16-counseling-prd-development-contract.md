@@ -3,6 +3,7 @@
 状态：implemented
 类型：process
 Owner：AGENTS.md
+取代：无
 
 ## 问题
 
@@ -10,7 +11,7 @@ Owner：AGENTS.md
 
 ## 决策
 
-[产品约束](../../counseling-product-contract.md)承接 PRD 章节、范围、P0 至 P3 优先级和待明确事项；根与子树 AGENTS 保留各自执行规则和链接。设计、测试与路线图分别拥有交互要求、验证方式和后续顺序。ARCHITECTURE 描述当前实现。[旧提案](../proposed/2026-09-12-counseling-minimal-release.md)保留背景，其无模型优先排期由产品约束接管。
+[产品约束](../../counseling-product-contract.md)承接 PRD 章节、范围、P0 至 P3 优先级和待明确事项；根与子树 AGENTS 保留各自执行规则和链接。设计、测试与路线图分别拥有交互要求、验证方式和后续顺序。ARCHITECTURE 描述当前实现。早期最小发布提案已经被产品约束和手工优先工作台决定吸收，不再作为当前入口。
 
 本次只改文档与导航，不实现转写、归档、危机预警、加密或新角色，不修改数据库、业务代码、依赖和部署拓扑。原始 DOCX 不提交到仓库；记录标题、版本和日期以追溯来源。
 

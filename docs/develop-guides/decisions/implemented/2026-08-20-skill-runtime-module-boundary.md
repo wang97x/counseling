@@ -3,6 +3,7 @@
 状态：implemented
 类型：simplification
 Owner：backend/package/yuxi/agents/skills/runtime.py
+取代：2026-08-17-skill-preload.md、2026-08-23-deepagents-07-migration.md
 
 ## 问题
 
@@ -38,6 +39,8 @@ Sandbox 来源校验不变。
 - 删除整个 Middleware：工具可见性门控、动态激活和 MCP 生命周期仍需要请求级 Owner，不能删除。
 
 ## 后果
+
+Skill 预加载已成为同一运行时解析链的组成部分，不再作为独立 Decision。预加载、依赖闭包、Middleware 注入和工具门控统一由 runtime、service 与装配测试表达；DeepAgents 版本迁移和异步读取实现细节由依赖锁、backend contract 与测试拥有。
 
 - 纯运行时解析只有一个语义 Owner，依赖方向变为 context/toolkits/Middleware → runtime。
 - 授权结果、依赖顺序、循环与缺失依赖的 fail-safe、来源映射、工具注册和激活时机保持不变。

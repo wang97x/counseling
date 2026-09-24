@@ -3,6 +3,7 @@
 状态：implemented
 类型：architecture
 Owner：backend/package/yuxi/repositories/agent_run_repository.py
+取代：无
 
 Run 同行形状由 `storage/postgres/models_business.py` 与 schema manager 拥有，worker 跨行执行边界由 `services/run_worker.py` 拥有，Kubernetes Sandbox inventory 由 `docker/sandbox_provisioner/app.py` 拥有。Workspace、Skill source/projection、Skill runtime module 与数据面身份分别由 [Workspace Owner 收敛](2026-08-21-workspace-owner-convergence.md)、[Skill source 收敛](2026-08-18-skill-source-convergence.md)、[Skill runtime module 边界](2026-08-20-skill-runtime-module-boundary.md)和[统一 Workspace 运行身份](2026-08-20-unified-workspace-runtime-identity.md)拥有；本记录不重复定义其文件、事务、缓存、路由或安装契约。
 

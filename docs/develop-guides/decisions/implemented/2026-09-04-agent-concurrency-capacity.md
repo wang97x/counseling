@@ -3,6 +3,7 @@
 状态：implemented
 类型：architecture
 Owner：docker-compose.yml
+取代：2026-09-07-agent-concurrency-optimization.md
 
 ## 问题
 
@@ -50,7 +51,7 @@ AgentRun 持久保存五个可空 UTC 时间点：
 
 新增时间点只由当前有效 lease owner 写入且 write-once。观测写入使用短事务；失败记录 warning，但不能覆盖模型输出或 Run 终态。历史 Run 的缺失值保持 NULL，不补造时间。
 
-API 使用同一 serializer 派生 `dispatch_latency_ms`（创建到开工）、`preparation_latency_ms`（开工到准备完成）、`model_first_output_latency_ms`（准备完成到首次输出）、`first_output_latency_ms`（创建到首次输出）和 `total_latency_ms`（创建到终态），不冗余持久化毫秒值，也不产生负耗时。结果接口、Run 接口与对话历史复用同一投影；历史查询继续批量读取 Run，不增加逐消息请求。前端消息底部与折叠过程只读取同一 `total_latency_ms`，五段明细归入调试面板的 Run 分组；具体展示归属由 [前端优化](2026-09-05-frontend-optimization.md) 记录。
+API 使用同一 serializer 派生 `dispatch_latency_ms`（创建到开工）、`preparation_latency_ms`（开工到准备完成）、`model_first_output_latency_ms`（准备完成到首次输出）、`first_output_latency_ms`（创建到首次输出）和 `total_latency_ms`（创建到终态），不冗余持久化毫秒值，也不产生负耗时。结果接口、Run 接口与对话历史复用同一投影；历史查询继续批量读取 Run，不增加逐消息请求。前端消息底部与折叠过程只读取同一 `total_latency_ms`，五段明细归入调试面板的 Run 分组；具体展示归属由[性能与构建优化](2026-09-08-performance-and-bundle-optimization.md)记录。
 
 这些时间点记录的是事务内状态转换，不包含随后提交本身、runtime cleanup 或前端等待与渲染耗时；`total_latency_ms` 因而是 Run 状态机耗时，不是完整的用户端请求时延。
 
@@ -69,6 +70,8 @@ API 使用同一 serializer 派生 `dispatch_latency_ms`（创建到开工）、
 - 使用 Locust 取代单文件压测：适合未来分布式发压，但仍需实现 Yuxi 的 Request→Run SSE 和同 Run 因果校验；当前脚本满足本机容量验证。
 
 ## 后果
+
+后续模型前延迟、SSE、取消连接、Sandbox 惰性创建和压测矩阵优化属于本容量模型的实现收敛。当前预算由 Compose、运行时指标、性能工具和测试拥有；阶段性评测报告不再作为独立当前 Decision。
 
 - 默认配置能在一个 worker 内承载 100 个同时 Sandbox Run，并为控制面留出调度余量；它是经过当前机器与工作负载验证的容量基线，不是所有部署的 SLA。
 - 高并发首先受外部模型配额、宿主内存、Docker IPAM 和数据库总预算共同约束。增加 worker、修改模型或 Sandbox profile 后必须重新测试，不能按表格线性外推。

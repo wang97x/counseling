@@ -3,6 +3,7 @@
 状态：implemented
 类型：testing
 Owner：backend/test/run_tests.sh
+取代：2026-09-07-test-suite-audit-follow-up.md
 
 ## 问题
 
@@ -22,6 +23,8 @@ Owner：backend/test/run_tests.sh
 - 按主题批量删除 router、middleware 或 service/worker 测试：拒绝，因为当前证据未证明它们断言同一事实。
 
 ## 后果
+
+测试审计 follow-up、fixture 合并和发布门禁 oracle 修正已经由测试规范、运行脚本与 verifier 吸收。只有观察边界、真实依赖或 gate 语义发生变化时才需要新的 Decision；普通测试整理直接由测试和 diff 证明。
 
 测试文件数量不因未经证明的“重复”而减少；provider reasoning unit 的参数实例减少 3 个，测试前置条件与目录语义更准确。后续删除测试必须先指出被删除测试的语义 Owner、现存独立 oracle 和负向覆盖。
 

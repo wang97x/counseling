@@ -3,6 +3,7 @@
 状态：implemented
 类型：architecture
 Owner：backend/counseling/src/counseling/storage/models.py
+取代：2026-09-12-minimal-student-record.md、2026-09-12-personal-knowledge.md、2026-09-12-student-conversations.md、2026-09-12-student-record-pages.md、2026-09-12-team-knowledge-entry.md、proposed/2026-09-19-record-first-counseling-architecture.md
 
 ## 问题
 
@@ -26,6 +27,8 @@ Owner：backend/counseling/src/counseling/storage/models.py
 - 让业务管理员读取咨询正文以便统计：查询方便，但扩大敏感数据访问范围，因此只提供数据库聚合和最小元数据。
 
 ## 后果
+
+早期最小学生档案、个人/团队知识入口、学生会话和档案页面 Decision 已由当前业务包、权限查询、前端角色路由与本记录吸收。档案负责人、正文可见性、Conversation 归属和业务/Yuxi 包边界继续以产品约束、repository/service 和真实 HTTP 测试为 Owner，不再按页面或首版切片重复记录。
 
 - 统一记录表把文件来源字段改为可空；服务按 `record_kind` 校验，不能让文件记录缺少来源或手工记录伪造对象路径。
 - `current_risk_level` 是查询投影而非独立临床结论；任何展示都必须能回到最近的人工风险事件，未评估不能解释为低风险。

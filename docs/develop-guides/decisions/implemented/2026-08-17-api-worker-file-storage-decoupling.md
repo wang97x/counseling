@@ -3,6 +3,7 @@
 状态：implemented
 类型：architecture
 Owner：docker-compose.yml
+取代：2026-08-23-sandbox-native-async-read.md
 
 日志与缓存路径由 `yuxi.config` 和 `logging_config.py` 拥有。本记录拥有 API、worker 与 provisioner 的
 进程权限、日志和缓存解耦边界；当前文件边界由
@@ -23,6 +24,8 @@ outputs 在 Sandbox 重建、父子 Agent 与并发 Run 中也缺少明确的恢
   不写入共享 `saves`；管理端日志接口只读取 API 进程日志。
 - Conversation 附件与 outputs 直接使用 UserWorkspace 中的 Workdir。未确认的临时附件解析仍可使用
   用户隔离的 MinIO 前缀。
+- Sandbox 同步与异步读取共享可读路径、文件类型、大小限制和分页规则；异步路径使用原生文件 API，
+  不回退到 shell stdout 传输。远端 client 的创建晚于授权与参数校验，并由单次读取明确关闭。
 - 用户级 `/home/gem/user-data` 和按 uid 汇总的授权 Skills 只读投影通过显式 UserWorkspace 与 Skill
   projection 挂载进入 Sandbox；当前 Skill source/projection 边界由
   [共享 Skill 持久源与个人 UserWorkspace 边界](2026-08-18-skill-source-convergence.md)拥有。API/worker 与

@@ -3,6 +3,7 @@
 状态：implemented
 类型：process
 Owner：docs/develop-guides/spec-loop.md
+取代：2026-08-17-documentation-information-architecture.md、2026-08-26-human-centered-documentation.md
 
 ## 问题
 
@@ -28,6 +29,8 @@ Agent 创建 PR 时使用默认严格模板；人工或其他非 Agent 提交可
 - 用 diff heuristic 自动判定 substantial/trivial：无法可靠判断语义风险，保留为 Reviewer 责任。
 
 ## 后果
+
+文档信息架构、面向读者的写作规则与测试审计不再各自保留阶段性 Decision；当前规则分别由 `docs/AGENTS.md`、文档规范和测试规范直接拥有。局部流程修正由对应规范、verifier 与回归测试闭合，避免把一次治理改造长期暴露为并列当前 Owner。
 
 非平凡工作增加一个实现前决策点和逐主张证据记录，但小而完整、没有待裁决替代或风险的同变更修复仍可解释后直接 implemented。Deterministic replay 提供低噪声 PR 阻断，却不证明外部 provider 自然语言行为；真实 provider 探针缺少 secret 时明确失败，未执行时记录 `Not run`。
 

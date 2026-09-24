@@ -6,7 +6,7 @@
 
 - 教程位于 `intro/`，配置和运维参考位于 `advanced/`，Agent 扩展位于 `agents/`，运行机制位于 `mechanisms/`，工程流程位于 `develop-guides/`。
 - 系统边界属于根 [ARCHITECTURE.md](../ARCHITECTURE.md)，测试方法属于[测试规范](develop-guides/testing-guidelines.md)，心理辅导需求属于[产品约束](develop-guides/counseling-product-contract.md)。只在本次页面涉及对应事实时读取相关章节。
-- 非显然取舍属于 `decisions/`，达到门槛的事故属于 `postmortems/`，已发布事实属于 changelog，未完成方向属于 roadmap。
+- 非显然取舍属于 `decisions/`，达到门槛的事故属于 `postmortems/`，已发布事实属于 changelog，未完成方向属于 roadmap；changelog 只回答历史，不作为当前行为或实现要求。
 - 新增页面、移动页面或实质改变信息架构时，读取[文档规范](develop-guides/documentation-guidelines.md)的相关章节并更新导航和入站链接。
 
 ## 写作与验证

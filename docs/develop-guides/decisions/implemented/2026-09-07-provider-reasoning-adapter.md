@@ -3,6 +3,7 @@
 状态：implemented
 类型：simplification
 Owner：backend/package/yuxi/models/chat.py
+取代：无
 
 ## 问题
 

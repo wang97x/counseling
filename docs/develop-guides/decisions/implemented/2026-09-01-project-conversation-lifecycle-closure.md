@@ -3,6 +3,7 @@
 状态：implemented
 类型：bug-fix
 Owner：backend/package/yuxi/services/subagent_run_service.py
+取代：2026-08-30-project-conversation-sidebar-management.md
 
 ## 问题
 

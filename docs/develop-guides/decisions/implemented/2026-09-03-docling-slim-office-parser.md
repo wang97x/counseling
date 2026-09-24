@@ -3,6 +3,7 @@
 状态：implemented
 类型：simplification
 Owner：backend/package/yuxi/knowledge/parser/unified.py
+取代：2026-08-27-qa-chunk-length-limit.md、2026-09-02-knowledge-aware-utc-timestamps.md、2026-09-03-reduce-pipeline-redundancy.md、2026-09-05-knowledge-stats-refresh.md、2026-09-09-book-chunk-sampling.md、2026-09-17-remove-libreoffice-runtime.md
 
 ## 问题
 
@@ -14,7 +15,7 @@ Yuxi 只使用 Docling 将 DOCX、PPTX、XLSX 和 XLS 转为 Markdown，但完�
 
 对 `InputDocument` 私有 backend 引用的访问只存在于这个适配点，转换结束或失败后统一卸载资源。现有 Markdown 导出、图片上传、顺序替换与失败占位逻辑继续消费 `DoclingDocument`；DOCX 异常仍回退到 `python-docx`，PDF 和图片 OCR 不进入 Office backend。
 
-完整 `docling`、Torch、TorchVision 和 PyTorch 专用索引已从项目依赖删除。旧 XLS 后续改为由轻量 `xlrd` 直接提取表格，不再进入 Docling backend；见[按使用场景移除 LibreOffice 运行时](./2026-09-17-remove-libreoffice-runtime.md)。
+完整 `docling`、Torch、TorchVision 和 PyTorch 专用索引已从项目依赖删除。旧 XLS 由轻量 `xlrd` 直接提取表格，不再进入 Docling backend；解析器注册表和依赖声明共同拥有这一运行时事实。
 
 ## 替代方案
 
@@ -24,6 +25,8 @@ Yuxi 只使用 Docling 将 DOCX、PPTX、XLSX 和 XLS 转为 Markdown，但完�
 - 继续使用 `DocumentConverter`，仅限制 allowed formats：入口仍依赖完整 Docling 的 converter 和 pipeline 装配；不采用。
 
 ## 后果
+
+QA 超长切分、书籍无放回抽样、解析能力去重、aware UTC 修复、知识统计刷新和 LibreOffice 下线均已由当前 parser/repository、依赖声明与回归测试拥有，不再保留局部 Decision。Office/PDF 解析继续以轻量依赖闭包和统一能力注册为边界；重新引入重量运行时仍需独立证据。
 
 - Office 转换集中在一个直接 backend 适配器，删除未使用的模型与 pipeline 装配层。
 - 新 API 镜像为 1,159,075,226 bytes，原镜像为 1,435,192,473 bytes，减少 276,117,247 bytes（19.2%）。

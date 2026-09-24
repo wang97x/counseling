@@ -3,6 +3,7 @@
 状态：implemented
 类型：feature
 Owner：backend/counseling/src/counseling/students/service.py
+取代：无
 
 ## 问题
 

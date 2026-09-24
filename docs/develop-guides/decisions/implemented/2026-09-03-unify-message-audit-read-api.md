@@ -3,6 +3,7 @@
 状态：implemented
 类型：simplification
 Owner：backend/server/routers/chat_router.py
+取代：无
 
 ## 问题
 

@@ -3,6 +3,7 @@
 状态：implemented
 类型：feature
 Owner：backend/package/yuxi/agents/tool_approval.py
+取代：无
 
 ## 问题
 

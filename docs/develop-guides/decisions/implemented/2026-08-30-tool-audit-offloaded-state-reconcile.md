@@ -3,6 +3,7 @@
 状态：implemented
 类型：bug-fix
 Owner：backend/package/yuxi/services/chat_service.py
+取代：无
 
 ## 问题
 
@@ -12,7 +13,7 @@ Tool lifecycle 流在 `tool-finished` 时已经把原始 output 持久化为已�
 
 Shipping `tools` lifecycle 是已开始 Tool 执行事实的 Owner。`tool-finished` 或受控失败已经关闭审计后，终态 State 不再二次提交或覆盖该事实；repository 继续拒绝 lifecycle 自身对同一已关闭 operation 提交不同结果。
 
-终态 State 只处理流中出现裸 `tool-error`、审计仍为 running 且带 `awaiting_run_terminal` 的 operation，并且只接受同一 `tool_call_id` 的最后一条 error ToolMessage 来补全内容。大结果卸载阈值、文件格式、ToolCall 单向投影和普通 History 契约保持不变。本记录聚焦修正 [ToolMessage 增量审计与兼容投影](./2026-08-30-tool-message-incremental-audit.md) 的终态 State 边界。
+终态 State 只处理流中出现裸 `tool-error`、审计仍为 running 且带 `awaiting_run_terminal` 的 operation，并且只接受同一 `tool_call_id` 的最后一条 error ToolMessage 来补全内容。大结果卸载阈值、文件格式、ToolCall 单向投影和普通 History 契约保持不变。本记录聚焦修正 [AgentRun 审计基础](./2026-08-28-agent-run-audit-foundation.md)的终态 State 边界。
 
 ## 替代方案
 

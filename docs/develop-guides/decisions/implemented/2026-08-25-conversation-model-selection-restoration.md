@@ -3,6 +3,7 @@
 状态：implemented
 类型：bug-fix
 Owner：backend/package/yuxi/repositories/conversation_repository.py
+取代：无
 
 ## 问题
 

@@ -3,6 +3,7 @@
 状态：implemented
 类型：simplification
 Owner：backend/package/yuxi/agents/skills/service.py
+取代：无
 
 Skill 持久目录配置由 `yuxi.config` 拥有；Prompt 与激活路径由
 `agents/middlewares/skills.py` 拥有；Sandbox 只读挂载仍由 provisioner 拥有。

@@ -3,6 +3,7 @@
 状态：implemented
 类型：architecture
 Owner：backend/package/yuxi/storage_migration.py
+取代：2026-08-20-v071-storage-migration-boundary.md
 
 `storage-migrator` 执行数据库 Schema 变更，`PostgresManager` 持久化版本并提供只读兼容校验；API 与 worker 只消费已经完成迁移的 Schema。
 
@@ -26,6 +27,8 @@ API 与 worker 在启动时执行建表和 `ensure_*_schema`，多个运行进�
 - 要求所有迁移支持 downgrade：数据删除和约束收紧无法形成可信无损回滚；采用发布前备份、幂等升级和明确数据影响。
 
 ## 后果
+
+v0.7.1 的一次性兼容边界已经由版本化 migrator 和迁移测试吸收，不再作为并列当前 Decision。旧版本细节只在仍执行的 migration 与回归测试中保留，当前启动和发布只认本记录定义的唯一迁移 Owner。
 
 - API 与 worker 启动不再竞争 DDL 锁；迁移错误集中在 `storage-migrator`，失败会阻止运行服务启动。
 - 当前版本正常重启不再重复执行 Yuxi Schema 收敛 SQL。

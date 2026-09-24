@@ -56,7 +56,6 @@ cache
 .trae
 .codex
 .sisyphus
-.pytest_cache
 
 *.secret*
 *.nogit*
@@ -71,7 +70,6 @@ cache
 *.pdf
 src/data
 */package-lock.json
-web/package-lock.json
 saves
 saves_dev
 notebooks

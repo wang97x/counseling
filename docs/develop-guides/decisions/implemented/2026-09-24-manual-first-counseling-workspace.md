@@ -3,6 +3,7 @@
 状态：implemented
 类型：feature
 Owner：web/src/domains/counseling/views/StudentWorkspaceView.vue
+取代：2026-09-16-counseling-workspace-frontend-prototype.md、proposed/2026-09-12-counseling-minimal-release.md
 
 ## 问题
 
@@ -24,6 +25,8 @@ Owner：web/src/domains/counseling/views/StudentWorkspaceView.vue
 - 为手工记录、风险和阶段结束继续保留独立标签：入口清楚，但与统一时间线的产品主线冲突，因此使用上下文动作和时间线节点。
 
 ## 后果
+
+先前的前端演示工作台只保留在 changelog 与 Git 历史；当前页面不再以 localStorage 或固定生成结果冒充业务成功。手工记录、档案时间线和后续增强入口由当前领域组件、业务 API 与本记录共同拥有。
 
 - 辅导员不依赖模型、worker 或知识库即可完成建档、记录、确认、风险跟进、回看、更正和阶段结束。
 - 现有文件草稿、上传与生成 API 没有删除；当前工作台不为它们提供主入口。后续恢复时需要独立任务列表、真实对象存储/模型验证和人工确认体验。

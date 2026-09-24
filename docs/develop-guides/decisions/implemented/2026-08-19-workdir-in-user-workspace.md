@@ -3,6 +3,7 @@
 状态：implemented
 类型：simplification
 Owner：backend/package/yuxi/services/workdir_service.py
+取代：无
 
 本决定替代此前关于独立 Project Workdir 和 Project 存储挂载的决定：
 
@@ -11,7 +12,7 @@ Owner：backend/package/yuxi/services/workdir_service.py
 
 个人 Skill 继续遵循[Skill source convergence](../implemented/2026-08-18-skill-source-convergence.md)：个人 Skill 属于 UserWorkspace，共享 Skill 仍由只读 projection 提供。
 
-发布版升级边界由 [v0.7.1 存储迁移](2026-08-20-v071-storage-migration-boundary.md) 独立拥有。
+发布版升级边界由[版本化 Schema 迁移 Owner](2026-08-24-versioned-schema-migration-owner.md)独立拥有。
 
 ## 问题
 
