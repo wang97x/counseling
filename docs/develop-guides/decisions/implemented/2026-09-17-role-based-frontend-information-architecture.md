@@ -19,7 +19,7 @@ Owner：web/src/utils/frontendAccess.js
 - 未迁移的 `technical_admin` 身份继续获得技术控制台入口；显式同时拥有该角色的业务管理员才显示技术模块。
 - 档案关联会话允许辅导员从带 `student_id` 的 `/agent/:thread_id` 进入，路由通过学生会话列表接口确认 Thread 确实属于当前有权档案；既有平台 `admin` 仍可进入原有平台会话。通用 `/agent` 新建对话、`/workspace` 与 CLI 授权页不向业务管理员或超级管理员开放，不能通过直接 URL 绕过。
 
-所有实际操作仍服从现有后端授权。本记录不迁移 `technical_admin` 数据；辅导员自助建档的后端权限由[辅导员自助建档与档案内助手会话](../proposed/2026-09-17-counselor-owned-record-workflow.md)拥有。
+所有实际操作仍服从现有后端授权。本记录不迁移 `technical_admin` 数据；辅导员自助建档的后端权限由[辅导员自助建档与档案内助手会话](./2026-09-17-counselor-owned-record-workflow.md)拥有。
 
 ## 替代方案
 

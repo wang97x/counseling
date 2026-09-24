@@ -229,7 +229,7 @@ def test_storage_migrator_gates_every_shipping_file_consumer(filename: str) -> N
         dependency = compose["services"][service_name]["depends_on"]["storage-migrator"]
         assert dependency["condition"] == "service_completed_successfully"
     migrator = compose["services"]["storage-migrator"]
-    assert "python -m yuxi.storage_migration" in migrator["command"]
+    assert "python -m server.storage_migration" in migrator["command"]
     migrator_targets = {_volume_target(volume) for volume in migrator.get("volumes") or []}
     assert "/app/legacy-saves" in migrator_targets
     assert "/app/legacy-projects" not in migrator_targets

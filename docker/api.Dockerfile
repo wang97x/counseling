@@ -46,8 +46,9 @@ COPY backend/pyproject.toml /app/pyproject.toml
 COPY backend/.python-version /app/.python-version
 COPY backend/uv.lock /app/uv.lock
 
-# 先复制 package 目录，因为 pyproject.toml 中 yuxi = { path = "package", editable = true }
+# 先复制本地包目录，供 uv 安装 editable 依赖。
 COPY backend/package /app/package
+COPY backend/counseling /app/counseling
 
 # 如果网络还是不好，可以在后面添加 --index-url https://pypi.tuna.tsinghua.edu.cn/simple
 RUN uv sync --no-cache --group test --no-dev --frozen

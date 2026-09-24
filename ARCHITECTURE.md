@@ -28,7 +28,7 @@ Yuxi 是一个面向 RAG、知识图谱和多智能体工作流的知识库平�
 
 ## 后端代码地图
 
-后端分成两个顶层边界：`backend/server` 是 Web 应用入口与 HTTP 适配层，`backend/package/yuxi` 是业务和基础设施主体。新增领域逻辑通常优先放在 `yuxi` 包中，路由层只处理请求模型、认证上下文和响应装配。
+后端分成三个顶层边界：`backend/server` 是 Web 应用与迁移的装配入口，`backend/package/yuxi` 是通用智能体平台，`backend/counseling/src/counseling` 是心理辅导业务包。心理辅导领域逻辑不得新增到 `yuxi` 命名空间；业务包当前复用 Yuxi 的认证、数据库、解析和对象存储基础设施，并通过端口及 `counseling.integrations.yuxi` 适配通用会话与模型能力。路由层只处理请求模型、认证上下文、适配器装配和响应。
 
 ### Web 与 worker 入口
 
@@ -54,6 +54,17 @@ Yuxi 只交付完整知识能力路径。API 始终注册 `external_kb`、`knowl
 - `config` 区分系统级配置和用户级配置。PostgreSQL 持久化系统配置和用户配置；Redis 只保存带版本失效的短缓存，旧 `base.toml` 只作为一次性迁移来源。
 - `utils` 只放跨领域且足够通用的日志、时间、SSE 和轻量工具；`filepreview.py` 提供不依赖存储、领域或 HTTP 的格式识别、文本渲染和 Office 转换原语。
 
+### `backend/counseling/src/counseling`
+
+- `students` 拥有学生档案、归属查询和档案关联会话用例。
+- `documents` 拥有文件型与手工型咨询记录草稿、追加修订、人工确认、不可变正式记录、追加更正和统一时间线装配。
+- `risks` 拥有辅导员人工风险事件及其档案当前风险投影；不执行自动风险判断或干预。
+- `administration` 只拥有业务管理员本部门的最小聚合查询，不读取个案正文。
+- `storage` 拥有心理辅导模型、DDL 和独立 `counseling` Schema 版本；新业务表不进入 Yuxi 的 `business` Schema 版本。
+- `integrations.yuxi` 是业务端口到 Yuxi 通用 Conversation 与模型能力的适配边界。依赖方向只能是 `counseling -> yuxi`；`yuxi` 不得导入 `counseling`。
+
+`server.storage_migration` 是迁移 composition root，先执行 Yuxi 平台迁移，再执行心理辅导领域迁移。Yuxi 中只保留已发布 v8→v9 的历史学生表迁移以兼容旧库；当前新库和后续辅导 Schema 均由业务包拥有。
+
 ### 后台任务
 
 项目中存在三套领域状态不同、但共享 PostgreSQL 事实与 Redis/ARQ 投递模式的后台机制，不应合并状态模型：
@@ -70,7 +81,7 @@ Yuxi 只交付完整知识能力路径。API 始终注册 `external_kb`、`knowl
 
 - `main.js` 挂载应用，`App.vue` 是根组件。
 - `router` 定义公开首页、登录、智能体、工作区、智能体管理、扩展和仪表盘路由，并负责认证、管理员和超级管理员守卫。
-- `apis` 是后端接口封装边界。新增接口应在这里定义，复用 `base.js` 的请求、鉴权和错误处理。
+- `apis` 是通用平台接口封装边界。心理辅导接口、服务、类型、组件和页面统一位于 `domains/counseling`，并复用 `apis/base.js` 的请求、鉴权和错误处理。
 - `stores` 保存用户、智能体配置、主题和其他跨页面状态。
 - `views` 是页面级入口，`components` 是可复用界面块。智能体对话的主要交互位于 `AgentChatComponent`，由 `AgentView` 负责页面组合。
 - `composables` 封装请求排队、Run SSE、流式消息、审批、线程状态、提及和其他可组合逻辑。
@@ -80,7 +91,7 @@ Yuxi 只交付完整知识能力路径。API 始终注册 `external_kb`、`knowl
 
 `/students` 为辅导员和业务管理员提供学生档案列表。辅导员为自己创建档案，并在详情中维护背景摘要与状态；业务管理员只读取本部门最小档案元数据，不能创建或打开个案正文。“下一步助手”创建档案关联会话并复用原对话页，不再提供独立的通用新建对话入口；关联会话作为对应节点合并到档案时间轴，可从节点继续对话。Conversation 的服务端 metadata 固定学生及确认背景；档案编辑不改变已有快照，普通请求接入时将快照固化到 Request、Run 和用户级模型输入。
 
-`StudentRecordListView` 与 `StudentWorkspaceView` 提供档案列表和五标签工作区，`services/counselingWorkspaceService.js` 显式选择真实 API 或演示适配器。真实调用复用 `apis/counseling_api.js` 与现有会话附件接口；档案助手通过关联 Conversation 进入既有 Agent 页面，摘要生成、草稿保存、归档预览和正式归档在 `services/counseling/apiAdapter.js` 中仍返回 `not_supported`。演示模式不提供关联会话入口，演示状态不构成 PostgreSQL 中的正式辅导记录。
+`domains/counseling/views/StudentRecordListView.vue` 与 `StudentWorkspaceView.vue` 提供档案列表和工作区，`domains/counseling/workspaceService.js` 装配真实 API 适配器。业务前端通过 `domains/counseling/api.js` 调用 `/api/counseling/*`；档案关联会话由业务 API 授权后适配到通用 Conversation，浏览器不再用通用建线程接口提交学生标识或背景。演示状态不构成 PostgreSQL 中的正式辅导记录。
 
 ## 智能体运行链路
 

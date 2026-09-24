@@ -18,7 +18,6 @@ from yuxi.storage.postgres.models_business import (
     UNVIEWED_RUN_MARKER,
 )
 from yuxi.storage.postgres.models_business import Base as BusinessBase
-from yuxi.storage.postgres import models_counseling  # noqa: F401 - 注册学生表到业务 metadata
 from yuxi.storage.postgres.models_knowledge import Base as KnowledgeBase
 from yuxi.utils import logger
 from yuxi.utils.singleton import SingletonMeta
@@ -985,7 +984,6 @@ class PostgresManager(metaclass=SingletonMeta):
         self._check_initialized()
         stmts = [
             *BUSINESS_ROLE_SCHEMA_STATEMENTS,
-            *COUNSELING_STUDENT_SCHEMA_STATEMENTS,
             "ALTER TABLE IF EXISTS skills ADD COLUMN IF NOT EXISTS tool_dependencies JSONB DEFAULT '[]'::jsonb",
             "ALTER TABLE IF EXISTS skills ADD COLUMN IF NOT EXISTS mcp_dependencies JSONB DEFAULT '[]'::jsonb",
             "ALTER TABLE IF EXISTS skills ADD COLUMN IF NOT EXISTS skill_dependencies JSONB DEFAULT '[]'::jsonb",

@@ -85,6 +85,7 @@ async def test_student_owner_and_manager_access_are_isolated(test_client):
         assert created.status_code == 201, created.text
         student_id = created.json()["id"]
         assert "background_summary" not in created.json()
+        assert created.json()["current_risk_level"] == "unassessed"
         duplicate = await test_client.post(
             "/api/counseling/students",
             headers=owner,
@@ -101,7 +102,7 @@ async def test_student_owner_and_manager_access_are_isolated(test_client):
         updated = await test_client.put(
             f"/api/counseling/students/{student_id}",
             headers=owner,
-            json={"background_summary": "虚构背景，仅测试隔离", "status": "closed"},
+            json={"background_summary": "虚构背景，仅测试隔离", "status": "active", "expected_version": 1},
         )
         assert updated.status_code == 200, updated.text
         assert updated.json()["background_summary"] == "虚构背景，仅测试隔离"
@@ -110,7 +111,7 @@ async def test_student_owner_and_manager_access_are_isolated(test_client):
             "FROM counseling_students WHERE id = $1",
             student_id,
         )
-        assert tuple(persisted.values()) == (departments[0], "S-001", owner_id, "虚构背景，仅测试隔离", "closed")
+        assert tuple(persisted.values()) == (departments[0], "S-001", owner_id, "虚构背景，仅测试隔离", "active")
 
         for headers in (manager, other, tech, foreign_manager, no_role):
             detail = await test_client.get(f"/api/counseling/students/{student_id}", headers=headers)
@@ -123,13 +124,34 @@ async def test_student_owner_and_manager_access_are_isolated(test_client):
             )
             assert write.status_code in {403, 404}, write.text
 
-        for headers in (manager, owner):
-            listed = await test_client.get("/api/counseling/students", headers=headers)
-            assert listed.status_code == 200, listed.text
-            assert listed.json() == [
-                {"id": student_id, "student_code": "S-001", "counselor_id": owner_id, "status": "closed"}
-            ]
-            assert "background_summary" not in listed.text
+        owner_list = await test_client.get("/api/counseling/students", headers=owner)
+        assert owner_list.status_code == 200, owner_list.text
+        assert owner_list.json() == [
+            {
+                "id": student_id,
+                "student_code": "S-001",
+                "display_name": "",
+                "class_name": "",
+                "counselor_id": owner_id,
+                "status": "active",
+                "current_risk_level": "unassessed",
+                "version": 2,
+            }
+        ]
+        manager_list = await test_client.get("/api/counseling/students", headers=manager)
+        assert manager_list.status_code == 200, manager_list.text
+        assert manager_list.json() == [
+            {
+                "id": student_id,
+                "student_code": "S-001",
+                "counselor_id": owner_id,
+                "status": "active",
+                "current_risk_level": "unassessed",
+                "version": 2,
+            }
+        ]
+        assert "background_summary" not in owner_list.text
+        assert "background_summary" not in manager_list.text
         for headers in (other, foreign_manager):
             listed = await test_client.get("/api/counseling/students", headers=headers)
             assert listed.status_code == 200 and listed.json() == [], listed.text
@@ -153,18 +175,21 @@ async def test_student_owner_and_manager_access_are_isolated(test_client):
         payload = {
             "agent_id": agent_slug,
             "request_id": uuid.uuid4().hex,
-            "student_id": student_id,
             "background_snapshot": "人工确认的虚构背景",
         }
-        created_thread = await test_client.post("/api/chat/thread", headers=owner, json=payload)
-        assert created_thread.status_code == 200, created_thread.text
+        conversation_url = f"/api/counseling/students/{student_id}/conversations"
+        created_thread = await test_client.post(conversation_url, headers=owner, json=payload)
+        assert created_thread.status_code == 201, created_thread.text
         thread = created_thread.json()
         snapshot = {"student_id": student_id, "student_code": "S-001", "background_snapshot": "人工确认的虚构背景"}
         assert thread["metadata"]["counseling"] == snapshot
-        repeated = await test_client.post("/api/chat/thread", headers=owner, json=payload)
-        assert repeated.status_code == 200 and repeated.json()["id"] == thread["id"]
-        for changes in ({"student_id": second_id}, {"background_snapshot": "另一份背景"}):
-            conflict = await test_client.post("/api/chat/thread", headers=owner, json={**payload, **changes})
+        repeated = await test_client.post(conversation_url, headers=owner, json=payload)
+        assert repeated.status_code == 201 and repeated.json()["id"] == thread["id"]
+        for url, changes in (
+            (f"/api/counseling/students/{second_id}/conversations", {}),
+            (conversation_url, {"background_snapshot": "另一份背景"}),
+        ):
+            conflict = await test_client.post(url, headers=owner, json={**payload, **changes})
             assert conflict.status_code == 409, conflict.text
         for changes in ({"student_id": second_id}, {"metadata": {"counseling": snapshot}}):
             denied = await test_client.put(f"/api/chat/thread/{thread['id']}", headers=owner, json=changes)
@@ -173,13 +198,11 @@ async def test_student_owner_and_manager_access_are_isolated(test_client):
             "/api/chat/thread", headers=owner, json={"agent_id": agent_slug, "metadata": {"counseling": snapshot}}
         )
         assert forged.status_code == 400, forged.text
-        missing_confirmation = await test_client.post(
-            "/api/chat/thread", headers=owner, json={"agent_id": agent_slug, "student_id": student_id}
-        )
+        missing_confirmation = await test_client.post(conversation_url, headers=owner, json={"agent_id": agent_slug})
         assert missing_confirmation.status_code == 422
         for headers in (other, manager, tech, foreign_manager, no_role):
-            denied = await test_client.post("/api/chat/thread", headers=headers, json=payload)
-            assert denied.status_code == 404, denied.text
+            denied = await test_client.post(conversation_url, headers=headers, json=payload)
+            assert denied.status_code in {403, 404}, denied.text
             denied = await test_client.get(f"/api/chat/thread/{thread['id']}/history", headers=headers)
             assert denied.status_code == 404, denied.text
             denied = await test_client.get(f"/api/counseling/students/{student_id}/conversations", headers=headers)
@@ -236,7 +259,7 @@ async def test_student_owner_and_manager_access_are_isolated(test_client):
                     )
                 run = await db.get(AgentRun, result.run_id)
                 assert run is not None
-                assert run.input_payload["counseling"] == snapshot
+                assert run.input_payload["model_context"]["payload"] == snapshot
                 # 本测试不向 worker 发布任务，同事务结束测试运行，避免留下待执行任务。
                 run.status = "cancelled"
                 run.finished_at = utc_now_naive()
@@ -244,7 +267,7 @@ async def test_student_owner_and_manager_access_are_isolated(test_client):
             async with async_sessionmaker(engine)() as db:
                 request = await db.scalar(select(AgentRunRequest).where(AgentRunRequest.request_id == request_id))
                 persisted_input = await db.get(Message, request.input_message_id)
-                assert request.input_payload["counseling"] == snapshot
+                assert request.input_payload["model_context"]["payload"] == snapshot
                 assert persisted_input.content == "当前问题"
                 model_input = persisted_input.extra_metadata["raw_message"]["content"]
                 assert "人工确认的虚构背景" in model_input[0]["text"]
@@ -282,6 +305,7 @@ async def test_student_owner_and_manager_access_are_isolated(test_client):
             "DELETE FROM projects WHERE uid IN (SELECT uid FROM users WHERE id = ANY($1::integer[]))", users
         )
         await conn.execute("DELETE FROM agents WHERE slug = $1", f"student-agent-{suffix}")
+        await conn.execute("DELETE FROM counseling_audit_events WHERE department_id = ANY($1::integer[])", departments)
         await conn.execute("DELETE FROM counseling_students WHERE department_id = ANY($1::integer[])", departments)
         await conn.execute("DELETE FROM users WHERE id = ANY($1::integer[])", users)
         await conn.execute("DELETE FROM departments WHERE id = ANY($1::integer[])", departments)
@@ -306,7 +330,17 @@ async def test_student_migration_is_idempotent_and_checks_status():
                 "SELECT column_name FROM information_schema.columns WHERE table_name = 'counseling_students'"
             )
         }
-        assert {"department_id", "student_code", "counselor_id", "background_summary", "status"} <= columns
+        assert {
+            "department_id",
+            "student_code",
+            "display_name",
+            "class_name",
+            "counselor_id",
+            "background_summary",
+            "status",
+            "current_risk_level",
+            "version",
+        } <= columns
         constraints = {
             row["conname"]
             for row in await conn.fetch(

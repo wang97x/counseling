@@ -1,19 +1,25 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
-import { filterApiStudents, mapApiConversation, mapApiStudent, toApiStudentPatch } from '../../src/services/counseling/apiMapping.js'
-import { validateCounselingUpload } from '../../src/services/counseling/uploadValidation.js'
+import {
+  filterApiStudents,
+  mapApiConversation,
+  mapApiStudent,
+  mapApiTimelineNode,
+  toApiStudentPatch,
+} from '../../src/domains/counseling/services/apiMapping.js'
+import { validateCounselingUpload } from '../../src/domains/counseling/services/uploadValidation.js'
 import {
   createLatestOperation,
   isCurrentCounselingOperation,
   isCurrentStudentRequest,
-} from '../../src/utils/counselingRequestGuard.js'
-import { processCounselingRecordUpload } from '../../src/services/counseling/recordUploadFlow.js'
+} from '../../src/domains/counseling/requestGuard.js'
+import { processCounselingRecordUpload } from '../../src/domains/counseling/services/recordUploadFlow.js'
 import {
   createCounselingDemoAdapter,
   createCounselingDemoSeed,
   STORAGE_KEY,
-} from '../../src/services/counseling/demoAdapter.js'
+} from '../../src/domains/counseling/services/demoAdapter.js'
 
 function memoryStorage(initial = {}) {
   const values = new Map(Object.entries(initial))
@@ -51,31 +57,43 @@ test('共享上传边界在真实请求前拒绝错误类型、空文件和超�
   assert.equal(validateCounselingUpload({ name: 'talk.pdf', size: 5 * 1024 * 1024 + 1 }).code, 'file_too_large')
   assert.equal(validateCounselingUpload({ name: 'talk.docx', size: 10 }), null)
 
-  const apiAdapter = readFileSync(new URL('../../src/services/counseling/apiAdapter.js', import.meta.url), 'utf8')
-  assert.ok(apiAdapter.indexOf('validateCounselingUpload(file)') < apiAdapter.indexOf('uploadTmpAttachment(file)'))
+  const apiAdapter = readFileSync(new URL('../../src/domains/counseling/services/apiAdapter.js', import.meta.url), 'utf8')
+  assert.ok(
+    apiAdapter.indexOf('validateCounselingUpload(file)') < apiAdapter.indexOf('counselingApi.createRecordDraft(studentId'),
+  )
 })
 
-test('真实附件成功后终止于明确的部分成功，不调用摘要或诱导重复上传', async () => {
-  let uploadCalls = 0
-  let summaryCalls = 0
+test('真实记录上传后生成可人工审阅的结构化草稿', async () => {
+  const calls = []
   const service = {
     mode: 'api',
-    async uploadRecord() {
-      uploadCalls += 1
-      return { status: 'ok', data: { id: 'attachment-1', name: '记录.pdf' } }
+    async createRecordDraft(studentId, file, requestId) {
+      calls.push(['upload', studentId, file.name, requestId])
+      return { status: 'ok', data: { id: 'draft-1', version: 1 } }
     },
-    async generateSummary() {
-      summaryCalls += 1
-      return { status: 'not_supported' }
+    async generateSummary(studentId, draftId, version, requestId) {
+      calls.push(['summary', studentId, draftId, version, requestId])
+      return {
+        status: 'ok',
+        data: {
+          id: draftId,
+          version: 2,
+          source: { fileName: '记录.pdf' },
+          parsedText: '已解析文本',
+          summary: { sections: [{ title: '会谈概述', content: '待审阅' }] },
+        },
+      }
     },
   }
 
-  const result = await processCounselingRecordUpload(service, 'student-1', { name: '记录.pdf' }, { threadId: 'thread-1' })
+  const result = await processCounselingRecordUpload(service, 'student-1', { name: '记录.pdf' })
   assert.equal(result.status, 'ok')
-  assert.equal(result.kind, 'attachment_only')
-  assert.match(result.message, /附件已加入会话/)
-  assert.equal(uploadCalls, 1)
-  assert.equal(summaryCalls, 0)
+  assert.equal(result.kind, 'record_draft')
+  assert.equal(result.draft.version, 2)
+  assert.equal(result.uploaded.name, '记录.pdf')
+  assert.deepEqual(calls.map(([kind]) => kind), ['upload', 'summary'])
+  assert.equal(calls[1][2], 'draft-1')
+  assert.equal(calls[1][3], 1)
 })
 
 test('上传拒绝错误类型、空文件和超过 5MB 的文件', async () => {
@@ -173,6 +191,41 @@ test('档案关联会话映射到可继续的时间轴节点', () => {
   })
 })
 
+test('正式记录时间线展示结构化摘要且不暴露 source 对象为标签', () => {
+  assert.deepEqual(mapApiTimelineNode({
+    id: 'record-1',
+    type: 'record',
+    occurred_at: '2026-09-22T10:00:00Z',
+    title: '谈话记录.pdf',
+    source: { file_name: '谈话记录.pdf' },
+    summary: { sections: [{ title: '会谈概述', content: '已由辅导员确认' }] },
+  }), {
+    id: 'record-1',
+    conversationId: undefined,
+    occurredAt: '2026-09-22T10:00:00Z',
+    title: '谈话记录.pdf',
+    summary: '会谈概述：已由辅导员确认',
+    source: 'upload',
+  })
+})
+
+test('真实时间线会话 DTO 使用节点 id 保留继续对话入口', () => {
+  assert.deepEqual(mapApiTimelineNode({
+    id: 'thread-2',
+    type: 'conversation',
+    occurred_at: '2026-09-22T11:00:00Z',
+    title: '第 2 次辅导',
+    agent_id: 'counseling-agent',
+  }), {
+    id: 'thread-2',
+    conversationId: 'thread-2',
+    occurredAt: '2026-09-22T11:00:00Z',
+    title: '第 2 次辅导',
+    summary: '暂无摘要',
+    source: 'assistant',
+  })
+})
+
 test('学生请求守卫拒绝切换档案或代次后的迟到结果', () => {
   assert.equal(isCurrentStudentRequest('1', 4, '1', 4), true)
   assert.equal(isCurrentStudentRequest('1', 4, '2', 5), false)
@@ -260,16 +313,17 @@ test('高风险摘要未人工确认时不能归档', async () => {
 })
 
 test('前端服务边界显式选择适配器且生产模式没有演示回退', () => {
-  const selector = readFileSync(new URL('../../src/services/counselingWorkspaceService.js', import.meta.url), 'utf8')
-  const apiAdapter = readFileSync(new URL('../../src/services/counseling/apiAdapter.js', import.meta.url), 'utf8')
-  assert.match(selector, /VITE_COUNSELING_DEMO/)
-  assert.match(selector, /demo\s*\?\s*createCounselingDemoAdapter/)
-  assert.match(apiAdapter, /status: 'not_supported'/)
+  const selector = readFileSync(new URL('../../src/domains/counseling/workspaceService.js', import.meta.url), 'utf8')
+  const apiAdapter = readFileSync(new URL('../../src/domains/counseling/services/apiAdapter.js', import.meta.url), 'utf8')
+  assert.match(selector, /return createCounselingApiAdapter\(\)/)
+  assert.doesNotMatch(selector, /VITE_COUNSELING_DEMO|createCounselingDemoAdapter/)
+  assert.match(apiAdapter, /createRecordDraft/)
+  assert.match(apiAdapter, /confirmRecordDraft/)
   assert.doesNotMatch(apiAdapter, /createCounselingDemoAdapter/)
 })
 
 test('工作台使用 URL 标签恢复并隔离学生切换时的旧响应', () => {
-  const source = readFileSync(new URL('../../src/views/StudentWorkspaceView.vue', import.meta.url), 'utf8')
+  const source = readFileSync(new URL('../../src/domains/counseling/views/StudentWorkspaceView.vue', import.meta.url), 'utf8')
   assert.match(source, /route\.query\.tab/)
   assert.match(source, /COUNSELING_TABS\.includes/)
   assert.match(source, /const version = \+\+requestVersion/)
@@ -288,7 +342,7 @@ test('工作台使用 URL 标签恢复并隔离学生切换时的旧响应', () 
   assert.match(source, /record\.conversationId/)
   assert.match(source, />继续对话</)
 
-  const listSource = readFileSync(new URL('../../src/views/StudentRecordListView.vue', import.meta.url), 'utf8')
+  const listSource = readFileSync(new URL('../../src/domains/counseling/views/StudentRecordListView.vue', import.meta.url), 'utf8')
   assert.match(listSource, /Number\(item\.counselorId\) === Number\(userStore\.userId\)/)
   assert.match(listSource, /仅负责人可打开/)
   assert.match(listSource, /const listOperations = createLatestOperation\(\)/)
@@ -300,15 +354,13 @@ test('工作台使用 URL 标签恢复并隔离学生切换时的旧响应', () 
   assert.match(listSource, /userStore\.canCreateStudentRecord/)
   assert.match(listSource, /createStudent\(\{ student_code: code \}\)/)
   assert.doesNotMatch(listSource, /listCounselors|createForm\.counselor_id/)
-  const apiAdapter = readFileSync(new URL('../../src/services/counseling/apiAdapter.js', import.meta.url), 'utf8')
-  assert.match(apiAdapter, /timeline: items\.map\(mapApiConversation\)/)
+  const apiAdapter = readFileSync(new URL('../../src/domains/counseling/services/apiAdapter.js', import.meta.url), 'utf8')
+  assert.match(apiAdapter, /timeline: items\.map\(mapApiTimelineNode\)/)
 
-  const uploadSource = readFileSync(new URL('../../src/components/counseling/RecordUploadFlow.vue', import.meta.url), 'utf8')
-  assert.match(uploadSource, /\['上传记录', '附件已加入'\]/)
-  assert.match(uploadSource, /completionMode\.value = result\.kind/)
-  assert.match(uploadSource, /附件已加入最近会话/)
-  assert.match(uploadSource, /AI 摘要与档案归档尚未发生/)
-  assert.match(uploadSource, /completionMode === 'attachment_only' \? '关闭'/)
+  const uploadSource = readFileSync(new URL('../../src/domains/counseling/components/RecordUploadFlow.vue', import.meta.url), 'utf8')
+  assert.match(uploadSource, /props\.service\.updateSummary/)
+  assert.match(uploadSource, /props\.service\.confirmRecordDraft/)
+  assert.match(uploadSource, /经人工确认的记录已写入档案时间轴/)
   assert.match(uploadSource, /flowOperations\.begin\(\)/)
   assert.match(uploadSource, /isCurrentCounselingOperation/)
 })

@@ -3,6 +3,7 @@ from collections.abc import Callable
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from counseling.storage.schema import require_current_schema as require_current_counseling_schema
 from yuxi.agents.mcp.service import ensure_builtin_mcp_servers_in_db
 from yuxi.models.providers.service import ensure_builtin_model_providers_in_db
 from yuxi.services.run_queue_service import close_queue_clients, get_redis_client
@@ -65,6 +66,7 @@ async def _startup(app: FastAPI) -> None:
     # Schema 只由 Compose 中的 storage-migrator 修改；运行进程仅校验兼容版本。
     pg_manager.initialize()
     await pg_manager.require_current_schema()
+    await require_current_counseling_schema()
 
     from yuxi.config.options import (
         ensure_options_in_db,

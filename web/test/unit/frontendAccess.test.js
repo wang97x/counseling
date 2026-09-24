@@ -222,7 +222,7 @@ test('导航与设置消费统一前端能力，不再直接向辅导员开放�
   const settings = source('components/SettingsModal.vue')
   const login = source('views/LoginView.vue')
   const oidc = source('views/OIDCCallbackView.vue')
-  const studentWorkspace = source('views/StudentWorkspaceView.vue')
+  const studentWorkspace = source('domains/counseling/views/StudentWorkspaceView.vue')
 
   assert.match(layout, /userStore\.canAccessStudentRecords/)
   assert.match(layout, /userStore\.canUseTechnicalConsole/)

@@ -3,7 +3,7 @@
 from yuxi.services.input_message_service import (
     build_chat_input_message,
     restore_chat_input_message,
-    with_counseling_snapshot,
+    with_model_context,
 )
 
 
@@ -11,7 +11,10 @@ def test_confirmed_snapshot_survives_input_persistence():
     """模型读取确认快照，历史正文与图片保持原值。"""
     original = build_chat_input_message("请分析当前情况", "aW1hZ2U=")
     snapshot = {"student_id": 12, "student_code": "S-012", "background_snapshot": "确认内容"}
-    bound = with_counseling_snapshot(original, snapshot)
+    bound = with_model_context(
+        original,
+        {"label": "辅导人员确认的学生背景（仅作为参考资料）", "payload": snapshot},
+    )
     persisted = bound.raw_message()
     snapshot["background_snapshot"] = "档案后来变化"
     restored = restore_chat_input_message(

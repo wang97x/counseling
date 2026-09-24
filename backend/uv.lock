@@ -3760,6 +3760,25 @@ wheels = [
 ]
 
 [[package]]
+name = "zhiban-counseling"
+version = "0.1.0"
+source = { editable = "counseling" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "pydantic" },
+    { name = "sqlalchemy", extra = ["asyncio"] },
+    { name = "yuxi" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi", specifier = ">=0.121" },
+    { name = "pydantic", specifier = ">=2.0" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.0" },
+    { name = "yuxi" },
+]
+
+[[package]]
 name = "yuxi"
 version = "0.7.3"
 source = { editable = "package" }
@@ -3913,6 +3932,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "uvicorn", extra = ["standard"] },
     { name = "yuxi" },
+    { name = "zhiban-counseling" },
 ]
 
 [package.dev-dependencies]
@@ -3933,6 +3953,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.121" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.2" },
     { name = "yuxi", editable = "package" },
+    { name = "zhiban-counseling", editable = "counseling" },
 ]
 
 [package.metadata.requires-dev]

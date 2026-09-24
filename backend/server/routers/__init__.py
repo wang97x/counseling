@@ -8,6 +8,7 @@ from server.routers.auth_dept_router import department
 from server.routers.auth_router import auth
 from server.routers.chat_router import chat
 from server.routers.counseling_router import counseling
+from server.routers.counseling_admin_router import counseling_admin
 from server.routers.dashboard_router import dashboard
 from server.routers.external_kb_router import external_kb
 from server.routers.filesystem_router import filesystem_router
@@ -38,6 +39,7 @@ router.include_router(agent_invocation_channel_router)  # /api/agent-invocation/
 router.include_router(agent_invocation_eval_router)  # /api/agent-invocation/eval/*
 router.include_router(chat)  # /api/chat/* 对话线程、消息历史与附件
 router.include_router(counseling)  # /api/counseling/students* 学生档案
+router.include_router(counseling_admin)  # /api/counseling/admin* 业务管理聚合
 router.include_router(projects)  # /api/projects* 项目创建与选择
 router.include_router(scheduled_agents)  # /api/scheduled-tasks* 用户自建 Agent 定时任务
 

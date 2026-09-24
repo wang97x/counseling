@@ -169,8 +169,6 @@ class ThreadCreate(BaseModel):
     agent_id: str
     metadata: dict | None = None
     project_id: str | None = None
-    student_id: int | None = Field(None, gt=0)
-    background_snapshot: str | None = Field(None, max_length=10000)
 
 
 class ThreadResponse(BaseModel):
@@ -290,14 +288,14 @@ async def create_thread(
     thread: ThreadCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_required_user)
 ):
     """创建新对话线程 (使用新存储系统)"""
+    if thread.metadata and "counseling" in thread.metadata:
+        raise HTTPException(status_code=400, detail="counseling 是业务服务端保留字段")
     return await create_thread_view(
         agent_slug=thread.agent_id,
         request_id=thread.request_id,
         title=thread.title,
         metadata=thread.metadata,
         project_id=thread.project_id,
-        student_id=thread.student_id,
-        background_snapshot=thread.background_snapshot,
         db=db,
         current_uid=str(current_user.uid),
     )

@@ -155,7 +155,7 @@ services:
       YUXI_RUNTIME_DIR: /app/runtime/storage-migrator
       YUXI_LEGACY_STORAGE_DIR: /app/legacy-saves
       YUXI_USER_DATA_DIR: /app/user-data
-    command: uv run --no-sync --no-dev python -m yuxi.storage_migration
+    command: uv run --no-sync --no-dev python -m server.storage_migration
     restart: "no"
     depends_on:
       postgres:

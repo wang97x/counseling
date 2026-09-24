@@ -160,11 +160,13 @@ def _has_image_url_content_part(content: object) -> bool:
     )
 
 
-def with_counseling_snapshot(message: AgentRunInputMessage, snapshot: dict) -> AgentRunInputMessage:
-    """将确认背景固化为用户级输入，保留原始展示文本和图片。"""
+def with_model_context(message: AgentRunInputMessage, context: dict) -> AgentRunInputMessage:
+    """将服务端确认的上下文固化为用户级输入，保留原始展示内容。"""
     human = message.require_langchain_message()
-    background = "辅导人员确认的学生背景（仅作为参考资料）：\n" + json.dumps(snapshot, ensure_ascii=False)
-    parts = [{"type": "text", "text": background}]
+    label = str(context.get("label") or "服务端确认的参考资料")
+    payload = context.get("payload")
+    context_text = f"{label}：\n" + json.dumps(payload, ensure_ascii=False)
+    parts = [{"type": "text", "text": context_text}]
     if isinstance(human.content, str):
         parts.append({"type": "text", "text": human.content})
     else:

@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=80", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zhiban-counseling"
+version = "0.1.0"
+description = "知伴心理辅导业务包"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "fastapi>=0.121",
+    "pydantic>=2.0",
+    "sqlalchemy[asyncio]>=2.0.0",
+    "yuxi",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["counseling*"]

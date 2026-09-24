@@ -5,7 +5,7 @@ import { sanitizeRedirect } from '@/utils/oidcAutoStart'
 import {
   resolveFrontendNavigationRedirect
 } from '@/utils/frontendAccess'
-import { counselingApi } from '@/apis/counseling_api'
+import { counselingApi } from '@/domains/counseling/api'
 
 const AppLayout = () => import('@/layouts/AppLayout.vue')
 
@@ -82,13 +82,13 @@ const router = createRouter({
         {
           path: '',
           name: 'StudentRecords',
-          component: () => import('../views/StudentRecordListView.vue'),
+          component: () => import('../domains/counseling/views/StudentRecordListView.vue'),
           meta: { keepAlive: false, requiresAuth: true, requiresStudentRecords: true }
         },
         {
           path: ':studentId',
           name: 'StudentRecordDetail',
-          component: () => import('../views/StudentWorkspaceView.vue'),
+          component: () => import('../domains/counseling/views/StudentWorkspaceView.vue'),
           meta: { keepAlive: false, requiresAuth: true, requiresStudentDetail: true }
         }
       ]

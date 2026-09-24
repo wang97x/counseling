@@ -2,7 +2,7 @@
 
 本目录是 Vue 3 / Vite 前端。默认只读本文件、受影响组件/API 和相关测试；只有 UI、样式或交互改动才读取[设计规范](../docs/develop-guides/design.md)的相关章节，跨前后端链路或陌生模块才读取根[架构文档](../ARCHITECTURE.md)。
 
-- API 调用统一放在 `src/apis`；组件不直接拼接普通 HTTP 请求。
+- 通用平台 API 调用放在 `src/apis`；心理辅导 API 与页面、服务、类型和组件收敛在 `src/domains/counseling`，其 API Owner 固定为领域根 `api.js`。组件不直接拼接普通 HTTP 请求。
 - 前端权限与路由守卫只提供体验约束，后端执行最终授权。
 - 复用 `base.css` 变量和 `@lucide/vue`，不为一次需求引入依赖或样式体系。
 - 保持 loading、empty、error、断线恢复和终态投影一致；不用乐观 UI 覆盖 PostgreSQL 最终事实。

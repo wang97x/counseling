@@ -9,6 +9,7 @@ classifiers = [
 ]
 requires-python = ">=3.12,<3.14"
 dependencies = [
+    "zhiban-counseling",
     "fastapi>=0.121",
     "uvicorn[standard]>=0.34.2",
     "arq>=0.26.3",
@@ -42,13 +43,14 @@ url = "https://pypi.tuna.tsinghua.edu.cn/simple"
 default = true
 
 [tool.uv.sources]
+zhiban-counseling = { path = "counseling", editable = true }
 yuxi = { path = "package", editable = true }
 
 
 [tool.pytest.ini_options]
 addopts = "-v --tb=short"
 testpaths = ["test/unit", "test/integration", "test/e2e"]
-pythonpath = [".", "package"]
+pythonpath = [".", "package", "counseling/src"]
 markers = [
     "unit: marks tests that run without live services",
     "auth: marks tests that require authentication",

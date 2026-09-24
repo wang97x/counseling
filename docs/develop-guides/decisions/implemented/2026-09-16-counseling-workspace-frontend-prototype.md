@@ -2,7 +2,7 @@
 
 状态：implemented
 类型：feature
-Owner：web/src/services/counselingWorkspaceService.js
+Owner：web/src/domains/counseling/workspaceService.js
 
 ## 问题
 

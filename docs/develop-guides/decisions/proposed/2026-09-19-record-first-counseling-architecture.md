@@ -4,6 +4,8 @@
 类型：architecture
 Owner：docs/develop-guides/counseling-product-contract.md
 
+交付顺序已由[最小心理辅导业务后端](../implemented/2026-09-23-minimal-counseling-backend.md)收敛；本记录继续拥有档案优先和业务/Yuxi 边界，不再拥有首版功能范围。
+
 ## 问题
 
 当前心理辅导前端复用 Yuxi 的对话、Agent 与技术管理信息架构，学生详情以五个标签和关联会话组织。该结构让辅导师在档案、对话和生成文件之间切换，也让业务角色与 Yuxi 平台角色产生重叠。业务需要以学生档案及历史时间线为唯一主线，并把 Yuxi 收敛为无业务角色、由业务后端调用的文件生成能力。
@@ -20,7 +22,7 @@ Owner：docs/develop-guides/counseling-product-contract.md
 
 跟进记录在草稿阶段可编辑；确认归档后，任何角色均不能修改或删除原记录。纠错通过引用原记录的新更正事件追加，保留原因、操作者和时间。重新生成只创建新草稿，不覆盖历史文书。生成结果复制到业务侧存储并进入待审状态，辅导师确认后才成为正式档案；业务正式文件不依赖 Yuxi 临时产物地址。
 
-目标目录边界如下，实际迁移按可验证的纵向业务切片推进，不要求一次性搬迁现有代码：
+目标目录边界如下，实际迁移按可验证的纵向业务切片推进，不要求一次性拆成独立进程：
 
 ```text
 backend/
@@ -33,7 +35,6 @@ backend/
 │   ├── documents/
 │   ├── generation/
 │   └── audit/
-├── integrations/counseling_yuxi/
 ├── package/yuxi/
 │   └── generation/
 └── server/routers/
@@ -55,6 +56,8 @@ web/src/
 
 `counseling` 领域只依赖生成端口，不依赖 Yuxi 的 Conversation、Project、AgentRun 或工作区模型。`counseling_yuxi` 是唯一同时理解业务生成请求和 Yuxi 执行协议的边界。现有 Yuxi 目录在迁移期保持运行事实；新目录只有在源码、装配和测试落地后才成为当前架构。
 
+迁移顺序固定为：先建立独立 Python 包、前端领域目录和依赖负控；再迁移辅导 Schema、业务角色与知识权限 Owner；随后把业务生成收敛到端口；最后再继续扩展 P0 归档。过渡期适配器位于 `counseling.integrations.yuxi`，是唯一同时理解业务请求与 Yuxi 协议的边界。Yuxi 已发布的历史迁移可以为旧库兼容保留，但不得继续承接新的辅导表或业务用例。
+
 ## 替代方案
 
 - 继续以 Yuxi Conversation 为业务主线：实现复用最多，但业务记录、执行线程和正式文件的生命周期会继续耦合，因此不采用。
@@ -73,6 +76,7 @@ web/src/
 | 业务侧通过生成端口调用无角色的 Yuxi | 浏览器直连 Agent 或 Yuxi 接收业务角色 | `counseling.generation` 与 `counseling_yuxi` 适配层 | 架构依赖检查、integration 与 E2E | 前端无 Yuxi 业务生成调用；Yuxi 请求模型无业务角色 | Not run |
 | 生成结果进入业务待审版本并由辅导师确认 | 临时产物直接成为档案或依赖临时 URL | 文书 service、repository 与对象存储 | worker E2E，回读业务记录和文件对象 | 失败、取消和重复回调均不产生正式版本 | Not run |
 | 团队知识包含版本化文书模板，个人私密条目不进入生成 | 模板另建入口或私密笔记被检索 | 团队/个人知识 service 与检索过滤 | HTTP integration 与生成上下文检查 | 私密条目及未发布团队版本不会进入上下文 | Not run |
+| 心理辅导运行时代码不再落入或被 Yuxi 反向依赖 | 只换目录但 `yuxi` 仍导入业务包，或新业务 DDL 继续进入平台版本 | `backend/counseling`、`backend/package/yuxi`、`server.storage_migration` | `pytest test/unit/architecture/test_counseling_package_boundary.py test/unit/storage/test_counseling_schema.py` | 新增 `yuxi -> counseling` 导入或把记录 DDL 放回 Yuxi 时测试失败 | Passed |
 
 ## 风险
 

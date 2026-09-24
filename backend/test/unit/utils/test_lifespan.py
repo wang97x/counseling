@@ -73,6 +73,32 @@ async def test_api_startup_validates_full_schema_without_running_ddl(
     assert calls == ["initialize", "require_current_schema"]
 
 
+async def test_api_startup_requires_counseling_schema_after_platform_schema(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """平台版本正确但业务版本缺失时仍拒绝启动。"""
+    calls: list[str] = []
+    monkeypatch.setenv("API_KEY_DERIVATION_SECRET", "schema-test-api-secret-at-least-thirty-two-characters")
+    monkeypatch.setenv("JWT_SECRET_KEY", "schema-test-jwt-secret-at-least-thirty-two-characters")
+    monkeypatch.setenv("SANDBOX_PROVISIONER_TOKEN", "schema-test-sandbox-token-at-least-thirty-two-characters")
+    monkeypatch.setattr(lifespan_module.pg_manager, "initialize", lambda: calls.append("initialize"))
+
+    async def require_platform_schema() -> None:
+        calls.append("platform")
+
+    async def require_counseling_schema() -> None:
+        calls.append("counseling")
+        raise RuntimeError("missing counseling schema")
+
+    monkeypatch.setattr(lifespan_module.pg_manager, "require_current_schema", require_platform_schema)
+    monkeypatch.setattr(lifespan_module, "require_current_counseling_schema", require_counseling_schema)
+
+    with pytest.raises(RuntimeError, match="missing counseling schema"):
+        await lifespan_module._startup(FastAPI())
+
+    assert calls == ["initialize", "platform", "counseling"]
+
+
 async def test_required_startup_component_failure_still_releases_every_runtime_component(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

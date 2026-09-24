@@ -2,7 +2,7 @@
 
 状态：implemented
 类型：feature
-Owner：web/src/views/StudentRecordListView.vue
+Owner：web/src/domains/counseling/views/StudentRecordListView.vue
 
 ## 问题
 
@@ -10,7 +10,7 @@ Owner：web/src/views/StudentRecordListView.vue
 
 ## 决策
 
-侧边栏为具备辅导人员或业务管理员角色的用户显示“学生档案”。业务管理员在列表中读取部门分配元数据，创建档案时从本部门合格辅导人员中选择初始负责人。负责人从列表进入本人档案详情，维护背景摘要与状态。页面接口封装在 `web/src/apis/counseling_api.js`；候选人的权限筛选由 `backend/package/yuxi/services/counseling.py` 与 repository 执行。
+侧边栏为具备辅导人员或业务管理员角色的用户显示“学生档案”。业务管理员在列表中读取部门分配元数据，负责人从列表进入本人档案详情并维护背景摘要与状态。页面接口封装在 `web/src/domains/counseling/api.js`；权限筛选由 `backend/counseling/src/counseling/students` 中的 service 与 repository 执行。
 
 ## 替代方案
 

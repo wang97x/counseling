@@ -5,6 +5,7 @@ on:
     paths:
       - '.env.template'
       - 'backend/package/yuxi/**'
+      - 'backend/counseling/**'
       - 'backend/pyproject.toml'
       - 'backend/uv.lock'
       - 'backend/server/**'
@@ -22,6 +23,7 @@ on:
     paths:
       - '.env.template'
       - 'backend/package/yuxi/**'
+      - 'backend/counseling/**'
       - 'backend/pyproject.toml'
       - 'backend/uv.lock'
       - 'backend/server/**'

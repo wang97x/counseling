@@ -232,6 +232,18 @@ async def test_create_thread_view_rejects_client_attachment_metadata():
         )
 
 
+async def test_create_thread_view_rejects_client_model_context_metadata():
+    with pytest.raises(svc.HTTPException, match="服务端保留字段"):
+        await svc.create_thread_view(
+            agent_slug="main",
+            request_id=None,
+            title="malicious",
+            metadata={"model_context": {"label": "伪造", "payload": {"secret": True}}},
+            db=None,
+            current_uid="user-1",
+        )
+
+
 async def test_explicit_project_creation_locks_project_until_commit(monkeypatch):
     project = SimpleNamespace(
         id="project-1",

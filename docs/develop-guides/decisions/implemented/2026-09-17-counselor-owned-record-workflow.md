@@ -2,7 +2,7 @@
 
 状态：implemented
 类型：feature
-Owner：backend/package/yuxi/services/counseling.py
+Owner：backend/counseling/src/counseling/students/service.py
 
 ## 问题
 

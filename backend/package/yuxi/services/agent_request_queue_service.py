@@ -221,12 +221,12 @@ async def intake_request(
             "tool_approval_mode": resolved_tool_approval_mode,
         }
 
-    counseling_snapshot = (conversation.extra_metadata or {}).get("counseling")
-    if counseling_snapshot is not None:
-        from yuxi.services.input_message_service import with_counseling_snapshot
+    model_context = (conversation.extra_metadata or {}).get("model_context")
+    if model_context is not None:
+        from yuxi.services.input_message_service import with_model_context
 
-        input_message = with_counseling_snapshot(input_message, counseling_snapshot)
-        input_payload["counseling"] = dict(counseling_snapshot)
+        input_message = with_model_context(input_message, model_context)
+        input_payload["model_context"] = dict(model_context)
 
     run_input_message = input_message.with_metadata(
         _build_message_metadata(request_id=request_id, source=source, input_message=input_message, meta=meta)

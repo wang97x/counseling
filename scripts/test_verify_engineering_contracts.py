@@ -561,6 +561,14 @@ jobs:
             )
         )
 
+    def test_domain_api_owner_may_define_api_paths(self) -> None:
+        self._write(
+            "web/src/domains/counseling/api.js",
+            "export const listStudents = () => fetch('/api/counseling/students')\n",
+        )
+
+        self.assertFalse(any("web/src/apis 外不得拥有 /api 路径" in error for error in self._errors()))
+
     def test_service_workspace_host_path_bypasses_are_rejected(self) -> None:
         cases = (
             (

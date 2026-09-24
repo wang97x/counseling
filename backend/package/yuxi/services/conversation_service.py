@@ -78,34 +78,17 @@ async def create_thread_view(
     title: str | None,
     metadata: dict | None,
     project_id: str | None = None,
-    student_id: int | None = None,
-    background_snapshot: str | None = None,
+    server_metadata: dict | None = None,
     db: AsyncSession,
     current_uid: str,
 ) -> dict:
-    if metadata and ({"attachments", "counseling"} & metadata.keys()):
-        raise HTTPException(status_code=400, detail="attachments 和 counseling 是服务端保留字段")
-    if (student_id is None) != (background_snapshot is None):
-        raise HTTPException(status_code=422, detail="学生关联必须同时确认背景快照")
-
+    reserved_metadata = {"attachments", "model_context"}
+    if metadata and reserved_metadata.intersection(metadata):
+        raise HTTPException(status_code=400, detail="metadata 包含服务端保留字段")
     user_result = await db.execute(select(User).where(User.uid == str(current_uid)))
     current_user = user_result.scalar_one_or_none()
     if not current_user:
         raise HTTPException(status_code=404, detail="用户不存在")
-
-    counseling_snapshot = None
-    if student_id is not None:
-        from yuxi.services.counseling import get_student
-
-        try:
-            student = await get_student(db, current_user, student_id)
-        except (PermissionError, LookupError) as exc:
-            raise HTTPException(status_code=404, detail="学生档案不存在或无权访问") from exc
-        counseling_snapshot = {
-            "student_id": student_id,
-            "student_code": student["student_code"],
-            "background_snapshot": background_snapshot,
-        }
 
     agent_repo = AgentRepository(db)
     agent_item = await agent_repo.get_visible_by_slug(slug=agent_slug, user=current_user)
@@ -124,7 +107,7 @@ async def create_thread_view(
                 existing_project,
                 agent_slug=agent_item.slug,
                 project_id=project_id,
-                counseling_snapshot=counseling_snapshot,
+                server_metadata=server_metadata,
             )
             workdir_binding = workdir_binding_from_project(
                 conversation=existing,
@@ -147,8 +130,7 @@ async def create_thread_view(
     thread_id = str(uuid.uuid4())
     thread_metadata = dict(metadata or {})
     thread_metadata["backend_id"] = agent_item.backend_id
-    if counseling_snapshot is not None:
-        thread_metadata["counseling"] = counseling_snapshot
+    thread_metadata.update(server_metadata or {})
     if project_id:
         project = await project_repo.lock_active_selectable_for_user(
             project_id,
@@ -213,7 +195,7 @@ async def create_thread_view(
             existing_project,
             agent_slug=agent_item.slug,
             project_id=project_id,
-            counseling_snapshot=counseling_snapshot,
+            server_metadata=server_metadata,
         )
         project = existing_project
 
@@ -563,7 +545,7 @@ def _require_matching_thread_creation_intent(
     *,
     agent_slug: str,
     project_id: str | None,
-    counseling_snapshot: dict | None = None,
+    server_metadata: dict | None = None,
 ) -> None:
     """要求已有 Conversation 仍有效且匹配当前幂等创建意图。"""
     if conversation.status == "deleted" or project is None or project.status == "deleted":
@@ -573,8 +555,9 @@ def _require_matching_thread_creation_intent(
         if project_id
         else project is not None and project.selection_status == "implicit"
     )
-    if (conversation.extra_metadata or {}).get("counseling") != counseling_snapshot:
-        raise HTTPException(status_code=409, detail="request_id 已用于其他学生或背景快照")
+    existing_metadata = conversation.extra_metadata or {}
+    if any(existing_metadata.get(key) != value for key, value in (server_metadata or {}).items()):
+        raise HTTPException(status_code=409, detail="request_id 已用于其他服务端创建上下文")
     if conversation.agent_id != agent_slug or not same_project_intent:
         raise HTTPException(status_code=409, detail="request_id 已用于其他 Conversation 创建意图")
 

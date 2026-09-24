@@ -926,7 +926,13 @@ def _validate_web_api_boundary(root: Path, errors: list[str]) -> int:
     for path in sorted(source_root.rglob("*")):
         if not path.is_file() or path.suffix not in {".js", ".ts", ".vue"}:
             continue
-        if (source_root / "apis") in path.parents:
+        relative = path.relative_to(source_root)
+        is_domain_api_owner = (
+            len(relative.parts) == 3
+            and relative.parts[0] == "domains"
+            and relative.name in {"api.js", "api.ts"}
+        )
+        if (source_root / "apis") in path.parents or is_domain_api_owner:
             continue
         checked += 1
         for line_number, line in enumerate(
@@ -946,6 +952,8 @@ def _validate_workspace_host_path_boundary(root: Path, errors: list[str]) -> int
     for source_root in (
         root / "backend/package/yuxi/services",
         root / "backend/package/yuxi/repositories",
+        root / "backend/counseling/src/counseling/students",
+        root / "backend/counseling/src/counseling/documents",
     ):
         for path in sorted(source_root.rglob("*.py")):
             checked += 1
