@@ -1,8 +1,8 @@
 # CLI 查看可用 Agent
 
-状态：implemented
+状态：archived
 类型：feature
-Owner：packages/yuxi-cli/src/yuxi_cli/agent.py
+Owner：docs/develop-guides/changelog.md
 
 ## 问题
 

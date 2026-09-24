@@ -10,7 +10,6 @@
 | Integration | `backend/test/integration` | 真实 HTTP、认证、事务、锁、Schema、lease 和服务副作用 | 依赖 Docker Compose |
 | E2E | `backend/test/e2e` | Run、SSE、worker、文件落盘和完整用户链路 | 依赖完整 Compose，数量少、速度慢 |
 | Web unit | `web/test/unit` | 前端状态、组件和交互逻辑 | 通过 `pnpm test:unit` |
-| CLI | `packages/yuxi-cli/tests` | CLI 配置、命令和客户端行为 | 独立 Python 包 |
 
 同一个子项目只保留一个测试根目录，不要同时创建 `test` 和 `tests`。
 
@@ -39,7 +38,7 @@ PRD 的性能、质量和使用指标按[指标与待决事项](./counseling-pro
 - 只调用纯 Python 逻辑、fake repository 或临时目录：放 `unit`。
 - 要验证真实接口、认证、事务或 Redis/PostgreSQL 边界：放 `integration`；API 测试放 `integration/api`。
 - 要从入口一路验证到最终 Run、文件或对象：放 `e2e`。
-- 前端和 CLI 测试留在各自项目的测试根，不放到 backend。
+- 前端测试留在项目测试根，不放到 backend。
 
 不要因为测试文件少或执行快就把 integration 降成 unit；测试层级反映它依赖的真实边界。
 
@@ -125,13 +124,6 @@ backend/test/run_tests.sh all
 docker compose exec web pnpm run lint:check
 docker compose exec web pnpm run test:unit
 docker compose exec web pnpm run build
-```
-
-CLI：
-
-```bash
-cd packages/yuxi-cli
-uv run pytest
 ```
 
 工程契约、文档构建和补丁检查：

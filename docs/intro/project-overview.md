@@ -44,7 +44,7 @@ Yuxi 提供用户、部门、共享范围、模型供应商和 API Key 管理。
 一次普通的智能体请求大致经过这条链路：
 
 ```text
-Web / CLI / 外部 API
+Web / 外部 API
         ↓
 FastAPI 接收请求并保存 Message、Request
         ↓  PostgreSQL 提交后

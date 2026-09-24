@@ -21,7 +21,6 @@ def verify_policy(root: Path) -> list[str]:
 
     update_entries = (
         ("uv", "/backend", "/backend"),
-        ("uv", "/packages/yuxi-cli", "/packages/yuxi-cli"),
         ("npm", "/web", "/web"),
         ("npm", "/docs", "/docs"),
         ("docker", None, "docker"),
@@ -47,8 +46,6 @@ def verify_policy(root: Path) -> list[str]:
         '"backend/pyproject.toml"',
         '"backend/package/pyproject.toml"',
         '"backend/uv.lock"',
-        '"packages/yuxi-cli/pyproject.toml"',
-        '"packages/yuxi-cli/uv.lock"',
         '"web/package.json"',
         '"web/pnpm-lock.yaml"',
         '"web/pnpm-workspace.yaml"',

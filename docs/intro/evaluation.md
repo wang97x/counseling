@@ -2,7 +2,7 @@
 
 知识库评估用一组固定问题和参考答案检查 RAG 链路。它适合比较嵌入模型、分块策略和检索参数的变化，不能代替真实用户场景的人工验收。
 
-本页只介绍知识库评估。要评估智能体是否能完成编程、研究或工具调用任务，请看[智能体评估](../agents/agent-evaluation.md)。
+本页介绍知识库评估。
 
 ## 评估会测什么
 
@@ -79,5 +79,4 @@
 
 - [创建并使用知识库](./knowledge-base.md)：先把文档处理到 `indexed`。
 - [文档处理与 OCR](../advanced/document-processing.md)：调整解析和分块参数。
-- [智能体评估](../agents/agent-evaluation.md)：评估完整智能体任务。
 - [知识库机制详解](../mechanisms/knowledge-base.md)：了解评估与文档状态、存储和权限的关系。

@@ -175,8 +175,6 @@ PR 正文按创建方式选择模板：
 3. 修复产生新提交时创建下一个候选 tag；已推送的候选 tag 保留原指向。
 4. 最终候选通过后，在同一提交新增正式 tag，并发布正式 Release。Release 正文保留相对上一正式版本的完整功能更新及升级注意事项。应用 tag 触发检查，文档站只在 main 分支推送时部署。
 
-CLI 使用 `packages/yuxi-cli/pyproject.toml` 中的独立版本。需要发布 CLI 时先提交包版本和锁文件更新，再对明确的提交或 tag 手动运行 [Publish yuxi-cli](https://github.com/wang97x/counseling/actions/workflows/publish-yuxi-cli.yml)；应用 Release 不触发 PyPI 上传。CLI 版本未变时无需重复发布，上传失败须检查版本与 PyPI 状态。
-
 ## 7. 文档维护
 
 代码、配置、API、状态、权限或命令变化时，同一 PR 更新对应的 owning page：

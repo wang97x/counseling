@@ -1,6 +1,6 @@
 # 文档导入与查询 API
 
-本页说明如何通过 HTTP 或 CLI 把文档加入知识库，以及如何查询已经处理的内容。它面向管理员和集成开发者；知识库运行机制见[知识库机制](../mechanisms/knowledge-base.md)，导图和图谱见[知识导图与知识图谱](./knowledge-base-graph.md)。
+本页说明如何通过 HTTP 把文档加入知识库，以及如何查询已经处理的内容。它面向管理员和集成开发者；知识库运行机制见[知识库机制](../mechanisms/knowledge-base.md)，导图和图谱见[知识导图与知识图谱](./knowledge-base-graph.md)。
 
 ## 权限
 
@@ -69,21 +69,6 @@ Durable Task 的 `success` 只代表 worker 已完成编排。最终结论要检
 `files` 的查询参数只匹配文件名，不搜索正文。`open` 默认从第 0 行开始读取，单次最多 1800 行；`find` 返回匹配窗口。
 
 Dify 和 Notion 只提供外部检索能力。它们不支持 Yuxi 的文档上传、解析、索引和全文打开；调用不支持的接口时，服务会明确返回错误。
-
-## CLI
-
-先按[命令行工具](../intro/cli.md)完成登录：
-
-```bash
-yuxi kb list
-yuxi kb upload ./docs --kb-id <kb-id>
-yuxi kb files --kb-id <kb-id> --query handbook
-yuxi kb query --kb-id <kb-id> "如何申请年假？"
-yuxi kb open --kb-id <kb-id> --file-id <file-id>
-yuxi kb find --kb-id <kb-id> --file-id <file-id> --pattern "年假"
-```
-
-`kb upload` 只上传原文件并添加文件记录，不自动完成 OCR、解析或向量入库。完成后回到知识库页面继续处理并确认 `indexed`。
 
 ## 验证入口
 

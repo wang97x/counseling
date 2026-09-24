@@ -51,7 +51,6 @@ export default defineConfig({
         items: [
           { text: '认识 Yuxi', link: '/intro/project-overview' },
           { text: '快速开始', link: '/intro/quick-start' },
-          { text: '命令行工具', link: '/intro/cli' },
           { text: '模型配置', link: '/intro/model-config' },
           { text: '知识库与知识图谱', link: '/intro/knowledge-base' },
           { text: '知识库评估', link: '/intro/evaluation' }
@@ -65,7 +64,6 @@ export default defineConfig({
           { text: 'Agent 请求队列', link: '/agents/agent-request-queue' },
           { text: '工具系统', link: '/agents/tools-system' },
           { text: '中间件', link: '/agents/middleware' },
-          { text: '智能体评估', link: '/agents/agent-evaluation' },
           { text: '沙盒配置与运维', link: '/agents/sandbox-architecture' },
           { text: 'MCP 集成', link: '/agents/mcp-integration' },
           { text: 'Skills 管理', link: '/agents/skills-management' },

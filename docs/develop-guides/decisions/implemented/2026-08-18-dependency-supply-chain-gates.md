@@ -10,7 +10,7 @@ Python 与 Node.js 的锁定依赖没有漏洞和许可证审计 gate。新增�
 
 ## 决策
 
-依赖审计 workflow 以 shipping 锁文件为事实来源，并只在 manifest、锁文件、审计 workflow、Makefile 或固定脆弱 fixture 变化时自动运行；同一分支的新运行取消已经过期的审计。Python 漏洞直接运行 `uv audit`，Node.js 漏洞直接运行 `pnpm audit`；backend 受 PyTorch 版本约束的 advisory 使用工具原生 `--ignore` 明确列出。固定脆弱 fixture 由同一 workflow 执行，证明 Python 与 Node.js 审计会因已知漏洞返回失败。Python 许可证通过隔离生产环境运行 `pip-licenses`，输出 backend 与 yuxi-cli 的传递依赖报告供 Review 使用，不自动判断法律兼容性。
+依赖审计 workflow 以 shipping 锁文件为事实来源，并只在 manifest、锁文件、审计 workflow、Makefile 或固定脆弱 fixture 变化时自动运行；同一分支的新运行取消已经过期的审计。Python 漏洞直接运行 `uv audit`，Node.js 漏洞直接运行 `pnpm audit`；backend 受 PyTorch 版本约束的 advisory 使用工具原生 `--ignore` 明确列出。固定脆弱 fixture 由同一 workflow 执行，证明 Python 与 Node.js 审计会因已知漏洞返回失败。Python 许可证通过隔离生产环境运行 `pip-licenses`，输出 backend 的传递依赖报告供 Review 使用，不自动判断法律兼容性。
 
 Dependabot 的常规版本策略由[依赖更新降噪策略](2026-08-19-dependency-update-policy.md)拥有；本记录只拥有漏洞与许可证审计 gate。
 

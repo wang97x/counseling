@@ -2,7 +2,7 @@
 
 本组页面面向管理员和集成开发者，把知识库管理拆成三个任务：
 
-- [文档导入与查询 API](./knowledge-base-api.md)：权限、上传、解析、索引、外部查询和 CLI。
+- [文档导入与查询 API](./knowledge-base-api.md)：权限、上传、解析、索引和外部查询。
 - [知识导图与知识图谱](./knowledge-base-graph.md)：导图、示例问题、图谱构建和修复。
 - [知识库机制](../mechanisms/knowledge-base.md)：文件状态、存储 Owner、Durable Task、权限和 Agent 工具链路。
 
