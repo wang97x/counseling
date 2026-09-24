@@ -134,12 +134,12 @@ PRD 第 8、10 章的数字是目标值，验收前需固定测试数据、环�
 
 ## 当前实现定位
 
-此处仅为 2026-09-19 的源码核对入口，状态为 `Inspected`，不替代业务验收：
+此处仅为 2026-09-24 的源码核对入口，状态为 `Inspected`，不替代业务验收：
 
 - [学生档案模型](https://github.com/wang97x/counseling/blob/main/backend/counseling/src/counseling/storage/models.py)及业务包中的 service/repository 提供最小档案、负责人和部门边界。现有 `StudentRecord`、`/students` 命名继续使用，不能因 PRD 使用“来访者”而直接重命名持久化结构。
-- [工作台服务](https://github.com/wang97x/counseling/blob/main/web/src/domains/counseling/workspaceService.js)只装配真实 API 适配器。[真实 API 适配器](https://github.com/wang97x/counseling/blob/main/web/src/domains/counseling/services/apiAdapter.js)已接入文件记录草稿、摘要、预览和确认归档接口；这属于 P1 文件增强，不能证明 P0 手工业务页面已经交付。
-- 当前 `StudentWorkspaceView` 仍采用概览、时间线、目标、量表、危机五标签，并通过关联 Conversation 跳转通用 Agent 页面；这与目标单页档案及业务生成任务存在差距。
+- [工作台服务](https://github.com/wang97x/counseling/blob/main/web/src/domains/counseling/workspaceService.js)只装配真实 API 适配器。[真实 API 适配器](https://github.com/wang97x/counseling/blob/main/web/src/domains/counseling/services/apiAdapter.js)已接入手工咨询草稿、确认归档、追加更正、人工风险、阶段结束和业务管理员聚合统计。文件记录与 AI 摘要接口继续保留，但不在当前 P0 工作台主路径展示。
+- 当前 `StudentWorkspaceView` 使用学生信息、待确认草稿和统一时间线组成单页档案；主操作为手工咨询记录、人工风险和阶段结束，不再从业务工作台发起关联 Agent 会话。
 - 当前前端通过统一能力映射隔离业务入口和 Yuxi 技术入口，但仍保留迁移前平台角色与 `technical_admin` 兼容路径；目标三角色数据迁移及后端逐项授权尚未完成。
-- 五标签页面及演示交互不能证明文件生成、正式归档、历史不可变、量表计分或危机识别已接入后端。演示仅用虚构数据，真实接口失败不得回退演示数据。
+- P0 手工链路已经通过真实 HTTP 与 PostgreSQL integration；真实浏览器验收仍须完成。保留的文件生成代码和演示交互不能证明 P1 文件/模型联调、量表计分或自动危机识别已经交付，真实接口失败不得回退演示数据。
 
 具体功能实现时，更新其源码、测试和机制说明；产品约束保持目标边界，验证方法见[心理辅导业务验证](./testing-guidelines.md#心理辅导业务验证)。

@@ -2,54 +2,67 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
-  ArrowLeft, Bot, CalendarClock, CheckCircle2, ClipboardList, FileUp,
-  HeartPulse, History, ListChecks, PencilLine, RotateCcw, ShieldAlert, Target,
+  ArrowLeft, CheckCircle2, ClipboardPenLine, FileClock,
+  History, PencilLine, ShieldAlert, UserRoundCheck,
 } from '@lucide/vue'
+import { message } from 'ant-design-vue'
 import PageHeader from '@/components/shared/PageHeader.vue'
-import AssessmentTrend from '../components/AssessmentTrend.vue'
-import RecordUploadFlow from '../components/RecordUploadFlow.vue'
 import RiskTag from '../components/RiskTag.vue'
 import { counselingWorkspaceService } from '../workspaceService.js'
-import { COUNSELING_TABS } from '../types.js'
 import { createLatestOperation, isCurrentStudentRequest } from '../requestGuard.js'
-import { useAgentStore } from '@/stores/agent'
-import { message } from 'ant-design-vue'
 
 const route = useRoute()
 const router = useRouter()
 const service = counselingWorkspaceService
-const agentStore = useAgentStore()
 const workspace = ref(null)
 const loading = ref(false)
 const error = ref('')
-const uploadOpen = ref(false)
 const editOpen = ref(false)
-const editBusy = ref(false)
-const conversationOpen = ref(false)
-const conversationBusy = ref(false)
-const conversationError = ref('')
-const editForm = reactive({ chiefConcern: '', status: 'active' })
-const conversationForm = reactive({ agent_id: undefined })
-const availableAgents = computed(() => agentStore.agents.filter((item) => !item.is_subagent))
-let requestVersion = 0
-const editOperations = createLatestOperation()
-const conversationOperations = createLatestOperation()
-
-const tabItems = [
-  { key: 'overview', label: '概览', icon: ClipboardList },
-  { key: 'timeline', label: '时间轴', icon: History },
-  { key: 'goals', label: '目标与作业', icon: Target },
-  { key: 'assessments', label: '量表', icon: HeartPulse },
-  { key: 'crisis', label: '危机', icon: ShieldAlert },
-]
-const activeTab = computed(() => COUNSELING_TABS.includes(String(route.query.tab)) ? String(route.query.tab) : 'overview')
+const recordOpen = ref(false)
+const riskOpen = ref(false)
+const correctionOpen = ref(false)
+const closeOpen = ref(false)
+const busy = ref(false)
+const editForm = reactive({ displayName: '', className: '', chiefConcern: '' })
+const recordForm = reactive(emptyRecordForm())
+const riskForm = reactive({ level: 'watch', basis: '', actionTaken: '', status: 'monitoring' })
+const correctionForm = reactive({ recordId: '', reason: '', ...emptyContent() })
+const closeForm = reactive({ closureNote: '' })
 const studentId = computed(() => String(route.params.studentId || ''))
+const activeDrafts = computed(() => workspace.value?.drafts || [])
+const operations = createLatestOperation()
+let requestVersion = 0
+
+function emptyContent() {
+  return { overview: '', observation: '', actionTaken: '', nextPlan: '', riskNotes: '' }
+}
+
+function localDateTimeValue(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value)
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+  return local.toISOString().slice(0, 16)
+}
+
+function emptyRecordForm() {
+  return {
+    id: '', version: 0, consultedAt: localDateTimeValue(), consultationType: '面谈', ...emptyContent(),
+  }
+}
+
+function contentPayload(form) {
+  return {
+    overview: form.overview.trim(),
+    observation: form.observation.trim(),
+    action_taken: form.actionTaken.trim(),
+    next_plan: form.nextPlan.trim(),
+    risk_notes: form.riskNotes.trim(),
+  }
+}
 
 async function loadWorkspace(id = studentId.value) {
   const version = ++requestVersion
   loading.value = true
   error.value = ''
-  workspace.value = null
   try {
     const result = await service.getWorkspace(id)
     if (version !== requestVersion || id !== studentId.value) return
@@ -62,109 +75,179 @@ async function loadWorkspace(id = studentId.value) {
   }
 }
 
-function setTab(tab) {
-  if (!COUNSELING_TABS.includes(tab)) return
-  void router.replace({ query: { ...route.query, tab } })
-}
-
 function openEdit() {
-  editForm.chiefConcern = workspace.value.background || ''
-  editForm.status = workspace.value.student.status
+  Object.assign(editForm, {
+    displayName: workspace.value.student.name.startsWith('学生 ') ? '' : workspace.value.student.name,
+    className: workspace.value.student.className,
+    chiefConcern: workspace.value.background === '尚未录入背景信息' ? '' : workspace.value.background,
+  })
   editOpen.value = true
 }
 
 async function saveEdit() {
-  const id = studentId.value
-  const version = requestVersion
-  const operation = editOperations.begin()
-  editBusy.value = true
-  try {
-    const result = await service.updateStudent(id, { ...editForm })
-    if (!isCurrentStudentRequest(id, version, studentId.value, requestVersion) || !editOperations.isCurrent(operation)) return
-    if (result.status !== 'ok') throw new Error(result.message || '保存档案失败')
-    workspace.value = result.data
+  await runAction(async () => {
+    await service.updateStudent(studentId.value, { ...editForm })
     editOpen.value = false
-    message.success('档案已保存')
-  } catch (cause) {
-    if (isCurrentStudentRequest(id, version, studentId.value, requestVersion) && editOperations.isCurrent(operation)) {
-      message.error(cause.message || '保存档案失败')
-    }
-  } finally {
-    if (editOperations.isCurrent(operation)) editBusy.value = false
-  }
+    await loadWorkspace()
+    message.success('档案信息已保存')
+  }, '保存档案失败')
 }
 
-async function openConversationCreator() {
-  const id = studentId.value
-  const version = requestVersion
-  const operation = conversationOperations.begin()
-  conversationError.value = ''
-  conversationForm.agent_id = undefined
-  conversationOpen.value = true
-  try {
-    await agentStore.fetchAgents()
-    if (!isCurrentStudentRequest(id, version, studentId.value, requestVersion) || !conversationOperations.isCurrent(operation)) return
-    conversationForm.agent_id = availableAgents.value[0]?.id
-  } catch (cause) {
-    if (isCurrentStudentRequest(id, version, studentId.value, requestVersion) && conversationOperations.isCurrent(operation)) {
-      conversationError.value = cause.message || '加载智能体失败'
-    }
-  }
+function openNewRecord() {
+  Object.assign(recordForm, emptyRecordForm())
+  recordOpen.value = true
 }
 
-async function createConversation() {
-  const id = studentId.value
-  const version = requestVersion
-  const operation = conversationOperations.begin()
-  if (!conversationForm.agent_id) {
-    conversationError.value = '请选择可用的智能体'
-    return
+function openDraft(draft) {
+  const content = draft.content || {}
+  Object.assign(recordForm, {
+    id: draft.id,
+    version: draft.version,
+    consultedAt: localDateTimeValue(draft.consultedAt),
+    consultationType: draft.consultationType || '面谈',
+    overview: content.overview || '',
+    observation: content.observation || '',
+    actionTaken: content.action_taken || '',
+    nextPlan: content.next_plan || '',
+    riskNotes: content.risk_notes || '',
+  })
+  recordOpen.value = true
+}
+
+async function persistRecordDraft() {
+  if (!recordForm.overview.trim()) throw new Error('请填写本次咨询概述')
+  if (!recordForm.consultedAt) throw new Error('请选择咨询时间')
+  const payload = {
+    consulted_at: new Date(recordForm.consultedAt).toISOString(),
+    consultation_type: recordForm.consultationType,
+    content: contentPayload(recordForm),
   }
-  conversationBusy.value = true
-  conversationError.value = ''
-  try {
-    const result = await service.createConversation({
+  const result = recordForm.id
+    ? await service.updateManualRecordDraft(studentId.value, recordForm.id, {
+      ...payload, expected_version: recordForm.version,
+    })
+    : await service.createManualRecordDraft(studentId.value, {
+      ...payload, request_id: crypto.randomUUID(),
+    })
+  Object.assign(recordForm, { id: result.data.id, version: result.data.version })
+  return result.data
+}
+
+async function saveRecordDraft() {
+  await runAction(async () => {
+    await persistRecordDraft()
+    recordOpen.value = false
+    await loadWorkspace()
+    message.success('咨询记录草稿已保存')
+  }, '保存咨询记录失败')
+}
+
+async function confirmRecord() {
+  await runAction(async () => {
+    const draft = await persistRecordDraft()
+    await service.confirmManualRecord(studentId.value, draft.id, draft.version, crypto.randomUUID())
+    recordOpen.value = false
+    await loadWorkspace()
+    message.success('咨询记录已由你确认并归档')
+  }, '确认归档失败')
+}
+
+function openCorrection(item) {
+  const content = item.content || {}
+  Object.assign(correctionForm, {
+    recordId: item.id,
+    reason: '',
+    overview: content.overview || '',
+    observation: content.observation || '',
+    actionTaken: content.action_taken || '',
+    nextPlan: content.next_plan || '',
+    riskNotes: content.risk_notes || '',
+  })
+  correctionOpen.value = true
+}
+
+async function saveCorrection() {
+  if (!correctionForm.reason.trim()) return message.error('请填写更正原因')
+  await runAction(async () => {
+    await service.addRecordCorrection(studentId.value, correctionForm.recordId, {
       request_id: crypto.randomUUID(),
-      student_id: Number(id),
-      background_snapshot: workspace.value.background,
-      title: workspace.value.student.code + ' · 辅导会话',
-      agent_id: conversationForm.agent_id,
+      reason: correctionForm.reason.trim(),
+      corrected_content: contentPayload(correctionForm),
     })
-    if (!isCurrentStudentRequest(id, version, studentId.value, requestVersion) || !conversationOperations.isCurrent(operation)) return
-    if (result.status !== 'ok') throw new Error(result.message || '创建辅导会话失败')
-    conversationOpen.value = false
-    await router.push({
-      name: 'AgentCompWithThreadId',
-      params: { thread_id: result.data.id },
-      query: { student_id: id },
+    correctionOpen.value = false
+    await loadWorkspace()
+    message.success('更正已追加，原记录保持不变')
+  }, '追加更正失败')
+}
+
+function openRisk() {
+  Object.assign(riskForm, { level: 'watch', basis: '', actionTaken: '', status: 'monitoring' })
+  riskOpen.value = true
+}
+
+async function saveRisk() {
+  if (!riskForm.basis.trim()) return message.error('请填写人工判断依据')
+  await runAction(async () => {
+    await service.createRiskEvent(studentId.value, {
+      request_id: crypto.randomUUID(),
+      level: riskForm.level,
+      basis: riskForm.basis.trim(),
+      action_taken: riskForm.actionTaken.trim(),
+      status: riskForm.status,
+      source_record_id: null,
     })
+    riskOpen.value = false
+    await loadWorkspace()
+    message.success('人工风险记录已保存')
+  }, '保存风险记录失败')
+}
+
+function openClose() {
+  closeForm.closureNote = ''
+  closeOpen.value = true
+}
+
+async function closeStudent() {
+  if (!closeForm.closureNote.trim()) return message.error('请填写阶段结束说明')
+  await runAction(async () => {
+    await service.closeStudent(studentId.value, workspace.value.student.version, closeForm.closureNote.trim())
+    closeOpen.value = false
+    await loadWorkspace()
+    message.success('当前辅导阶段已结束')
+  }, '结束阶段失败')
+}
+
+async function runAction(action, fallback) {
+  const id = studentId.value
+  const version = requestVersion
+  const operation = operations.begin()
+  busy.value = true
+  try {
+    await action()
   } catch (cause) {
-    if (isCurrentStudentRequest(id, version, studentId.value, requestVersion) && conversationOperations.isCurrent(operation)) {
-      conversationError.value = cause.message || '创建辅导会话失败'
+    if (isCurrentStudentRequest(id, version, studentId.value, requestVersion) && operations.isCurrent(operation)) {
+      message.error(cause.message || fallback)
     }
   } finally {
-    if (conversationOperations.isCurrent(operation)) conversationBusy.value = false
+    if (operations.isCurrent(operation)) busy.value = false
   }
 }
 
-async function resetDemo() {
-  await service.resetDemo()
-  await loadWorkspace()
-}
-
-async function handleArchived() {
-  uploadOpen.value = false
-  await loadWorkspace()
+function timelineLabel(item) {
+  return {
+    consultation_record: '正式咨询记录',
+    record_correction: '追加更正',
+    risk_event: '人工风险记录',
+    record: '文件记录',
+    conversation: '历史会话',
+  }[item.type] || '档案记录'
 }
 
 watch(studentId, (id) => {
-  uploadOpen.value = false
-  editOpen.value = false
-  conversationOpen.value = false
-  editOperations.invalidate()
-  conversationOperations.invalidate()
-  editBusy.value = false
-  conversationBusy.value = false
+  operations.invalidate()
+  for (const modal of [editOpen, recordOpen, riskOpen, correctionOpen, closeOpen]) modal.value = false
+  busy.value = false
+  workspace.value = null
   if (id) void loadWorkspace(id)
 }, { immediate: true })
 </script>
@@ -172,318 +255,206 @@ watch(studentId, (id) => {
 <template>
   <div class="workspace-page">
     <PageHeader :title="workspace?.student?.name ? workspace.student.name + '的档案' : '档案工作台'" :loading="loading" :show-border="true">
-      <template #info><a-tag v-if="service.mode === 'demo'" color="gold">演示数据</a-tag></template>
       <template #actions>
-        <a-button class="header-secondary" aria-label="返回档案列表" title="返回档案列表" @click="router.push('/students')">
-          <template #icon><ArrowLeft :size="15" /></template><span>返回列表</span>
-        </a-button>
-        <a-button v-if="service.mode === 'demo'" class="header-secondary" aria-label="重置演示数据" title="重置演示数据" @click="resetDemo">
-          <template #icon><RotateCcw :size="15" /></template><span>重置</span>
-        </a-button>
-        <a-button v-if="service.mode === 'api'" class="header-secondary" aria-label="编辑档案" title="编辑档案" :disabled="!workspace" @click="openEdit">
-          <template #icon><PencilLine :size="15" /></template><span>编辑档案</span>
-        </a-button>
-        <a-button type="primary" aria-label="上传谈话记录" title="上传谈话记录" :disabled="!workspace" @click="uploadOpen = true">
-          <template #icon><FileUp :size="15" /></template><span>上传谈话记录</span>
-        </a-button>
-        <a-button v-if="service.mode === 'api'" aria-label="打开下一步助手" title="打开下一步助手" :disabled="!workspace" @click="openConversationCreator">
-          <template #icon><Bot :size="15" /></template><span>助手</span>
+        <a-button aria-label="返回档案列表" @click="router.push('/students')"><ArrowLeft :size="15" />返回列表</a-button>
+        <a-button :disabled="!workspace" @click="openEdit"><PencilLine :size="15" />编辑信息</a-button>
+        <a-button v-if="workspace?.student?.status !== 'closed'" type="primary" :disabled="!workspace" @click="openNewRecord">
+          <ClipboardPenLine :size="15" />新增咨询记录
         </a-button>
       </template>
     </PageHeader>
 
     <main class="workspace-content">
-      <a-alert
-        v-if="service.mode === 'demo'"
-        type="warning"
-        show-icon
-        message="演示数据 · 不是生产档案"
-        description="本工作台用于设计评审与交互验收；AI 摘要、风险识别和归档结果均为模拟状态。"
-      />
       <a-alert v-if="error" type="error" show-icon :message="error">
         <template #action><a-button size="small" @click="loadWorkspace()">重试</a-button></template>
       </a-alert>
       <a-skeleton v-if="loading" active :paragraph="{ rows: 8 }" />
 
       <template v-else-if="workspace">
-        <section class="student-hero">
-          <div class="student-primary">
-            <div class="student-name-row">
-              <span class="student-avatar">{{ workspace.student.name.slice(0, 1) }}</span>
-              <div>
-                <div class="name-line">
-                  <h2>{{ workspace.student.name }}</h2>
-                  <span>{{ workspace.student.code }}</span>
-                  <RiskTag :level="workspace.student.riskLevel" />
-                </div>
-                <p>{{ workspace.student.chiefConcern }}</p>
+        <section class="student-card">
+          <div class="student-heading">
+            <span class="student-avatar"><UserRoundCheck :size="24" /></span>
+            <div>
+              <div class="name-line">
+                <h2>{{ workspace.student.name }}</h2>
+                <span>{{ workspace.student.code }}</span>
+                <a-tag :color="workspace.student.status === 'closed' ? 'default' : 'blue'">
+                  {{ workspace.student.status === 'closed' ? '阶段结束' : '辅导中' }}
+                </a-tag>
+                <RiskTag :level="workspace.student.riskLevel" />
               </div>
-            </div>
-            <div class="hero-meta">
-              <div><span>辅导进度</span><strong>第 {{ workspace.student.sessionCount }} 次</strong></div>
-              <div><span>负责人</span><strong>{{ workspace.student.counselor }}</strong></div>
-              <div><span>下次预约</span><strong>{{ service.mode === 'api' ? '后端能力尚未接入' : workspace.student.nextAppointment || '暂无安排' }}</strong></div>
-              <div><span>最近动态</span><strong>{{ workspace.student.recentActivity }}</strong></div>
+              <p>{{ workspace.student.className || '未填写班级' }} · 负责人 {{ workspace.student.counselor }}</p>
             </div>
           </div>
-          <button v-if="service.mode === 'api'" type="button" class="next-session" aria-label="打开下一步助手" @click="openConversationCreator">
-            <CalendarClock :size="20" />
-            <div><span>下一步助手</span><strong>{{ workspace.todos.find((item) => item.status === 'todo')?.title || '回顾当前阶段' }}</strong><small>基于当前档案开始新一步</small></div>
-          </button>
-        </section>
-
-        <nav class="workspace-tabs" aria-label="档案工作台标签">
-          <button
-            v-for="item in tabItems"
-            :key="item.key"
-            type="button"
-            :class="{ active: activeTab === item.key }"
-            @click="setTab(item.key)"
-          >
-            <component :is="item.icon" :size="17" />{{ item.label }}
-            <span v-if="item.key === 'crisis' && workspace.crises.length">{{ workspace.crises.length }}</span>
-          </button>
-        </nav>
-
-        <section v-if="activeTab === 'overview'" class="workspace-grid overview-grid">
-          <article class="panel background-panel">
-            <div class="panel-heading"><div><span>学生背景</span><h3>当前理解</h3></div></div>
-            <p class="large-copy">{{ workspace.background }}</p>
-            <div class="quick-actions">
-              <button type="button" @click="uploadOpen = true"><FileUp :size="18" /><span><strong>上传记录</strong><small>生成可审阅摘要</small></span></button>
-              <button v-if="service.mode === 'api'" type="button" @click="openConversationCreator"><Bot :size="18" /><span><strong>下一步助手</strong><small>进入档案关联对话</small></span></button>
-              <button type="button" @click="setTab('timeline')"><History :size="18" /><span><strong>查看变化</strong><small>回顾历次辅导</small></span></button>
-            </div>
-          </article>
-          <article class="panel">
-            <div class="panel-heading"><div><span>本次待办</span><h3>需要继续跟进</h3></div><ListChecks :size="20" /></div>
-            <a-alert v-if="service.mode === 'api'" type="info" show-icon message="待办能力尚未接入后端" />
-            <a-empty v-else-if="!workspace.todos.length" description="当前没有待办" :image="null" />
-            <ul v-else class="todo-list">
-              <li v-for="item in workspace.todos" :key="item.id">
-                <CheckCircle2 :size="18" :class="{ done: item.status === 'done' }" />
-                <div><strong>{{ item.title }}</strong><span>{{ item.dueAt || '下次谈话前' }}</span></div>
-              </li>
-            </ul>
-          </article>
-          <article class="panel recent-panel">
-            <div class="panel-heading"><div><span>最近动态</span><h3>档案发生了什么</h3></div></div>
-            <div v-if="workspace.timeline[0]" class="recent-event">
-              <span>{{ workspace.timeline[0].occurredAt }}</span>
-              <strong>{{ workspace.timeline[0].title }}</strong>
-              <p>{{ workspace.timeline[0].summary }}</p>
-            </div>
-            <a-empty v-else description="暂无动态" :image="null" />
-          </article>
-        </section>
-
-        <section v-else-if="activeTab === 'timeline'" class="panel section-panel">
-          <div class="panel-heading"><div><span>COUNSELING HISTORY</span><h3>辅导时间轴与前后变化</h3></div><a-button @click="uploadOpen = true">上传新记录</a-button></div>
-          <a-empty v-if="!workspace.timeline.length" description="暂无辅导记录" />
-          <div v-else class="timeline-list">
-            <article v-for="record in workspace.timeline" :key="record.id">
-              <div class="timeline-mark"></div>
-              <div class="timeline-card">
-                <header><div><span>{{ record.occurredAt }}</span><h4>{{ record.title }}</h4></div><a-tag>{{ record.source === 'upload' ? '文件归档' : record.source === 'assistant' ? '助手对话' : '手动记录' }}</a-tag></header>
-                <p>{{ record.summary }}</p>
-                <a-button v-if="record.conversationId" size="small" @click="router.push({ name: 'AgentCompWithThreadId', params: { thread_id: record.conversationId }, query: { student_id: studentId } })">继续对话</a-button>
-                <div v-if="record.moodBefore != null" class="mood-change">
-                  <span>谈话前 {{ record.moodBefore }}</span><i>→</i><span>谈话后 {{ record.moodAfter }}</span>
-                </div>
-              </div>
-            </article>
+          <div class="background-copy">
+            <span>背景与主诉</span>
+            <p>{{ workspace.background }}</p>
           </div>
-        </section>
-
-        <section v-else-if="activeTab === 'goals'" class="panel section-panel">
-          <div class="panel-heading"><div><span>ACTION & PRACTICE</span><h3>目标与家庭作业</h3></div></div>
-          <a-alert v-if="service.mode === 'api'" type="info" show-icon message="目标与作业能力尚未接入后端" />
-          <a-empty v-else-if="!workspace.goals.length" description="暂无目标" />
-          <div v-else class="goal-grid">
-            <article v-for="goal in workspace.goals" :key="goal.id">
-              <header><Target :size="18" /><strong>{{ goal.title }}</strong><a-tag :color="goal.status === 'done' ? 'green' : 'blue'">{{ goal.status === 'done' ? '已完成' : '进行中' }}</a-tag></header>
-              <a-progress :percent="goal.progress" :stroke-color="'var(--main-600)'" />
-              <div><span>本次作业</span><p>{{ goal.homework || '暂未安排' }}</p></div>
-            </article>
+          <div class="business-actions">
+            <a-button @click="openRisk"><ShieldAlert :size="15" />记录人工风险</a-button>
+            <a-button v-if="workspace.student.status !== 'closed'" danger @click="openClose"><CheckCircle2 :size="15" />结束当前阶段</a-button>
           </div>
-        </section>
-
-        <section v-else-if="activeTab === 'assessments'" class="workspace-grid assessment-grid">
-          <article class="panel">
-            <div class="panel-heading"><div><span>ASSESSMENT TREND</span><h3>量表与主观观察趋势</h3></div></div>
-            <a-alert v-if="service.mode === 'api'" type="info" show-icon message="量表能力尚未接入后端" />
-            <AssessmentTrend v-else :series="workspace.assessments" />
-          </article>
-          <article class="panel interpretation-panel">
-            <div class="panel-heading"><div><span>解释</span><h3>人工阅读提示</h3></div></div>
-            <a-alert v-if="service.mode === 'api'" type="info" show-icon message="暂无可读取的量表解释接口" />
-            <a-empty v-else-if="!workspace.assessments.length" description="暂无解释" :image="null" />
-            <div v-for="series in workspace.assessments" v-else :key="series.name" class="interpretation">
-              <strong>{{ series.name }}</strong><p>{{ series.interpretation }}</p>
-            </div>
-          </article>
-        </section>
-
-        <section v-else class="panel section-panel crisis-panel">
-          <div class="panel-heading"><div><span>RISK REVIEW</span><h3>危机与持续观察</h3></div><ShieldAlert :size="22" /></div>
           <a-alert
-            v-if="service.mode === 'api'"
-            type="info"
+            v-if="workspace.student.status === 'closed'"
+            type="success"
             show-icon
-            message="后端风险评估能力尚未接入"
-            description="当前页面不会把缺失的风险数据解释为低风险，也不提供自动危机判断。"
+            message="当前辅导阶段已结束"
+            :description="workspace.student.closureNote || '未填写结束说明'"
           />
-          <a-alert v-else type="info" show-icon message="记录不等于处置" description="这里呈现人工复核后的风险观察；前端不会自动执行干预或宣称处置已经完成。" />
-          <a-empty v-if="service.mode !== 'api' && !workspace.crises.length" description="暂无危机记录" />
-          <div v-if="service.mode !== 'api' && workspace.crises.length" class="crisis-list">
-            <article v-for="event in workspace.crises" :key="event.id">
-              <header><RiskTag :level="event.level" /><span>{{ event.occurredAt }}</span><a-tag>{{ event.status === 'closed' ? '已关闭' : '观察中' }}</a-tag></header>
-              <div><span>观察信号</span><p>{{ event.signal }}</p></div>
-              <div><span>已记录响应</span><p>{{ event.response }}</p></div>
+        </section>
+
+        <section v-if="activeDrafts.length" class="panel">
+          <div class="section-heading">
+            <div><span>待确认</span><h3>咨询记录草稿</h3></div>
+            <FileClock :size="21" />
+          </div>
+          <div class="draft-list">
+            <button v-for="draft in activeDrafts" :key="draft.id" type="button" @click="openDraft(draft)">
+              <div><strong>{{ draft.consultationType || '咨询' }}草稿</strong><span>{{ draft.consultedAt }}</span></div>
+              <p>{{ draft.content?.overview || '尚未填写概述' }}</p>
+              <span>继续填写并确认</span>
+            </button>
+          </div>
+        </section>
+
+        <section class="panel timeline-panel">
+          <div class="section-heading">
+            <div><span>完整历史</span><h3>统一时间线</h3></div>
+            <History :size="21" />
+          </div>
+          <a-empty v-if="!workspace.timeline.length" description="暂无已确认的档案记录" />
+          <div v-else class="timeline-list">
+            <article v-for="item in workspace.timeline" :key="item.type + '-' + item.id">
+              <span class="timeline-dot"></span>
+              <div class="timeline-body">
+                <header>
+                  <div><span>{{ item.occurredAt }}</span><h4>{{ item.title }}</h4></div>
+                  <a-tag>{{ timelineLabel(item) }}</a-tag>
+                </header>
+                <p class="timeline-summary">{{ item.summary }}</p>
+                <dl v-if="item.content" class="record-details">
+                  <template v-if="item.content.observation"><dt>观察</dt><dd>{{ item.content.observation }}</dd></template>
+                  <template v-if="item.content.action_taken"><dt>已采取行动</dt><dd>{{ item.content.action_taken }}</dd></template>
+                  <template v-if="item.content.next_plan"><dt>后续计划</dt><dd>{{ item.content.next_plan }}</dd></template>
+                  <template v-if="item.content.risk_notes"><dt>风险备注</dt><dd>{{ item.content.risk_notes }}</dd></template>
+                </dl>
+                <div v-if="item.type === 'risk_event'" class="risk-line">
+                  <RiskTag :level="item.riskLevel" /><span>{{ item.riskStatus === 'closed' ? '已关闭' : '持续跟进' }}</span>
+                </div>
+                <a-button v-if="item.type === 'consultation_record'" size="small" @click="openCorrection(item)">
+                  追加更正
+                </a-button>
+              </div>
             </article>
           </div>
         </section>
       </template>
     </main>
 
-    <a-modal v-model:open="editOpen" title="编辑档案" :confirm-loading="editBusy" @ok="saveEdit">
+    <a-modal v-model:open="editOpen" title="编辑学生信息" :confirm-loading="busy" @ok="saveEdit">
       <a-form layout="vertical">
-        <a-form-item label="背景与主诉"><a-textarea v-model:value="editForm.chiefConcern" :rows="6" /></a-form-item>
-        <a-form-item label="状态">
-          <a-select v-model:value="editForm.status">
-            <a-select-option value="active">辅导中</a-select-option>
-            <a-select-option value="closed">阶段结束</a-select-option>
-          </a-select>
-        </a-form-item>
+        <a-form-item label="显示名称"><a-input v-model:value="editForm.displayName" maxlength="128" /></a-form-item>
+        <a-form-item label="班级"><a-input v-model:value="editForm.className" maxlength="128" /></a-form-item>
+        <a-form-item label="背景与主诉"><a-textarea v-model:value="editForm.chiefConcern" :rows="6" maxlength="10000" /></a-form-item>
       </a-form>
     </a-modal>
 
-    <a-modal v-model:open="conversationOpen" title="下一步助手" ok-text="进入对话" :confirm-loading="conversationBusy" @ok="createConversation">
-      <a-alert v-if="conversationError" type="error" show-icon :message="conversationError" class="conversation-alert" />
-      <a-form layout="vertical">
-        <a-alert type="info" show-icon message="新对话会成为当前学生档案时间轴上的一个节点。" class="conversation-alert" />
-        <a-form-item label="背景快照">
-          <a-textarea :value="workspace?.background" :rows="4" disabled />
-        </a-form-item>
-        <a-form-item label="智能体" required>
-          <a-select v-model:value="conversationForm.agent_id" placeholder="选择智能体">
-            <a-select-option v-for="item in availableAgents" :key="item.id" :value="item.id">{{ item.name }}</a-select-option>
-          </a-select>
-        </a-form-item>
+    <a-modal v-model:open="recordOpen" title="手工咨询记录" :confirm-loading="busy" :mask-closable="false" width="720px">
+      <a-alert type="info" show-icon message="保存草稿不会进入正式时间线；确认归档后原记录不可修改，只能追加更正。" />
+      <a-form layout="vertical" class="modal-form">
+        <div class="form-row">
+          <a-form-item label="咨询时间" required><a-input v-model:value="recordForm.consultedAt" type="datetime-local" /></a-form-item>
+          <a-form-item label="咨询方式" required><a-select v-model:value="recordForm.consultationType"><a-select-option value="面谈">面谈</a-select-option><a-select-option value="电话">电话</a-select-option><a-select-option value="线上">线上</a-select-option><a-select-option value="其他">其他</a-select-option></a-select></a-form-item>
+        </div>
+        <a-form-item label="本次咨询概述" required><a-textarea v-model:value="recordForm.overview" :rows="4" maxlength="10000" /></a-form-item>
+        <a-form-item label="辅导员观察"><a-textarea v-model:value="recordForm.observation" :rows="3" maxlength="10000" /></a-form-item>
+        <a-form-item label="已采取行动"><a-textarea v-model:value="recordForm.actionTaken" :rows="3" maxlength="10000" /></a-form-item>
+        <a-form-item label="后续计划"><a-textarea v-model:value="recordForm.nextPlan" :rows="3" maxlength="10000" /></a-form-item>
+        <a-form-item label="风险备注（不自动改变风险等级）"><a-textarea v-model:value="recordForm.riskNotes" :rows="2" maxlength="10000" /></a-form-item>
+      </a-form>
+      <template #footer>
+        <a-button @click="recordOpen = false">取消</a-button>
+        <a-button :loading="busy" @click="saveRecordDraft">保存草稿</a-button>
+        <a-button type="primary" :loading="busy" @click="confirmRecord">确认并归档</a-button>
+      </template>
+    </a-modal>
+
+    <a-modal v-model:open="correctionOpen" title="追加正式记录更正" :confirm-loading="busy" width="680px" @ok="saveCorrection">
+      <a-alert type="warning" show-icon message="更正会作为新事件追加，原正式记录不会被覆盖。" />
+      <a-form layout="vertical" class="modal-form">
+        <a-form-item label="更正原因" required><a-textarea v-model:value="correctionForm.reason" :rows="2" maxlength="2000" /></a-form-item>
+        <a-form-item label="更正后的咨询概述" required><a-textarea v-model:value="correctionForm.overview" :rows="4" /></a-form-item>
+        <a-form-item label="辅导员观察"><a-textarea v-model:value="correctionForm.observation" :rows="2" /></a-form-item>
+        <a-form-item label="已采取行动"><a-textarea v-model:value="correctionForm.actionTaken" :rows="2" /></a-form-item>
+        <a-form-item label="后续计划"><a-textarea v-model:value="correctionForm.nextPlan" :rows="2" /></a-form-item>
+        <a-form-item label="风险备注"><a-textarea v-model:value="correctionForm.riskNotes" :rows="2" /></a-form-item>
       </a-form>
     </a-modal>
 
-    <RecordUploadFlow
-      v-if="studentId"
-      :open="uploadOpen"
-      :student-id="studentId"
-      :service="service"
-      :thread-id="service.mode === 'api' ? String(workspace?.timeline?.[0]?.id || '') : ''"
-      @close="uploadOpen = false"
-      @archived="handleArchived"
-    />
+    <a-modal v-model:open="riskOpen" title="记录人工风险判断" :confirm-loading="busy" @ok="saveRisk">
+      <a-alert type="info" show-icon message="风险等级由辅导员人工判断；系统不会依据正文自动判断或执行危机干预。" />
+      <a-form layout="vertical" class="modal-form">
+        <div class="form-row">
+          <a-form-item label="风险等级" required><a-select v-model:value="riskForm.level"><a-select-option value="normal">常规关注</a-select-option><a-select-option value="watch">持续观察</a-select-option><a-select-option value="urgent">紧急关注</a-select-option></a-select></a-form-item>
+          <a-form-item label="跟进状态" required><a-select v-model:value="riskForm.status"><a-select-option value="open">待跟进</a-select-option><a-select-option value="monitoring">持续跟进</a-select-option><a-select-option value="closed">本事件已关闭</a-select-option></a-select></a-form-item>
+        </div>
+        <a-form-item label="人工判断依据" required><a-textarea v-model:value="riskForm.basis" :rows="4" maxlength="10000" /></a-form-item>
+        <a-form-item label="已采取行动"><a-textarea v-model:value="riskForm.actionTaken" :rows="3" maxlength="10000" /></a-form-item>
+      </a-form>
+    </a-modal>
+
+    <a-modal v-model:open="closeOpen" title="结束当前辅导阶段" :confirm-loading="busy" ok-text="确认结束" ok-type="danger" @ok="closeStudent">
+      <a-alert type="warning" show-icon message="阶段结束不代表风险自动解除，历史记录仍会保留。" />
+      <a-form layout="vertical" class="modal-form">
+        <a-form-item label="阶段结束说明" required><a-textarea v-model:value="closeForm.closureNote" :rows="5" maxlength="10000" /></a-form-item>
+      </a-form>
+    </a-modal>
   </div>
 </template>
 
 <style scoped>
-.conversation-alert { margin-bottom: 14px; }
 .workspace-page { min-height: 100%; color: var(--gray-900); background: var(--gray-25); }
-.workspace-content { display: grid; gap: 18px; max-width: 1320px; margin: 0 auto; padding: 22px var(--page-padding) 48px; }
-.student-hero { display: grid; grid-template-columns: 1fr minmax(260px, 32%); gap: 14px; }
-.student-primary, .next-session { border: 1px solid var(--gray-150); border-radius: 17px; background: var(--gray-0); }
-.student-primary { padding: 22px; }
-.student-name-row, .name-line, .next-session, .panel-heading, .quick-actions button, .goal-grid header, .crisis-list header { display: flex; align-items: center; }
-.student-name-row { gap: 14px; }
-.student-avatar { display: grid; place-items: center; flex: 0 0 48px; height: 48px; border-radius: 15px; color: var(--main-800); background: var(--main-50); font-size: 20px; font-weight: 800; }
+.workspace-content { display: grid; gap: 18px; max-width: 1120px; margin: 0 auto; padding: 22px var(--page-padding) 48px; }
+.student-card, .panel { padding: 22px; border: 1px solid var(--gray-150); border-radius: 16px; background: var(--gray-0); }
+.student-card { display: grid; gap: 20px; }
+.student-heading, .name-line, .business-actions, .section-heading, .timeline-body header, .risk-line { display: flex; align-items: center; }
+.student-heading { gap: 14px; }
+.student-avatar { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 14px; color: var(--main-700); background: var(--main-50); }
 .name-line { gap: 9px; flex-wrap: wrap; }
-.name-line h2 { margin: 0; color: var(--gray-1000); font-size: 22px; }
-.name-line > span { color: var(--gray-500); font-size: 12px; }
-.student-name-row p { margin: 5px 0 0; color: var(--gray-600); }
-.hero-meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 20px; padding-top: 17px; border-top: 1px solid var(--gray-100); }
-.hero-meta div { display: grid; gap: 4px; min-width: 0; }
-.hero-meta span, .panel-heading span, .next-session span { color: var(--gray-500); font-size: 11px; }
-.hero-meta strong { overflow: hidden; color: var(--gray-800); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
-.next-session { gap: 12px; width: 100%; padding: 20px; color: var(--second-700); background: linear-gradient(140deg, var(--second-30), var(--gray-0)); text-align: left; cursor: pointer; }
-.next-session:hover { border-color: var(--second-300); background: var(--second-30); }
-.next-session div { display: grid; gap: 5px; }
-.next-session strong { color: var(--gray-900); line-height: 1.45; }
-.next-session small { color: var(--gray-500); font-size: 11px; }
-.workspace-tabs { display: flex; gap: 4px; padding: 5px; overflow-x: auto; border: 1px solid var(--gray-150); border-radius: 13px; background: var(--gray-0); }
-.workspace-tabs button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; flex: 1; min-width: 120px; padding: 10px 14px; border: 0; border-radius: 9px; color: var(--gray-600); background: transparent; cursor: pointer; white-space: nowrap; }
-.workspace-tabs button.active { color: var(--main-800); background: var(--main-50); font-weight: 700; }
-.workspace-tabs button > span { display: grid; place-items: center; min-width: 19px; height: 19px; border-radius: 10px; color: var(--gray-0); background: var(--color-error-500); font-size: 10px; }
-.workspace-grid { display: grid; gap: 14px; }
-.overview-grid { grid-template-columns: 1.45fr 1fr; }
-.panel { padding: 20px; border: 1px solid var(--gray-150); border-radius: 16px; background: var(--gray-0); }
-.panel-heading { justify-content: space-between; gap: 12px; margin-bottom: 17px; }
-.panel-heading h3 { margin: 4px 0 0; color: var(--gray-1000); font-size: 17px; }
-.panel-heading > svg { color: var(--main-600); }
-.large-copy { margin: 0; color: var(--gray-700); font-size: 15px; line-height: 1.8; }
-.quick-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; margin-top: 22px; }
-.quick-actions button { gap: 9px; padding: 12px; border: 1px solid var(--gray-150); border-radius: 10px; color: var(--main-700); background: var(--gray-25); text-align: left; cursor: pointer; }
-.quick-actions button span { display: grid; gap: 2px; }
-.quick-actions strong { color: var(--gray-800); font-size: 13px; }
-.quick-actions small { color: var(--gray-500); font-size: 10px; }
-.todo-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.todo-list li { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--gray-100); }
-.todo-list svg { color: var(--gray-300); }
-.todo-list svg.done { color: var(--color-success-500); }
-.todo-list div { display: grid; gap: 4px; }
-.todo-list strong { color: var(--gray-800); font-size: 13px; }
-.todo-list span { color: var(--gray-500); font-size: 11px; }
-.recent-panel { grid-column: 1 / -1; }
-.recent-event { display: grid; gap: 6px; padding-left: 14px; border-left: 3px solid var(--main-300); }
-.recent-event span { color: var(--gray-500); font-size: 11px; }
-.recent-event p { margin: 0; color: var(--gray-600); }
-.section-panel { min-height: 360px; }
-.timeline-list { display: grid; padding-left: 13px; }
-.timeline-list > article { display: grid; grid-template-columns: 20px 1fr; }
-.timeline-mark { position: relative; border-left: 1px solid var(--gray-200); }
-.timeline-mark::before { content: ''; position: absolute; left: -5px; top: 22px; width: 9px; height: 9px; border: 2px solid var(--gray-0); border-radius: 50%; background: var(--main-500); box-shadow: 0 0 0 2px var(--main-100); }
-.timeline-card { margin-bottom: 14px; padding: 16px; border: 1px solid var(--gray-150); border-radius: 12px; background: var(--gray-25); }
-.timeline-card header { display: flex; justify-content: space-between; gap: 12px; }
-.timeline-card header span { color: var(--gray-500); font-size: 11px; }
-.timeline-card h4 { margin: 4px 0 0; color: var(--gray-900); }
-.timeline-card p { color: var(--gray-600); line-height: 1.65; }
-.mood-change { display: inline-flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 8px; color: var(--gray-700); background: var(--gray-0); font-size: 12px; }
-.mood-change i { color: var(--main-600); font-style: normal; }
-.goal-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
-.goal-grid article { padding: 17px; border: 1px solid var(--gray-150); border-radius: 12px; background: var(--gray-25); }
-.goal-grid header { gap: 9px; }
-.goal-grid header strong { flex: 1; color: var(--gray-900); }
-.goal-grid article > div { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--gray-150); }
-.goal-grid span, .crisis-list div > span { color: var(--gray-500); font-size: 11px; }
-.goal-grid p, .crisis-list p { margin: 4px 0 0; color: var(--gray-700); }
-.assessment-grid { grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); }
-.interpretation { padding: 13px 0; border-bottom: 1px solid var(--gray-100); }
-.interpretation p { margin: 5px 0 0; color: var(--gray-600); line-height: 1.55; }
-.crisis-panel { display: grid; gap: 16px; }
-.crisis-list { display: grid; gap: 12px; }
-.crisis-list article { display: grid; gap: 13px; padding: 16px; border: 1px solid var(--gray-150); border-left: 3px solid var(--color-warning-500); border-radius: 11px; background: var(--gray-25); }
-.crisis-list header { gap: 9px; }
-.crisis-list header > span { flex: 1; color: var(--gray-500); font-size: 12px; }
-@media (max-width: 1024px) {
-  .student-hero, .assessment-grid { grid-template-columns: 1fr; }
-  .hero-meta { grid-template-columns: repeat(2, 1fr); }
-}
-@media (max-width: 768px) {
-  .workspace-content { padding-top: 15px; }
-  .overview-grid { grid-template-columns: 1fr; }
-  .recent-panel { grid-column: auto; }
-  .goal-grid { grid-template-columns: 1fr; }
-  .quick-actions { grid-template-columns: 1fr; }
-}
-@media (max-width: 560px) {
-  .workspace-content { padding-inline: 12px; }
-  .student-primary, .panel { padding: 16px; }
-  .hero-meta { grid-template-columns: 1fr 1fr; }
-  :deep(.page-header-right .ant-tag) { display: none; }
-  :deep(.page-header-title) { max-width: 92px; overflow: hidden; text-overflow: ellipsis; }
-  :deep(.page-header-right) { gap: 4px; }
-  :deep(.page-header-right .ant-btn) { width: 30px; padding-inline: 6px; font-size: 0; }
-  :deep(.page-header-right .ant-btn-icon) { margin-inline-end: 0; }
-  .workspace-tabs { margin-inline: -12px; border-radius: 0; border-inline: 0; }
-  .workspace-tabs button { flex: 0 0 auto; min-width: auto; padding-inline: 13px; }
-  .workspace-tabs button svg { display: none; }
+.name-line h2 { margin: 0; font-size: 22px; }
+.name-line > span, .student-heading p, .section-heading span, .timeline-body header span { color: var(--gray-500); font-size: 12px; }
+.student-heading p { margin: 5px 0 0; }
+.background-copy { padding: 16px; border-radius: 12px; background: var(--gray-50); }
+.background-copy > span { color: var(--gray-500); font-size: 12px; }
+.background-copy p { margin: 7px 0 0; white-space: pre-wrap; line-height: 1.7; }
+.business-actions { gap: 10px; flex-wrap: wrap; }
+.section-heading { justify-content: space-between; margin-bottom: 16px; }
+.section-heading h3 { margin: 4px 0 0; font-size: 18px; }
+.section-heading > svg { color: var(--main-600); }
+.draft-list { display: grid; gap: 10px; }
+.draft-list button { display: grid; gap: 7px; padding: 14px; border: 1px solid var(--gray-150); border-radius: 11px; background: var(--gray-0); text-align: left; cursor: pointer; }
+.draft-list button:hover { border-color: var(--main-300); background: var(--main-30); }
+.draft-list button div { display: flex; justify-content: space-between; gap: 12px; }
+.draft-list p { margin: 0; color: var(--gray-700); }
+.draft-list button > span, .draft-list button div span { color: var(--main-700); font-size: 12px; }
+.timeline-list { display: grid; gap: 0; }
+.timeline-list article { position: relative; display: grid; grid-template-columns: 22px 1fr; gap: 12px; padding-bottom: 20px; }
+.timeline-list article:not(:last-child)::before { position: absolute; top: 16px; bottom: 0; left: 6px; width: 1px; background: var(--gray-200); content: ''; }
+.timeline-dot { z-index: 1; width: 13px; height: 13px; margin-top: 6px; border: 3px solid var(--main-100); border-radius: 50%; background: var(--main-600); }
+.timeline-body { display: grid; gap: 11px; padding: 16px; border: 1px solid var(--gray-150); border-radius: 12px; }
+.timeline-body header { justify-content: space-between; gap: 12px; }
+.timeline-body h4 { margin: 3px 0 0; }
+.timeline-summary { margin: 0; white-space: pre-wrap; line-height: 1.65; }
+.record-details { display: grid; grid-template-columns: 90px 1fr; gap: 7px 12px; margin: 0; padding-top: 10px; border-top: 1px solid var(--gray-100); }
+.record-details dt { color: var(--gray-500); font-size: 12px; }
+.record-details dd { margin: 0; white-space: pre-wrap; }
+.risk-line { gap: 9px; color: var(--gray-600); font-size: 12px; }
+.modal-form { margin-top: 18px; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 640px) {
+  .workspace-content { padding-inline: 14px; }
+  .student-card, .panel { padding: 16px; }
+  .form-row { grid-template-columns: 1fr; gap: 0; }
+  .record-details { grid-template-columns: 1fr; }
 }
 </style>

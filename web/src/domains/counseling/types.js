@@ -1,10 +1,9 @@
 /** 心理辅导工作台可见领域类型。 */
 
-export const COUNSELING_TABS = ['overview', 'timeline', 'goals', 'assessments', 'crisis']
 export const COUNSELING_UPLOAD_EXTENSIONS = ['txt', 'docx', 'pdf']
 export const COUNSELING_UPLOAD_MAX_BYTES = 5 * 1024 * 1024
 
-/** @typedef {'normal'|'watch'|'high'|'unknown'} RiskLevel */
+/** @typedef {'normal'|'watch'|'urgent'|'unknown'} RiskLevel */
 /** @typedef {'active'|'paused'|'closed'} StudentStatus */
 
 /**

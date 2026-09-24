@@ -234,5 +234,6 @@ test('导航与设置消费统一前端能力，不再直接向辅导员开放�
   assert.match(settings, /if \(userStore\.canUseTechnicalConsole\) tabs\.push\('apiKeys', 'agentEnv', 'base', 'ocr'\)/)
   assert.match(login, /router\.push\(userStore\.defaultHome\)/)
   assert.match(oidc, /router\.push\(userStore\.defaultHome\)/)
-  assert.equal((studentWorkspace.match(/query: \{ student_id:/g) || []).length, 2)
+  assert.equal((studentWorkspace.match(/query: \{ student_id:/g) || []).length, 0)
+  assert.doesNotMatch(studentWorkspace, /打开下一步助手|openConversationCreator/)
 })

@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ArrowRight, CalendarDays, Plus, RefreshCw, RotateCcw, Search, UserRound } from '@lucide/vue'
+import { ArrowRight, Plus, RefreshCw, RotateCcw, Search, UserRound } from '@lucide/vue'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import RiskTag from '../components/RiskTag.vue'
 import { counselingWorkspaceService } from '../workspaceService.js'
@@ -13,12 +13,13 @@ const router = useRouter()
 const service = counselingWorkspaceService
 const userStore = useUserStore()
 const students = ref([])
+const departmentSummary = ref(null)
 const createOpen = ref(false)
 const createBusy = ref(false)
-const createForm = reactive({ student_code: '' })
+const createForm = reactive({ student_code: '', display_name: '', class_name: '' })
 const loading = ref(false)
 const error = ref('')
-const filters = reactive({ query: '', riskLevel: undefined, status: undefined, appointment: undefined })
+const filters = reactive({ query: '', riskLevel: undefined, status: undefined })
 const listOperations = createLatestOperation()
 
 async function loadStudents() {
@@ -26,10 +27,16 @@ async function loadStudents() {
   loading.value = true
   error.value = ''
   try {
-    const result = await service.listStudents({ ...filters })
+    const [result, summaryResult] = await Promise.all([
+      service.listStudents({ ...filters }),
+      userStore.businessRoles.includes('business_admin')
+        ? service.getDepartmentSummary()
+        : Promise.resolve(null),
+    ])
     if (!listOperations.isCurrent(operation)) return
     if (result.status !== 'ok') throw new Error(result.message || '加载档案失败')
     students.value = result.data
+    departmentSummary.value = summaryResult?.data || null
   } catch (cause) {
     if (!listOperations.isCurrent(operation)) return
     error.value = cause.message || '加载档案失败'
@@ -40,7 +47,7 @@ async function loadStudents() {
 
 function openCreate() {
   createOpen.value = true
-  createForm.student_code = ''
+  Object.assign(createForm, { student_code: '', display_name: '', class_name: '' })
 }
 
 async function createStudent() {
@@ -51,7 +58,11 @@ async function createStudent() {
   }
   createBusy.value = true
   try {
-    const result = await service.createStudent({ student_code: code })
+    const result = await service.createStudent({
+      student_code: code,
+      display_name: createForm.display_name.trim(),
+      class_name: createForm.class_name.trim(),
+    })
     if (result.status !== 'ok') throw new Error(result.message || '创建档案失败')
     createOpen.value = false
     message.success('学生档案已创建')
@@ -65,7 +76,7 @@ async function createStudent() {
 
 async function resetDemo() {
   await service.resetDemo()
-  Object.assign(filters, { query: '', riskLevel: undefined, status: undefined, appointment: undefined })
+  Object.assign(filters, { query: '', riskLevel: undefined, status: undefined })
   await loadStudents()
 }
 
@@ -116,12 +127,19 @@ onMounted(loadStudents)
         <div>
           <span class="eyebrow">COUNSELING WORKSPACE</span>
           <h2>把每一次谈话，放回学生成长的上下文里</h2>
-          <p>快速查看风险、预约和最近变化；进入档案后完成记录审阅与归档。</p>
+          <p>围绕学生档案完成手工记录、人工风险跟进、确认归档和阶段回顾。</p>
         </div>
         <div class="intro-metric">
           <strong>{{ students.length }}</strong>
           <span>当前结果</span>
         </div>
+      </section>
+
+      <section v-if="departmentSummary" class="summary-grid" aria-label="部门业务概览">
+        <article><span>学生档案</span><strong>{{ departmentSummary.student_count }}</strong></article>
+        <article><span>辅导中</span><strong>{{ departmentSummary.student_status_counts?.active || 0 }}</strong></article>
+        <article><span>已确认记录</span><strong>{{ departmentSummary.confirmed_record_count }}</strong></article>
+        <article><span>待跟进风险事件</span><strong>{{ departmentSummary.open_risk_event_count }}</strong></article>
       </section>
 
       <a-alert
@@ -136,18 +154,16 @@ onMounted(loadStudents)
         <a-input v-model:value="filters.query" allow-clear :placeholder="service.mode === 'api' ? '搜索编号或负责人' : '搜索编号、姓名、主诉或负责人'" @pressEnter="loadStudents">
           <template #prefix><Search :size="16" /></template>
         </a-input>
-        <a-select v-model:value="filters.riskLevel" allow-clear :disabled="service.mode === 'api'" :placeholder="service.mode === 'api' ? '风险未接入' : '风险'" @change="loadStudents">
+        <a-select v-model:value="filters.riskLevel" allow-clear placeholder="风险" @change="loadStudents">
           <a-select-option value="normal">常规关注</a-select-option>
           <a-select-option value="watch">持续观察</a-select-option>
-          <a-select-option value="high">高风险</a-select-option>
+          <a-select-option value="urgent">紧急关注</a-select-option>
+          <a-select-option value="unknown">待评估</a-select-option>
         </a-select>
         <a-select v-model:value="filters.status" allow-clear placeholder="状态" @change="loadStudents">
           <a-select-option value="active">辅导中</a-select-option>
           <a-select-option v-if="service.mode === 'demo'" value="paused">已暂停</a-select-option>
           <a-select-option value="closed">阶段结束</a-select-option>
-        </a-select>
-        <a-select v-model:value="filters.appointment" allow-clear :disabled="service.mode === 'api'" :placeholder="service.mode === 'api' ? '预约未接入' : '预约'" @change="loadStudents">
-          <a-select-option value="upcoming">有后续预约</a-select-option>
         </a-select>
         <a-button type="primary" @click="loadStudents">筛选</a-button>
       </section>
@@ -186,10 +202,6 @@ onMounted(loadStudents)
             <div><span>状态</span><strong>{{ item.status === 'closed' ? '阶段结束' : item.status === 'paused' ? '已暂停' : '辅导中' }}</strong></div>
             <div><span>负责人</span><strong>{{ displayCounselor(item) }}</strong></div>
           </div>
-          <div class="appointment">
-            <CalendarDays :size="16" />
-            <span>{{ service.mode === 'api' ? '预约能力尚未接入' : item.nextAppointment ? '下次预约 ' + item.nextAppointment : '暂无后续预约' }}</span>
-          </div>
           <footer>
             <span>{{ item.recentActivity }}</span>
             <span v-if="canOpen(item)" class="open-link">打开档案 <ArrowRight :size="15" /></span>
@@ -203,6 +215,12 @@ onMounted(loadStudents)
       <a-form layout="vertical">
         <a-form-item label="学生编号" required>
           <a-input v-model:value="createForm.student_code" placeholder="字母、数字、下划线或连字符" />
+        </a-form-item>
+        <a-form-item label="显示名称或代号">
+          <a-input v-model:value="createForm.display_name" maxlength="128" placeholder="可后续补充" />
+        </a-form-item>
+        <a-form-item label="班级">
+          <a-input v-model:value="createForm.class_name" maxlength="128" placeholder="可后续补充" />
         </a-form-item>
         <a-alert type="info" show-icon message="档案创建后由你负责，仅你可以打开并维护档案正文。" />
       </a-form>
@@ -220,7 +238,11 @@ onMounted(loadStudents)
 .intro-metric { display: grid; min-width: 110px; padding: 14px; border: 1px solid var(--gray-150); border-radius: 14px; background: var(--gray-0); text-align: center; }
 .intro-metric strong { color: var(--main-700); font-size: 30px; }
 .intro-metric span { color: var(--gray-500); font-size: 12px; }
-.filter-bar { display: grid; grid-template-columns: minmax(220px, 1fr) 140px 140px 150px auto; gap: 10px; padding: 14px; border: 1px solid var(--gray-150); border-radius: 14px; background: var(--gray-0); }
+.filter-bar { display: grid; grid-template-columns: minmax(220px, 1fr) 150px 150px auto; gap: 10px; padding: 14px; border: 1px solid var(--gray-150); border-radius: 14px; background: var(--gray-0); }
+.summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.summary-grid article { display: grid; gap: 6px; padding: 16px; border: 1px solid var(--gray-150); border-radius: 12px; background: var(--gray-0); }
+.summary-grid span { color: var(--gray-500); font-size: 12px; }
+.summary-grid strong { color: var(--main-700); font-size: 24px; }
 .student-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .student-card { display: grid; gap: 18px; padding: 20px; border: 1px solid var(--gray-150); border-radius: 16px; background: var(--gray-0); cursor: pointer; transition: border-color .18s ease, background-color .18s ease; }
 .student-card:hover, .student-card:focus-visible { border-color: var(--main-300); outline: none; background: var(--main-30); }
@@ -244,6 +266,7 @@ onMounted(loadStudents)
 @media (max-width: 1024px) {
   .student-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .filter-bar { grid-template-columns: 1fr 1fr 1fr; }
+  .summary-grid { grid-template-columns: repeat(2, 1fr); }
   .filter-bar :first-child { grid-column: span 2; }
 }
 @media (max-width: 768px) {

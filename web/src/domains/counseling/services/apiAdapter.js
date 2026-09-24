@@ -34,15 +34,13 @@ export function createCounselingApiAdapter() {
     },
 
     async getWorkspace(studentId) {
-      const [detail, timeline, drafts, risks] = await Promise.all([
+      const [detail, timeline, drafts] = await Promise.all([
         counselingApi.getStudent(studentId),
         counselingApi.getTimeline(studentId),
         counselingApi.listRecordDrafts(studentId),
-        counselingApi.listRiskEvents(studentId),
       ])
       const items = timeline?.timeline || timeline?.items || timeline || []
       const draftItems = drafts?.drafts || drafts?.items || drafts || []
-      const riskItems = risks?.events || risks?.items || risks || []
       return {
         status: 'ok',
         data: {
@@ -51,12 +49,6 @@ export function createCounselingApiAdapter() {
           timeline: items.map(mapApiTimelineNode),
           drafts: draftItems.map(mapApiRecordDraft)
             .filter((item) => item.recordKind === 'manual' && item.status === 'draft'),
-          riskEvents: riskItems,
-          todos: [],
-          goals: [],
-          assessments: [],
-          crises: [],
-          uploads: [],
         },
       }
     },

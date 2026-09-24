@@ -158,10 +158,13 @@ test('API 映射保留 closed 与负责人边界，不伪造风险和未接入�
     student_code: 'S-9',
     counselor_id: 7,
     status: 'closed',
+    current_risk_level: 'urgent',
     background_summary: '',
+    version: 4,
   })
   assert.equal(owner.status, 'closed')
-  assert.equal(owner.riskLevel, 'unknown')
+  assert.equal(owner.riskLevel, 'urgent')
+  assert.equal(owner.version, 4)
   assert.equal(owner.sessionCount, null)
   assert.equal(owner.nextAppointment, undefined)
   assert.equal(owner.counselorId, 7)
@@ -170,9 +173,12 @@ test('API 映射保留 closed 与负责人边界，不伪造风险和未接入�
   const managerRow = mapApiStudent({ id: 10, student_code: 'S-10', counselor_id: 8, status: 'active' })
   assert.equal(managerRow.chiefConcern, '打开档案查看')
   assert.deepEqual(filterApiStudents([owner, managerRow], { status: 'closed', query: 'S-9' }), [owner])
-  assert.deepEqual(toApiStudentPatch({ chiefConcern: '更新背景', status: 'closed' }), {
+  assert.deepEqual(toApiStudentPatch({
+    chiefConcern: '更新背景', status: 'closed', displayName: '学生甲', className: '一班',
+  }), {
     background_summary: '更新背景',
-    status: 'closed',
+    display_name: '学生甲',
+    class_name: '一班',
   })
 })
 
@@ -205,7 +211,12 @@ test('正式记录时间线展示结构化摘要且不暴露 source 对象为标
     occurredAt: '2026-09-22T10:00:00Z',
     title: '谈话记录.pdf',
     summary: '会谈概述：已由辅导员确认',
+    type: 'record',
     source: 'upload',
+    content: null,
+    recordId: undefined,
+    riskLevel: undefined,
+    riskStatus: undefined,
   })
 })
 
@@ -222,8 +233,43 @@ test('真实时间线会话 DTO 使用节点 id 保留继续对话入口', () =>
     occurredAt: '2026-09-22T11:00:00Z',
     title: '第 2 次辅导',
     summary: '暂无摘要',
+    type: 'conversation',
     source: 'assistant',
+    content: null,
+    recordId: undefined,
+    riskLevel: undefined,
+    riskStatus: undefined,
   })
+})
+
+test('手工记录、追加更正和人工风险节点保留业务语义', () => {
+  const manual = mapApiTimelineNode({
+    id: 'manual-1',
+    type: 'consultation_record',
+    title: '面谈记录',
+    occurred_at: '2026-09-24T02:00:00Z',
+    content: { overview: '人工记录概述', next_plan: '继续跟进' },
+  })
+  assert.equal(manual.source, 'manual')
+  assert.equal(manual.summary, '人工记录概述')
+  assert.equal(manual.content.next_plan, '继续跟进')
+
+  const correction = mapApiTimelineNode({
+    id: 'correction-1',
+    type: 'record_correction',
+    record_id: 'manual-1',
+    summary: '补充人工核对',
+    content: { overview: '更正后内容' },
+  })
+  assert.equal(correction.source, 'correction')
+  assert.equal(correction.recordId, 'manual-1')
+
+  const risk = mapApiTimelineNode({
+    id: 'risk-1', type: 'risk_event', summary: '人工判断依据', risk_level: 'watch', risk_status: 'monitoring',
+  })
+  assert.equal(risk.source, 'risk')
+  assert.equal(risk.riskLevel, 'watch')
+  assert.equal(risk.riskStatus, 'monitoring')
 })
 
 test('学生请求守卫拒绝切换档案或代次后的迟到结果', () => {
@@ -322,25 +368,19 @@ test('前端服务边界显式选择适配器且生产模式没有演示回退',
   assert.doesNotMatch(apiAdapter, /createCounselingDemoAdapter/)
 })
 
-test('工作台使用 URL 标签恢复并隔离学生切换时的旧响应', () => {
+test('手工优先工作台隔离学生切换并移除 AI 主入口', () => {
   const source = readFileSync(new URL('../../src/domains/counseling/views/StudentWorkspaceView.vue', import.meta.url), 'utf8')
-  assert.match(source, /route\.query\.tab/)
-  assert.match(source, /COUNSELING_TABS\.includes/)
   assert.match(source, /const version = \+\+requestVersion/)
   assert.match(source, /version !== requestVersion \|\| id !== studentId\.value/)
   assert.match(source, /isCurrentStudentRequest\(id, version, studentId\.value, requestVersion\)/)
-  assert.match(source, /editOpen\.value = false/)
-  assert.match(source, /conversationOpen\.value = false/)
-  assert.match(source, /editBusy\.value = false/)
-  assert.match(source, /conversationBusy\.value = false/)
-  assert.match(source, /@click="openConversationCreator"/)
-  assert.match(source, /<a-button v-if="service\.mode === 'api'" aria-label="打开下一步助手"/)
-  assert.match(source, /<button v-if="service\.mode === 'api'" type="button" class="next-session"/)
-  assert.match(source, /<button v-if="service\.mode === 'api'" type="button" @click="openConversationCreator"/)
-  assert.doesNotMatch(source, /新建会话/)
-  assert.match(source, /record\.source === 'assistant' \? '助手对话'/)
-  assert.match(source, /record\.conversationId/)
-  assert.match(source, />继续对话</)
+  assert.match(source, /createManualRecordDraft/)
+  assert.match(source, /confirmManualRecord/)
+  assert.match(source, /addRecordCorrection/)
+  assert.match(source, /createRiskEvent/)
+  assert.match(source, /closeStudent/)
+  assert.match(source, /保存草稿不会进入正式时间线/)
+  assert.match(source, /原记录保持不变/)
+  assert.doesNotMatch(source, /RecordUploadFlow|openConversationCreator|agentStore|生成摘要|上传谈话记录/)
 
   const listSource = readFileSync(new URL('../../src/domains/counseling/views/StudentRecordListView.vue', import.meta.url), 'utf8')
   assert.match(listSource, /Number\(item\.counselorId\) === Number\(userStore\.userId\)/)
@@ -352,15 +392,15 @@ test('工作台使用 URL 标签恢复并隔离学生切换时的旧响应', () 
   assert.match(listSource, /aria-label="刷新档案列表"/)
   assert.match(listSource, /font-size: 0/)
   assert.match(listSource, /userStore\.canCreateStudentRecord/)
-  assert.match(listSource, /createStudent\(\{ student_code: code \}\)/)
+  assert.match(listSource, /student_code: code/)
+  assert.match(listSource, /display_name: createForm\.display_name\.trim\(\)/)
+  assert.match(listSource, /class_name: createForm\.class_name\.trim\(\)/)
   assert.doesNotMatch(listSource, /listCounselors|createForm\.counselor_id/)
+  assert.match(listSource, /getDepartmentSummary/)
   const apiAdapter = readFileSync(new URL('../../src/domains/counseling/services/apiAdapter.js', import.meta.url), 'utf8')
   assert.match(apiAdapter, /timeline: items\.map\(mapApiTimelineNode\)/)
-
-  const uploadSource = readFileSync(new URL('../../src/domains/counseling/components/RecordUploadFlow.vue', import.meta.url), 'utf8')
-  assert.match(uploadSource, /props\.service\.updateSummary/)
-  assert.match(uploadSource, /props\.service\.confirmRecordDraft/)
-  assert.match(uploadSource, /经人工确认的记录已写入档案时间轴/)
-  assert.match(uploadSource, /flowOperations\.begin\(\)/)
-  assert.match(uploadSource, /isCurrentCounselingOperation/)
+  assert.match(apiAdapter, /createManualRecordDraft/)
+  assert.match(apiAdapter, /confirmManualRecord/)
+  assert.match(apiAdapter, /createRiskEvent/)
+  assert.match(apiAdapter, /closeStudent/)
 })
