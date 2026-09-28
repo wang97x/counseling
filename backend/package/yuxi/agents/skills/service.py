@@ -31,7 +31,8 @@ from yuxi.config import (
     get_skill_projection_dir,
 )
 from yuxi.permissions import ResourcePermission, normalize_permission_config, resolve_skill_permission
-from yuxi.storage.postgres.models_business import Skill, User
+from counseling.identity.models import User
+from yuxi.storage.postgres.models_business import Skill
 from yuxi.utils.logging_config import logger
 from yuxi.utils.paths import ensure_within_root, open_directory_fd, open_regular_file_fd
 
@@ -340,7 +341,7 @@ async def sync_user_accessible_skills_async(
 
 async def refresh_user_skill_projection_async(uid: str) -> dict[str, str]:
     """按数据库中的最新授权快照重建用户共享 Skill 投影。"""
-    from yuxi.repositories.user_repository import UserRepository
+    from counseling.identity.repositories.user import UserRepository
     from yuxi.storage.postgres.manager import pg_manager
 
     normalized_uid = str(uid or "").strip()

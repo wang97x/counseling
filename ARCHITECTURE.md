@@ -28,7 +28,7 @@ Yuxi 是一个面向 RAG、知识图谱和多智能体工作流的知识库平�
 
 ## 后端代码地图
 
-后端分成三个顶层边界：`backend/server` 是 Web 应用与迁移的装配入口，`backend/package/yuxi` 是通用智能体平台，`backend/counseling/src/counseling` 是心理辅导业务包。心理辅导领域逻辑不得新增到 `yuxi` 命名空间；业务包当前复用 Yuxi 的认证、数据库、解析和对象存储基础设施，并通过端口及 `counseling.integrations.yuxi` 适配通用会话与模型能力。路由层只处理请求模型、认证上下文、适配器装配和响应。
+后端分成三个顶层边界：`backend/server` 是 Web 应用与迁移的装配入口，`backend/package/yuxi` 是 AI 平台内核，`backend/counseling/src/counseling` 是业务应用包。`counseling.identity` 拥有账号、认证、OIDC、API Key、部门、业务角色、用户管理与身份审计；Yuxi 只消费已经认证的调用身份或执行 AI 资源可见性查询，不拥有身份生命周期。心理辅导档案逻辑不得新增到 `yuxi` 命名空间；业务包通过 `counseling.integrations.yuxi` 适配 Conversation 与模型能力。
 
 ### Web 与 worker 入口
 
@@ -56,12 +56,14 @@ Yuxi 只交付完整知识能力路径。API 始终注册 `external_kb`、`knowl
 
 ### `backend/counseling/src/counseling`
 
+- `identity` 拥有用户与部门模型、密码/JWT、OIDC、API Key、业务角色、身份仓储、管理用例及 `/api/auth/*`、`/api/departments/*`、`/api/user/*` HTTP 入口。既有表名和 wire 字段保持兼容，但授权只解释显式业务角色。
+- 仓库内消费者直接从 `counseling.identity` 读取身份契约；Yuxi 模型模块中的身份类型 re-export 仅用于已发布 Python import 兼容，不能作为新代码依赖入口。
 - `students` 拥有学生档案、归属查询和档案关联会话用例。
 - `documents` 拥有文件型与手工型咨询记录草稿、追加修订、人工确认、不可变正式记录、追加更正和统一时间线装配。
 - `risks` 拥有辅导员人工风险事件及其档案当前风险投影；不执行自动风险判断或干预。
 - `administration` 只拥有业务管理员本部门的最小聚合查询，不读取个案正文。
 - `storage` 拥有心理辅导模型、DDL 和独立 `counseling` Schema 版本；新业务表不进入 Yuxi 的 `business` Schema 版本。
-- `integrations.yuxi` 是业务端口到 Yuxi 通用 Conversation 与模型能力的适配边界。依赖方向只能是 `counseling -> yuxi`；`yuxi` 不得导入 `counseling`。
+- `integrations.yuxi` 是业务端口到 Yuxi 通用 Conversation 与模型能力的适配边界。Yuxi 的 AI 链路可以消费有界业务身份读取能力，但不能创建用户、解释业务角色、管理部门或持有认证密钥逻辑。
 
 `server.storage_migration` 是迁移 composition root，先执行 Yuxi 平台迁移，再执行心理辅导领域迁移。Yuxi 中只保留已发布 v8→v9 的历史学生表迁移以兼容旧库；当前新库和后续辅导 Schema 均由业务包拥有。
 

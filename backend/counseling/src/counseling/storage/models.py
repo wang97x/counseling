@@ -13,7 +13,7 @@ from sqlalchemy import (
     func,
 )
 
-from yuxi.storage.postgres.models_business import JSON_VALUE, Base
+from yuxi.storage.postgres.base import Base, JSON_VALUE
 
 
 class StudentRecord(Base):

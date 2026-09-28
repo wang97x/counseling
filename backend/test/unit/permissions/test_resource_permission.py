@@ -1,19 +1,18 @@
 from types import SimpleNamespace
 
 import pytest
+from counseling.identity.knowledge import require_knowledge_base_permission, resolve_knowledge_base_permission
 
 from yuxi.permissions import (
     ResourcePermission,
     ResourcePermissionDenied,
-    require_knowledge_base_permission,
     resolve_agent_permission,
-    resolve_knowledge_base_permission,
     resolve_skill_permission,
 )
 
 
-def _user(uid="user-1", role="user", department_id=1):
-    return SimpleNamespace(uid=uid, role=role, department_id=department_id)
+def _user(uid="user-1", role="user", department_id=1, business_roles=None):
+    return SimpleNamespace(uid=uid, role=role, department_id=department_id, business_roles=business_roles or [])
 
 
 def _resource(created_by="owner", share_config=None):
@@ -28,9 +27,11 @@ def test_knowledge_base_global_read_and_department_manage():
     }
     resource = _resource(share_config=config)
 
-    assert resolve_knowledge_base_permission(_user(department_id=1), resource) == ResourcePermission.READ
-    managing_admin = _user(uid="admin-1", role="admin", department_id=1)
-    readonly_admin = _user(uid="other", role="admin", department_id=2)
+    assert resolve_knowledge_base_permission(
+        _user(department_id=1, business_roles=["counselor"]), resource
+    ) == ResourcePermission.READ
+    managing_admin = _user(uid="admin-1", department_id=1, business_roles=["business_admin"])
+    readonly_admin = _user(uid="other", department_id=2, business_roles=["business_admin"])
     assert resolve_knowledge_base_permission(managing_admin, resource) == ResourcePermission.MANAGE
     assert resolve_knowledge_base_permission(readonly_admin, resource) == ResourcePermission.READ
 
@@ -103,8 +104,10 @@ def test_user_agent_and_skill_scope_preserves_user_management():
 def test_personal_knowledge_base_only_owner_can_manage():
     resource = _resource(created_by="owner", share_config={"version": 2})
 
-    assert resolve_knowledge_base_permission(_user(uid="owner"), resource) == ResourcePermission.MANAGE
-    assert resolve_knowledge_base_permission(_user(uid="owner", role="admin"), resource) == ResourcePermission.MANAGE
+    assert resolve_knowledge_base_permission(
+        _user(uid="owner", business_roles=["counselor"]), resource
+    ) == ResourcePermission.MANAGE
+    assert resolve_knowledge_base_permission(_user(uid="owner", role="admin"), resource) == ResourcePermission.NONE
     assert resolve_knowledge_base_permission(_user(role="superadmin"), resource) == ResourcePermission.NONE
     assert resolve_knowledge_base_permission(_user(uid="other"), resource) == ResourcePermission.NONE
 
@@ -123,7 +126,7 @@ def test_personal_knowledge_base_without_owner_is_inaccessible():
     assert resolve_knowledge_base_permission(_user(uid=""), resource) == ResourcePermission.NONE
 
 
-def test_global_knowledge_base_share_remains_manage_for_admin():
+def test_global_team_knowledge_uses_explicit_business_roles():
     resource = _resource(
         share_config={
             "version": 2,
@@ -132,8 +135,12 @@ def test_global_knowledge_base_share_remains_manage_for_admin():
         }
     )
 
-    assert resolve_knowledge_base_permission(_user(role="admin"), resource) == ResourcePermission.MANAGE
-    assert resolve_knowledge_base_permission(_user(role="user"), resource) == ResourcePermission.READ
+    assert resolve_knowledge_base_permission(
+        _user(role="admin", business_roles=["business_admin"]), resource
+    ) == ResourcePermission.MANAGE
+    assert resolve_knowledge_base_permission(
+        _user(role="user", business_roles=["counselor"]), resource
+    ) == ResourcePermission.READ
 
 
 def test_team_knowledge_counselor_owner_is_read_only():
@@ -217,9 +224,14 @@ def test_manage_only_scope_also_grants_read_to_matching_users():
     )
 
     assert (
-        resolve_knowledge_base_permission(_user(role="admin", department_id=1), resource) == ResourcePermission.MANAGE
+        resolve_knowledge_base_permission(
+            _user(role="admin", department_id=1, business_roles=["business_admin"]), resource
+        )
+        == ResourcePermission.MANAGE
     )
-    assert resolve_knowledge_base_permission(_user(department_id=1), resource) == ResourcePermission.READ
+    assert resolve_knowledge_base_permission(
+        _user(department_id=1, business_roles=["counselor"]), resource
+    ) == ResourcePermission.READ
     assert resolve_knowledge_base_permission(_user(role="admin", department_id=2), resource) == ResourcePermission.NONE
 
 
@@ -240,11 +252,15 @@ def test_require_knowledge_base_permission_uses_resolved_resource_permission():
     )
 
     assert (
-        require_knowledge_base_permission(_user(role="admin"), resource, ResourcePermission.READ)
+        require_knowledge_base_permission(
+            _user(role="admin", business_roles=["counselor"]), resource, ResourcePermission.READ
+        )
         == ResourcePermission.READ
     )
     with pytest.raises(ResourcePermissionDenied):
-        require_knowledge_base_permission(_user(role="admin"), resource, ResourcePermission.MANAGE)
+        require_knowledge_base_permission(
+            _user(role="admin", business_roles=["counselor"]), resource, ResourcePermission.MANAGE
+        )
 
 
 def test_v2_scope_validation_rejects_disallowed_access_level():

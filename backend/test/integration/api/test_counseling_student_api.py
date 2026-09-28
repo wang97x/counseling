@@ -18,7 +18,7 @@ import asyncpg
 import pytest
 
 from yuxi.storage.postgres.manager import pg_manager
-from yuxi.utils.auth_utils import AuthUtils
+from counseling.identity.auth import AuthUtils
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 
@@ -57,7 +57,7 @@ async def test_student_owner_and_manager_access_are_isolated(test_client):
         _, manager = await actor(departments[0], "admin", '["business_admin"]')
         owner_id, owner = await actor(departments[0], "user", '["counselor"]')
         other_id, other = await actor(departments[0], "user", '["counselor"]')
-        _, tech = await actor(departments[0], "superadmin", '["technical_admin"]')
+        _, tech = await actor(departments[0], "superadmin", '["super_admin"]')
         _, foreign_manager = await actor(departments[1], "admin", '["business_admin"]')
         _, no_role = await actor(departments[0], "user", "[]")
         _, no_department_counselor = await actor(None, "user", '["counselor"]')

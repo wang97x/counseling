@@ -10,7 +10,8 @@ from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from yuxi.storage.postgres.manager import pg_manager
-from yuxi.storage.postgres.models_business import APIKey, ScheduledAgentJob, User
+from counseling.identity.models import APIKey, User
+from yuxi.storage.postgres.models_business import ScheduledAgentJob
 
 
 def _utc_now() -> dt:
@@ -144,7 +145,7 @@ class UserRepository:
     ) -> Annotated[list[tuple[User, str | None]], "用户列表，包含部门名称"]:
         """获取用户列表，包含部门名称"""
         async with self._session() as session:
-            from yuxi.storage.postgres.models_business import Department
+            from counseling.identity.models import Department
 
             query = (
                 select(User, Department.name.label("department_name"))
@@ -170,7 +171,7 @@ class UserRepository:
     ) -> tuple[list[tuple[User, str | None]], int]:
         """分页查询有效用户，并返回过滤后的总数。"""
         async with self._session() as session:
-            from yuxi.storage.postgres.models_business import Department
+            from counseling.identity.models import Department
 
             filters = [User.is_deleted == 0]
             if department_id is not None:
@@ -293,7 +294,9 @@ class UserRepository:
         """统计部门中管理员数量"""
         async with self._session() as session:
             query = select(func.count(User.id)).where(
-                User.department_id == department_id, User.role == "admin", User.is_deleted == 0
+                User.department_id == department_id,
+                User.business_roles.contains(["business_admin"]),
+                User.is_deleted == 0,
             )
             if exclude_user_id is not None:
                 query = query.where(User.id != exclude_user_id)

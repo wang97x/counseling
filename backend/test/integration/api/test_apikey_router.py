@@ -12,7 +12,7 @@ import pytest
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from yuxi.services.oidc_service import restore_deleted_oidc_user
+from counseling.identity.services.oidc import restore_deleted_oidc_user
 from yuxi.storage.postgres.models_business import APIKey, User
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]

@@ -7,18 +7,19 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, 
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.utils.auth_middleware import get_current_user, get_db, get_required_user
+from counseling.identity.http.dependencies import get_current_user, get_db, get_required_user
 from yuxi.config import UserConfig, UserConfigSchema
 from yuxi.repositories.agent_env_repository import AgentEnvRepository
-from yuxi.repositories.api_key_repository import (
+from counseling.identity.repositories.api_key import (
     APIKeyDepartmentConflict,
     APIKeyIdempotencyConflict,
     APIKeyRepository,
     APIKeySubjectUnavailable,
 )
 from yuxi.storage.minio import upload_image_to_minio
-from yuxi.storage.postgres.models_business import User
-from yuxi.utils.auth_utils import AuthUtils
+from counseling.identity.models import User
+from counseling.identity.auth import AuthUtils
+from counseling.identity.permissions import BusinessRole, has_business_role
 from yuxi.utils.datetime_utils import coerce_any_to_utc_datetime, format_utc_datetime, utc_now_naive
 
 user_router = APIRouter(prefix="/user", tags=["user"])
@@ -145,7 +146,7 @@ async def get_accessible_api_key(repository: APIKeyRepository, api_key_id: int, 
     access = await repository.get_accessible(
         api_key_id=api_key_id,
         requester_user_id=current_user.id,
-        is_superadmin=current_user.role == "superadmin",
+        is_superadmin=has_business_role(current_user, BusinessRole.SUPER_ADMIN),
     )
     if access.api_key is not None:
         return access.api_key
@@ -163,7 +164,7 @@ async def list_api_keys(
 ):
     api_keys, total = await APIKeyRepository(db).list_visible(
         requester_user_id=current_user.id,
-        is_superadmin=current_user.role == "superadmin",
+        is_superadmin=has_business_role(current_user, BusinessRole.SUPER_ADMIN),
         skip=skip,
         limit=limit,
     )
@@ -180,7 +181,7 @@ async def create_api_key(
     current_user: User = Depends(get_required_user),
     db: AsyncSession = Depends(get_db),
 ):
-    if data.user_id and data.user_id != current_user.id and current_user.role != "superadmin":
+    if data.user_id and data.user_id != current_user.id and not has_business_role(current_user, BusinessRole.SUPER_ADMIN):
         raise HTTPException(status_code=403, detail="无权为其他用户创建 API Key")
 
     target_user_id = data.user_id or current_user.id

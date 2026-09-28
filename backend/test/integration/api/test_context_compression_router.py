@@ -16,7 +16,7 @@ from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from server.routers.chat_router import chat
-from server.utils.auth_middleware import get_db, get_required_user
+from counseling.identity.http.dependencies import get_db, get_required_user
 from yuxi.services import context_compression_service
 from yuxi.storage.postgres.manager import pg_manager
 from yuxi.storage.postgres.models_business import Conversation, Project, User

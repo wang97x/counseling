@@ -81,7 +81,7 @@ PRD 第 3 至 5 章的 Commit / Diff 是业务隐喻。工程上需要记录来�
 
 ## 角色、隐私与危机
 
-目标业务角色压缩为 `super_admin`（超级管理）、`business_admin`（业务管理）和 `counselor`（辅导师）。用户统一从业务侧登录，根据显式角色获得对应界面和后端权限；Yuxi 不拥有或解释业务角色。现有源码中的 `technical_admin` 及平台 `user/admin/superadmin` 是迁移前兼容事实，不能用作目标授权模型。
+业务角色为 `super_admin`（超级管理）、`business_admin`（业务管理）和 `counselor`（辅导师）。用户统一从业务侧登录，根据显式角色获得对应界面和后端权限；账号、OIDC、API Key、部门及业务角色由 `counseling.identity` 拥有。Yuxi 不拥有或解释业务角色，平台 `user/admin/superadmin` 只作为既有 wire 兼容字段，不能授予业务权限。
 
 - 辅导师访问本人负责且获准的学生档案，维护草稿、发起生成并确认本人有权处理的文书。
 - 业务管理维护成员、最小档案元数据、业务统计和团队知识库，不读取个案正文、附件、文书正文或个人知识库。
@@ -139,7 +139,7 @@ PRD 第 8、10 章的数字是目标值，验收前需固定测试数据、环�
 - [学生档案模型](https://github.com/wang97x/counseling/blob/main/backend/counseling/src/counseling/storage/models.py)及业务包中的 service/repository 提供最小档案、负责人和部门边界。现有 `StudentRecord`、`/students` 命名继续使用，不能因 PRD 使用“来访者”而直接重命名持久化结构。
 - [工作台服务](https://github.com/wang97x/counseling/blob/main/web/src/domains/counseling/workspaceService.js)只装配真实 API 适配器。[真实 API 适配器](https://github.com/wang97x/counseling/blob/main/web/src/domains/counseling/services/apiAdapter.js)已接入手工咨询草稿、确认归档、追加更正、人工风险、阶段结束和业务管理员聚合统计。文件记录与 AI 摘要接口继续保留，但不在当前 P0 工作台主路径展示。
 - 当前 `StudentWorkspaceView` 使用学生信息、待确认草稿和统一时间线组成单页档案；主操作为手工咨询记录、人工风险和阶段结束，不再从业务工作台发起关联 Agent 会话。
-- 当前前端通过统一能力映射隔离业务入口和 Yuxi 技术入口，但仍保留迁移前平台角色与 `technical_admin` 兼容路径；目标三角色数据迁移及后端逐项授权尚未完成。
+- 前端通过统一能力映射隔离业务入口和 Yuxi 技术入口，只根据显式 `super_admin`、`business_admin`、`counselor` 派生入口；缺失业务角色时不从平台角色回退授权。Schema v3 把历史 `technical_admin` 转换为 `super_admin`。
 - P0 手工链路已经通过真实 HTTP 与 PostgreSQL integration；真实浏览器验收仍须完成。保留的文件生成代码和演示交互不能证明 P1 文件/模型联调、量表计分或自动危机识别已经交付，真实接口失败不得回退演示数据。
 
 具体功能实现时，更新其源码、测试和机制说明；产品约束保持目标边界，验证方法见[心理辅导业务验证](./testing-guidelines.md#心理辅导业务验证)。

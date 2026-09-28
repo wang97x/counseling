@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import Integer, String, case, cast, distinct, func, literal, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from counseling.identity.models import User
 from yuxi.repositories.agent_repository import AgentRepository
 from yuxi.storage.minio.client import normalize_public_minio_url
 from yuxi.storage.postgres.models_business import (
@@ -16,7 +17,6 @@ from yuxi.storage.postgres.models_business import (
     Message,
     MessageFeedback,
     ToolCall,
-    User,
 )
 from yuxi.utils.datetime_utils import UTC, ensure_shanghai, shanghai_now, utc_now
 

@@ -11,7 +11,7 @@ from yuxi.storage.postgres.manager import pg_manager
 from yuxi.utils import logger
 from yuxi.agents.backends.sandbox import init_sandbox_provider, shutdown_sandbox_provider
 from yuxi import get_version
-from yuxi.utils.auth_utils import AuthUtils
+from counseling.identity.auth import AuthUtils
 
 
 class RequiredStartupComponentError(RuntimeError):

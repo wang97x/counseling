@@ -9,7 +9,7 @@ import uuid
 import asyncpg
 import pytest
 
-from yuxi.utils.auth_utils import AuthUtils
+from counseling.identity.auth import AuthUtils
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 
@@ -34,7 +34,7 @@ async def test_business_roles_compose_without_expanding_legacy_admin_access(test
             INSERT INTO users
                 (username, uid, password_hash, role, business_roles, department_id,
                  login_failed_count, is_deleted, created_at)
-            VALUES ($1, $1, 'test', 'superadmin', '["technical_admin"]'::jsonb, $2, 0, 0, NOW())
+            VALUES ($1, $1, 'test', 'superadmin', '["super_admin"]'::jsonb, $2, 0, 0, NOW())
             RETURNING id
             """,
             super_uid,
@@ -56,7 +56,7 @@ async def test_business_roles_compose_without_expanding_legacy_admin_access(test
 
         profile_response = await test_client.get("/api/auth/me", headers=super_headers)
         assert profile_response.status_code == 200, profile_response.text
-        assert profile_response.json()["business_roles"] == ["technical_admin"]
+        assert profile_response.json()["business_roles"] == ["super_admin"]
 
         forbidden_response = await test_client.post(
             "/api/auth/users",

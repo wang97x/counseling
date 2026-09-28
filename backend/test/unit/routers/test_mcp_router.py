@@ -6,7 +6,7 @@ from yuxi.agents.mcp.service import MCPServerNotFoundError
 from yuxi.storage.postgres.models_business import User
 
 from server.routers.mcp_router import mcp
-from server.utils.auth_middleware import get_admin_user, get_db, get_required_user
+from counseling.identity.http.dependencies import get_admin_user, get_db, get_required_user
 
 
 def _build_app(*, allow_admin: bool = True) -> FastAPI:
@@ -26,6 +26,7 @@ def _build_app(*, allow_admin: bool = True) -> FastAPI:
             uid="admin",
             password_hash="x",
             role="admin",
+            business_roles=["super_admin"],
         )
 
     async def fake_required_user():
@@ -34,6 +35,7 @@ def _build_app(*, allow_admin: bool = True) -> FastAPI:
             uid="admin" if allow_admin else "user",
             password_hash="x",
             role="admin" if allow_admin else "user",
+            business_roles=["super_admin"] if allow_admin else [],
         )
 
     app.dependency_overrides[get_db] = fake_db

@@ -25,10 +25,10 @@ from counseling.storage.models import (
     CounselingRecordRevision,
 )
 from counseling.students.repository import StudentRepository
-from yuxi.permissions.business_roles import BusinessCapability, resolve_business_capabilities
+from counseling.identity.permissions import BusinessCapability, resolve_business_capabilities
 from yuxi.services.ocr_service import parse_document
 from yuxi.storage.minio.client import get_minio_client
-from yuxi.storage.postgres.models_business import User
+from counseling.identity.models import User
 from yuxi.utils.datetime_utils import format_utc_datetime, utc_now_naive
 from yuxi.utils.upload_utils import read_upload_with_limit
 

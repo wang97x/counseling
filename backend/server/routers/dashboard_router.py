@@ -6,9 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.utils.auth_middleware import get_db, get_superadmin_user
+from counseling.identity.http.dependencies import get_db, get_superadmin_user
 from yuxi.services.dashboard_service import DashboardService
-from yuxi.storage.postgres.models_business import User
+from counseling.identity.models import User
 
 dashboard = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 

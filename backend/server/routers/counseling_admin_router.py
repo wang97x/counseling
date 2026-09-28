@@ -4,8 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from counseling.administration.service import get_department_summary
-from server.utils.auth_middleware import get_db, get_required_user
-from yuxi.storage.postgres.models_business import User
+from counseling.identity.http.dependencies import get_db, get_required_user
+from counseling.identity.models import User
 
 counseling_admin = APIRouter(prefix="/counseling/admin", tags=["counseling-admin"])
 

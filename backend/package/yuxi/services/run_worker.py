@@ -57,9 +57,9 @@ from yuxi.services.workdir_service import (
     resolve_conversation_workdir_path,
 )
 from yuxi.storage.postgres.manager import pg_manager
-from yuxi.storage.postgres.models_business import AgentRun, Conversation, Message, User
+from counseling.identity.models import User
+from yuxi.storage.postgres.models_business import AgentRun, Conversation, Message
 from yuxi.storage.redis import get_arq_redis_settings
-from yuxi.utils.auth_utils import AuthUtils
 from yuxi.utils.datetime_utils import utc_now_naive
 from yuxi.utils.logging_config import logger
 from yuxi.utils.thread_utils import extract_thread_id
@@ -1539,7 +1539,6 @@ async def _worker_startup(ctx):
 
     if not isinstance(ctx, dict):
         raise TypeError("ARQ worker context 必须是字典")
-    AuthUtils.require_security_secrets()
     ctx["worker_id"] = WORKER_ID
     pg_manager.initialize()
     await pg_manager.require_current_schema()

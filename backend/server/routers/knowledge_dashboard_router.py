@@ -5,9 +5,9 @@ import traceback
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from server.utils.auth_middleware import get_superadmin_user
+from counseling.identity.http.dependencies import get_superadmin_user
 from yuxi.services.knowledge_dashboard_service import get_knowledge_stats
-from yuxi.storage.postgres.models_business import User
+from counseling.identity.models import User
 from yuxi.utils.logging_config import logger
 
 

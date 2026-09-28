@@ -20,7 +20,7 @@ export const useUserStore = defineStore('user', () => {
   // 计算属性
   const isLoggedIn = computed(() => !!token.value)
   const isAdmin = computed(() => userRole.value === 'admin' || userRole.value === 'superadmin')
-  const isSuperAdmin = computed(() => userRole.value === 'superadmin')
+  const isSuperAdmin = computed(() => businessRoles.value.includes('super_admin'))
   const canManagePersonalKnowledge = computed(() => businessRoles.value.includes('counselor'))
   const canManageTeamKnowledge = computed(() => businessRoles.value.includes('business_admin'))
   const frontendAccess = computed(() => resolveFrontendAccess(userRole.value, businessRoles.value))
@@ -43,7 +43,7 @@ export const useUserStore = defineStore('user', () => {
     phoneNumber.value = data.phone_number || ''
     avatar.value = data.avatar || ''
     userRole.value = data.role
-    businessRoles.value = data.business_roles ?? (data.role === 'user' ? ['counselor'] : [])
+    businessRoles.value = data.business_roles ?? []
     departmentId.value = data.department_id || null
     departmentName.value = data.department_name || ''
     localStorage.setItem('user_token', data.access_token)
@@ -197,8 +197,7 @@ export const useUserStore = defineStore('user', () => {
       phoneNumber.value = userData.phone_number || ''
       avatar.value = userData.avatar || ''
       userRole.value = userData.role
-      businessRoles.value =
-        userData.business_roles ?? (userData.role === 'user' ? ['counselor'] : [])
+      businessRoles.value = userData.business_roles ?? []
       departmentId.value = userData.department_id || null
       departmentName.value = userData.department_name || ''
 

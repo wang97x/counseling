@@ -3,10 +3,10 @@ from pydantic import BaseModel
 from yuxi.knowledge.runtime import knowledge_base
 from yuxi.knowledge.base import KBNotFoundError
 from yuxi.knowledge.read_models import KnowledgeBaseSummary
-from yuxi.storage.postgres.models_business import User
+from counseling.identity.models import User
 from yuxi.utils import logger
 
-from server.utils.auth_middleware import get_required_user
+from counseling.identity.http.dependencies import get_required_user
 
 external_kb = APIRouter(prefix="/knowledge", tags=["knowledge"])
 

@@ -5,7 +5,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from yuxi.agents.context import BaseContext, filter_config_by_role, resolve_agent_resource_options
 from yuxi.repositories.agent_repository import AGENT_RESOURCE_CONFIG_FIELDS
-from yuxi.storage.postgres.models_business import User
+from counseling.identity.models import User
 
 
 async def prepare_agent_config_write(

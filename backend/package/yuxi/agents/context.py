@@ -569,7 +569,7 @@ async def prepare_agent_runtime_context(
         return context
 
     from yuxi.agents.skills.runtime import resolve_runtime_skills_for_context
-    from yuxi.repositories.user_repository import UserRepository
+    from counseling.identity.repositories.user import UserRepository
     from yuxi.storage.postgres.manager import pg_manager
 
     resource_fields = AGENT_RUNTIME_RESOURCE_FIELDS

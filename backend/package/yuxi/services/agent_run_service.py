@@ -50,7 +50,8 @@ from yuxi.services.run_queue_service import (
     publish_cancel_signals,
 )
 from yuxi.storage.postgres.manager import pg_manager
-from yuxi.storage.postgres.models_business import Message, User, build_agent_run_timing
+from counseling.identity.models import User
+from yuxi.storage.postgres.models_business import Message, build_agent_run_timing
 from yuxi.utils.datetime_utils import utc_now_naive
 from yuxi.utils.hash_utils import hash_id
 from yuxi.utils.logging_config import logger

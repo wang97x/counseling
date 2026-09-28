@@ -9,7 +9,7 @@ from typing import Any
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from yuxi.storage.postgres.models_business import APIKey, User
+from counseling.identity.models import APIKey, User
 from yuxi.utils.datetime_utils import utc_now_naive
 
 

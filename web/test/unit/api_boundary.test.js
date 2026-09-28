@@ -241,7 +241,9 @@ test('用户管理分页 API 只请求当前页并编码服务端筛选条件', 
 
     setActivePinia(createPinia())
     const { useUserStore } = await server.ssrLoadModule('/src/stores/user.js')
-    useUserStore().userRole = 'superadmin'
+    const userStore = useUserStore()
+    userStore.userRole = 'superadmin'
+    userStore.businessRoles = ['super_admin']
     const { authApi } = await server.ssrLoadModule('/src/apis/auth_api.js')
 
     const page = await authApi.getUsersPage({

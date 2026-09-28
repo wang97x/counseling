@@ -5,10 +5,11 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from yuxi.storage.postgres.manager import pg_manager
-from yuxi.storage.postgres.models_business import APIKey, User
+from counseling.identity.models import APIKey, User
 from yuxi.utils.datetime_utils import utc_now_naive
 
-from yuxi.utils.auth_utils import AuthUtils
+from counseling.identity.auth import AuthUtils
+from counseling.identity.permissions import BusinessRole, has_business_role
 
 # 定义OAuth2密码承载器，指定token URL
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token", auto_error=False)
@@ -122,17 +123,28 @@ async def get_required_user(user: User | None = Depends(get_current_user)):
 
 # 获取管理员用户
 async def get_admin_user(current_user: User = Depends(get_required_user)):
-    if current_user.role not in ["admin", "superadmin"]:
+    """要求具有系统级 AI 管理权限。"""
+    if not has_business_role(current_user, BusinessRole.SUPER_ADMIN):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="需要管理员权限",
+            detail="需要超级管理权限",
         )
+    return current_user
+
+
+async def get_identity_admin_user(current_user: User = Depends(get_required_user)):
+    """允许业务管理或超级管理维护授权范围内的账号。"""
+    if not any(
+        has_business_role(current_user, role)
+        for role in (BusinessRole.BUSINESS_ADMIN, BusinessRole.SUPER_ADMIN)
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="需要用户管理权限")
     return current_user
 
 
 # 获取超级管理员用户
 async def get_superadmin_user(current_user: User = Depends(get_required_user)):
-    if current_user.role != "superadmin":
+    if not has_business_role(current_user, BusinessRole.SUPER_ADMIN):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="需要超级管理员权限",

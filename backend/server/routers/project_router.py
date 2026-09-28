@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.utils.auth_middleware import get_db, get_required_user
+from counseling.identity.http.dependencies import get_db, get_required_user
 from yuxi.services.project_service import (
     create_project_view,
     delete_project_view,
@@ -12,7 +12,7 @@ from yuxi.services.project_service import (
     list_projects_view,
     rename_project_view,
 )
-from yuxi.storage.postgres.models_business import User
+from counseling.identity.models import User
 
 projects = APIRouter(prefix="/projects", tags=["projects"])
 

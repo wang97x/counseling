@@ -9,8 +9,10 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 os.environ.setdefault("OPENAI_API_KEY", "dummy")
 
-from yuxi.services import oidc_service
-from yuxi.storage.postgres.models_business import User
+from counseling.identity import models as identity_models
+from counseling.identity.services import oidc as oidc_service
+
+User = identity_models.User
 
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.unit]

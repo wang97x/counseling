@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, Upl
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.utils.auth_middleware import get_db, get_required_user
+from counseling.identity.http.dependencies import get_db, get_required_user
 from counseling.integrations.yuxi import YuxiConversationAdapter, YuxiGenerationAdapter
 from counseling.documents.service import (
     CounselingConflictError,
@@ -42,7 +42,7 @@ from counseling.students.service import (
     update_student,
 )
 from counseling.risks.service import RiskConflictError, create_risk_event, list_risk_events
-from yuxi.storage.postgres.models_business import User
+from counseling.identity.models import User
 
 counseling = APIRouter(prefix="/counseling/students", tags=["counseling"])
 

@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from server.utils.auth_middleware import get_admin_user
+from counseling.identity.http.dependencies import get_admin_user
 from server.utils.knowledge_permissions import require_knowledge_base_read
 from server.utils.knowledge_response import serialize_knowledge_base
 from yuxi.knowledge.graphs.milvus_graph_service import MilvusGraphService
 from yuxi.knowledge.runtime import knowledge_base
-from yuxi.storage.postgres.models_business import User
+from counseling.identity.models import User
 from yuxi.utils.logging_config import logger
 
 graph = APIRouter(prefix="/graph", tags=["graph"])

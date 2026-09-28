@@ -381,7 +381,7 @@ async def test_prepare_agent_runtime_context_filters_resources_and_derives_runti
     )
     monkeypatch.setitem(
         sys.modules,
-        "yuxi.repositories.user_repository",
+        "counseling.identity.repositories.user",
         types.SimpleNamespace(UserRepository=FakeUserRepository),
     )
     monkeypatch.setitem(
@@ -478,7 +478,7 @@ async def test_prepare_agent_runtime_context_clears_resources_for_missing_user(m
     )
     monkeypatch.setitem(
         sys.modules,
-        "yuxi.repositories.user_repository",
+        "counseling.identity.repositories.user",
         types.SimpleNamespace(UserRepository=FakeUserRepository),
     )
     monkeypatch.setitem(

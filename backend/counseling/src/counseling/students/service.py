@@ -7,8 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from counseling.students.repository import StudentRepository
 from counseling.storage.models import CounselingAuditEvent
-from yuxi.permissions.business_roles import BusinessCapability, resolve_business_capabilities
-from yuxi.storage.postgres.models_business import User
+from counseling.identity.permissions import BusinessCapability, resolve_business_capabilities
+from counseling.identity.models import User
 from yuxi.utils.datetime_utils import format_utc_datetime
 
 

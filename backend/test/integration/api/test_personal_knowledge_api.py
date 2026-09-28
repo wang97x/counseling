@@ -9,7 +9,7 @@ import uuid
 import asyncpg
 import pytest
 
-from yuxi.utils.auth_utils import AuthUtils
+from counseling.identity.auth import AuthUtils
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 
@@ -29,7 +29,7 @@ async def test_personal_knowledge_two_users_and_files_are_isolated(test_client) 
         for actor, role, roles in (
             ("a", "user", ["counselor"]),
             ("b", "user", ["counselor"]),
-            ("technical", "superadmin", ["technical_admin"]),
+            ("technical", "superadmin", ["super_admin"]),
             ("no_capability", "user", []),
         ):
             uid = f"personal_{actor}_{suffix}"
@@ -144,12 +144,14 @@ async def test_personal_knowledge_two_users_and_files_are_isolated(test_client) 
         )
         assert downloaded.status_code == 200 and downloaded.content == content
 
-        for actor in ("a", "b", "technical"):
+        for actor in ("a", "b"):
             listed = await test_client.get("/api/knowledge/databases", headers=actors[actor]["headers"])
             assert listed.status_code == 200, listed.text
             visible = {row["kb_id"] for row in listed.json()["databases"]}
             assert (a_id in visible) == (actor == "a")
             assert (b_id in visible) == (actor == "b")
+        listed = await test_client.get("/api/knowledge/databases", headers=actors["technical"]["headers"])
+        assert listed.status_code == 403, listed.text
 
         forbidden_reads = [
             f"/api/knowledge/databases/{a_id}",

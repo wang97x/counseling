@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from server.utils.auth_middleware import get_db, get_required_user
+from counseling.identity.http.dependencies import get_db, get_required_user
 from yuxi.services.workspace_service import (
     create_workspace_directory,
     delete_workspace_path,
@@ -18,7 +18,7 @@ from yuxi.services.workspace_service import (
     upload_workspace_files,
     write_workspace_file_content,
 )
-from yuxi.storage.postgres.models_business import User
+from counseling.identity.models import User
 
 workspace = APIRouter(prefix="/workspace", tags=["workspace"])
 workspace_knowledge = APIRouter(prefix="/workspace", tags=["workspace"])

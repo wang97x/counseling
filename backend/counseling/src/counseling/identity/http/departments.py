@@ -9,13 +9,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.utils.auth_middleware import get_admin_user, get_db, get_superadmin_user
-from yuxi.repositories.department_repository import DepartmentRepository
-from yuxi.repositories.user_repository import UserRepository
-from yuxi.services.identity_admin_service import IdentityConflictError, create_department_with_admin
-from yuxi.services.operation_log_service import log_operation
-from yuxi.services.user_identity_service import is_valid_phone_number
-from yuxi.storage.postgres.models_business import User
+from counseling.identity.http.dependencies import get_db, get_identity_admin_user as get_admin_user, get_superadmin_user
+from counseling.identity.repositories.department import DepartmentRepository
+from counseling.identity.repositories.user import UserRepository
+from counseling.identity.services.admin import IdentityConflictError, create_department_with_admin
+from counseling.identity.services.audit import log_operation
+from counseling.identity.services.user_identity import is_valid_phone_number
+from counseling.identity.models import User
 
 # 创建路由器
 department = APIRouter(prefix="/departments", tags=["department"])

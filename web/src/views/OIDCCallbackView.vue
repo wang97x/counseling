@@ -74,7 +74,7 @@ const handleCallback = async () => {
     userStore.phoneNumber = tokenData.phone_number || ''
     userStore.avatar = tokenData.avatar || ''
     userStore.userRole = tokenData.role || 'user'
-    userStore.businessRoles = tokenData.business_roles ?? (tokenData.role === 'user' ? ['counselor'] : [])
+    userStore.businessRoles = tokenData.business_roles ?? []
     userStore.departmentId = tokenData.department_id || null
     userStore.departmentName = tokenData.department_name || ''
 

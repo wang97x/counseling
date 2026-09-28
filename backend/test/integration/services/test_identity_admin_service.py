@@ -11,7 +11,7 @@ from sqlalchemy import delete, func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from yuxi.services.identity_admin_service import (
+from counseling.identity.services.admin import (
     DepartmentAdminCreation,
     IdentityConflictError,
     SystemAlreadyInitializedError,

@@ -11,11 +11,11 @@ from yuxi.services.agent_run_service import AgentRunWaitTimeout, await_agent_run
 from yuxi.services.input_message_service import build_chat_input_message
 from yuxi.services.run_queue_service import list_run_stream_events
 from yuxi.services.run_submission_service import RunOrigin, RunSubmissionCommand, submit_run_command
-from yuxi.storage.postgres.models_business import User
+from counseling.identity.models import User
 from yuxi.utils.hash_utils import hash_id
 from yuxi.utils.logging_config import logger
 
-from server.utils.auth_middleware import get_db, get_required_user
+from counseling.identity.http.dependencies import get_db, get_required_user
 
 agent_invocation_eval_router = APIRouter(prefix="/agent-invocation/eval", tags=["agent-invocation"])
 

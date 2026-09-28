@@ -1,8 +1,8 @@
 import pytest
 from pydantic import ValidationError
 
-from server.routers.auth_dept_router import DepartmentCreate
-from server.routers.auth_router import InitializeAdmin, UserCreate, UserUpdate
+from counseling.identity.http.departments import DepartmentCreate
+from counseling.identity.http.auth import InitializeAdmin, UserCreate, UserUpdate
 
 
 @pytest.mark.parametrize(

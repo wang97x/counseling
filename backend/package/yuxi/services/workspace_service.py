@@ -13,7 +13,7 @@ from starlette.background import BackgroundTask
 from yuxi.agents.backends.paths import runtime_user_data_path
 from yuxi.repositories.project_repository import ProjectRepository
 from yuxi.services.file_preview import render_file_preview
-from yuxi.storage.postgres.models_business import User
+from counseling.identity.models import User
 from yuxi.utils.datetime_utils import utc_isoformat_from_timestamp
 from yuxi.utils.filepreview import (
     MAX_BINARY_PREVIEW_SIZE_BYTES,

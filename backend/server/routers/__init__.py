@@ -4,8 +4,9 @@ from server.routers.agent_invocation_call_router import agent_invocation_call_ro
 from server.routers.agent_invocation_channel_router import agent_invocation_channel_router
 from server.routers.agent_invocation_eval_router import agent_invocation_eval_router
 from server.routers.agent_router import agent_router
-from server.routers.auth_dept_router import department
-from server.routers.auth_router import auth
+from counseling.identity.http.auth import auth
+from counseling.identity.http.departments import department
+from counseling.identity.http.user_settings import user_router
 from server.routers.chat_router import chat
 from server.routers.counseling_router import counseling
 from server.routers.counseling_admin_router import counseling_admin
@@ -25,7 +26,6 @@ from server.routers.skill_router import skills, user_skills
 from server.routers.system_router import system
 from server.routers.system_task_router import tasks
 from server.routers.tool_router import tools
-from server.routers.user_router import user_router
 from server.routers.workspace_router import workspace, workspace_knowledge
 
 router = APIRouter()

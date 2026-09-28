@@ -81,7 +81,9 @@ test('知识库文件夹移动与重命名 API 使用管理端 PUT 契约', asyn
   try {
     setActivePinia(createPinia())
     const { useUserStore } = await server.ssrLoadModule('/src/stores/user.js')
-    useUserStore().userRole = 'superadmin'
+    const userStore = useUserStore()
+    userStore.userRole = 'superadmin'
+    userStore.businessRoles = ['super_admin']
     const { databaseApi, documentApi } = await server.ssrLoadModule('/src/apis/knowledge_api.js')
     await databaseApi.detectVirtualFolders('kb-1')
     await databaseApi.startVirtualFolderMigration('kb-1')

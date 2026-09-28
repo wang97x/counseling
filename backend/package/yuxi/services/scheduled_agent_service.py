@@ -22,7 +22,8 @@ from yuxi.repositories.scheduled_agent_repository import ScheduledAgentRepositor
 from yuxi.services.input_message_service import build_chat_input_message
 from yuxi.services.run_submission_service import RunOrigin, RunSubmissionCommand, submit_run_command
 from yuxi.storage.postgres.manager import pg_manager
-from yuxi.storage.postgres.models_business import ScheduledAgentJob, ScheduledAgentRun, User
+from counseling.identity.models import User
+from yuxi.storage.postgres.models_business import ScheduledAgentJob, ScheduledAgentRun
 from yuxi.utils.datetime_utils import format_utc_datetime, utc_now_naive
 from yuxi.utils.logging_config import logger
 

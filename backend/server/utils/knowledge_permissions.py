@@ -2,24 +2,26 @@
 
 from fastapi import Depends, HTTPException
 
-from server.utils.auth_middleware import get_required_user
+from counseling.identity.http.dependencies import get_required_user
+from counseling.identity.knowledge import resolve_knowledge_base_permission
+from counseling.identity.permissions import BusinessCapability, resolve_business_capabilities
 from yuxi.knowledge.read_models import KnowledgeBaseDetail
 from yuxi.knowledge.runtime import knowledge_base
 from yuxi.permissions import (
     ResourcePermission,
-    BusinessCapability,
-    resolve_business_capabilities,
     ResourcePermissionDenied,
-    require_knowledge_base_permission,
 )
-from yuxi.storage.postgres.models_business import User
+from counseling.identity.models import User
 
 
 async def get_knowledge_user(current_user: User = Depends(get_required_user)) -> User:
     """允许管理员、辅导人员及业务管理员进入知识管理。"""
     capabilities = resolve_business_capabilities(current_user)
-    if current_user.role not in {"admin", "superadmin"} and not capabilities.intersection(
-        {BusinessCapability.MANAGE_PERSONAL_KNOWLEDGE, BusinessCapability.MANAGE_TEAM_KNOWLEDGE}
+    if not capabilities.intersection(
+        {
+            BusinessCapability.MANAGE_PERSONAL_KNOWLEDGE,
+            BusinessCapability.MANAGE_TEAM_KNOWLEDGE,
+        }
     ):
         raise HTTPException(status_code=403, detail="需要知识库业务权限")
     return current_user
@@ -37,7 +39,9 @@ async def ensure_knowledge_base_permission(
         raise HTTPException(status_code=404, detail=f"知识库 {kb_id} 不存在")
 
     try:
-        require_knowledge_base_permission(current_user, db_info, required)
+        actual = resolve_knowledge_base_permission(current_user, db_info)
+        if actual.value == "none" or (required == ResourcePermission.MANAGE and actual != required):
+            raise ResourcePermissionDenied(f"需要 {required.value} 权限，当前为 {actual.value}")
     except ResourcePermissionDenied as error:
         raise HTTPException(status_code=403, detail="无权操作该知识库") from error
     return db_info

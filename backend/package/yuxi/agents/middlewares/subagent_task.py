@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from yuxi.repositories.agent_repository import AgentRepository
 from yuxi.repositories.agent_run_repository import TERMINAL_RUN_STATUSES
-from yuxi.repositories.user_repository import UserRepository
+from counseling.identity.repositories.user import UserRepository
 from yuxi.services.input_message_service import build_chat_input_message
 from yuxi.storage.postgres.manager import pg_manager
 from yuxi.storage.postgres.models_business import Agent

@@ -17,11 +17,11 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from yuxi.permissions.business_roles import default_business_roles_for_platform_role
-from yuxi.repositories.user_repository import UserRepository
-from yuxi.services.operation_log_service import log_operation
-from yuxi.storage.postgres.models_business import Department, User
-from yuxi.utils.auth_utils import AuthUtils
+from counseling.identity.permissions import BusinessRole
+from counseling.identity.repositories.user import UserRepository
+from counseling.identity.services.audit import log_operation
+from counseling.identity.models import Department, User
+from counseling.identity.auth import AuthUtils
 from yuxi.utils.datetime_utils import utc_now_naive
 from yuxi.utils.logging_config import logger
 
@@ -672,9 +672,7 @@ async def create_oidc_user(db, user_info: dict, department_id: int | None = None
                     "avatar": None,
                     "password_hash": password_hash,
                     "role": oidc_config.default_role,
-                    "business_roles": [
-                        role.value for role in default_business_roles_for_platform_role(oidc_config.default_role)
-                    ],
+                    "business_roles": [BusinessRole.COUNSELOR.value],
                     "department_id": department_id,
                     "last_login": utc_now_naive(),
                 }

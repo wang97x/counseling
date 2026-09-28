@@ -13,7 +13,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 from yuxi.repositories.scheduled_agent_repository import ScheduledAgentRepository
-from yuxi.repositories.user_repository import UserRepository
+from counseling.identity.repositories.user import UserRepository
 from yuxi.services import scheduled_agent_service as service
 from yuxi.services.scheduled_agent_service import _claim_due_run, _create_run_record
 from yuxi.storage.postgres.models_business import (

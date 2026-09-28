@@ -19,7 +19,7 @@ from yuxi.agents.backends.paths import (
     workspace_scope_from_runtime_path,
 )
 from yuxi.agents.skills.service import ResolvedSkill, list_accessible_skills
-from yuxi.repositories.user_repository import UserRepository
+from counseling.identity.repositories.user import UserRepository
 from yuxi.services.file_preview import render_file_preview
 from yuxi.services.workdir_service import resolve_authorized_workdir
 from yuxi.utils.filepreview import (

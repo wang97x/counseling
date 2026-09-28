@@ -33,23 +33,22 @@ from yuxi.knowledge.utils.sample_question_utils import (
     get_database_sample_questions,
 )
 from yuxi.knowledge.utils.url_fetcher import fetch_url_content
+from counseling.identity.knowledge import resolve_knowledge_base_permission
+from counseling.identity.permissions import BusinessCapability, resolve_business_capabilities
 from yuxi.permissions import (
-    BusinessCapability,
     ResourcePermission,
     is_personal_knowledge_base,
-    resolve_business_capabilities,
-    resolve_knowledge_base_permission,
 )
 from yuxi.services.knowledge_folder_service import knowledge_folder_service
 from yuxi.services.ocr_service import parse_document
 from yuxi.services.task_service import tasker
 from yuxi.services.workspace_service import read_workspace_file_bytes
 from yuxi.storage.minio.client import MinIOClient, StorageError, aupload_file_to_minio, get_minio_client
-from yuxi.storage.postgres.models_business import User
+from counseling.identity.models import User
 from yuxi.utils import logger
 from yuxi.utils.upload_utils import MAX_UPLOAD_SIZE_BYTES, read_upload_with_limit, write_upload_to_path
 
-from server.utils.auth_middleware import get_admin_user, get_db, get_required_user
+from counseling.identity.http.dependencies import get_admin_user, get_db, get_required_user
 from sqlalchemy.ext.asyncio import AsyncSession
 from server.utils.knowledge_response import serialize_knowledge_base, serialize_knowledge_base_list
 from server.utils.knowledge_permissions import (
@@ -162,7 +161,7 @@ async def _delete_document_storage_objects(kb_id: str, doc_id: str, file_path: s
 
 async def _require_manage_permission_if_kb_id(kb_id: str | None, current_user: User) -> None:
     """辅导人员上传必须指定知识库，指定后统一校验管理权限。"""
-    if not kb_id and current_user.role not in {"admin", "superadmin"}:
+    if not kb_id and BusinessCapability.MANAGE_SYSTEM not in resolve_business_capabilities(current_user):
         raise HTTPException(status_code=400, detail="请选择目标知识库")
     if kb_id:
         await _ensure_database_permission(kb_id, current_user, ResourcePermission.MANAGE)
@@ -261,10 +260,10 @@ async def create_database(
     current_user: User = Depends(get_knowledge_user),
 ):
     """创建知识库"""
-    if current_user.role not in {"admin", "superadmin"}:
+    capabilities = resolve_business_capabilities(current_user)
+    if BusinessCapability.MANAGE_SYSTEM not in capabilities:
         if kb_type != "milvus":
             raise HTTPException(status_code=403, detail="辅导知识库仅支持本地文档知识库")
-        capabilities = resolve_business_capabilities(current_user)
         personal = share_config is not None and is_personal_knowledge_base({"share_config": share_config})
         if share_config is None and BusinessCapability.MANAGE_TEAM_KNOWLEDGE not in capabilities:
             personal = True
@@ -452,7 +451,10 @@ async def update_database_info(
     if is_personal_knowledge_base(database_info) and data.share_config is not None:
         if not is_personal_knowledge_base({"share_config": data.share_config}):
             raise HTTPException(status_code=403, detail="个人知识库不能修改共享范围")
-    if current_user.role not in {"admin", "superadmin"} and data.share_config is not None:
+    if (
+        BusinessCapability.MANAGE_SYSTEM not in resolve_business_capabilities(current_user)
+        and data.share_config is not None
+    ):
         if not is_personal_knowledge_base(database_info):
             raise HTTPException(status_code=403, detail="业务管理员不能修改团队共享范围")
     logger.debug(
@@ -1783,7 +1785,7 @@ async def get_knowledge_base_types(current_user: User = Depends(get_knowledge_us
     """获取支持的知识库类型"""
     try:
         kb_types = knowledge_base.get_supported_kb_types()
-        if current_user.role not in {"admin", "superadmin"}:
+        if BusinessCapability.MANAGE_SYSTEM not in resolve_business_capabilities(current_user):
             kb_types = {key: value for key, value in kb_types.items() if key == "milvus"}
         return {"kb_types": kb_types, "message": "success"}
     except Exception as e:

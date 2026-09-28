@@ -8,14 +8,14 @@ from datetime import timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from yuxi.repositories.api_key_repository import (
+from counseling.identity.repositories.api_key import (
     APIKeyDepartmentConflict,
     APIKeyIdempotencyConflict,
     APIKeyRepository,
     APIKeySubjectUnavailable,
 )
-from yuxi.storage.postgres.models_business import APIKey, CLIAuthSession, Department, User
-from yuxi.utils.auth_utils import AuthUtils
+from counseling.identity.models import APIKey, CLIAuthSession, Department, User
+from counseling.identity.auth import AuthUtils
 from yuxi.utils.datetime_utils import utc_now_naive
 
 CLI_AUTH_SESSION_TTL_SECONDS = 10 * 60

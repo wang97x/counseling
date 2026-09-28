@@ -8,13 +8,13 @@ from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from server.utils.auth_middleware import (
-    get_admin_user,
+from counseling.identity.http.dependencies import (
+    get_identity_admin_user as get_admin_user,
     get_db,
     get_required_user,
     get_superadmin_user,
 )
-from yuxi.services.auth_service import (
+from counseling.identity.services.auth import (
     CLI_AUTH_POLL_INTERVAL_SECONDS,
     CLI_AUTH_SESSION_TTL_SECONDS,
     CLIAuthError,
@@ -23,36 +23,36 @@ from yuxi.services.auth_service import (
     exchange_cli_auth_token,
     get_cli_auth_session_for_user,
 )
-from yuxi.services.login_rate_limit_service import (
+from counseling.identity.services.login_rate_limit import (
     check_login_rate_limit,
     clear_login_failures,
     extract_client_ip,
     record_login_failure,
 )
-from yuxi.services.identity_admin_service import (
+from counseling.identity.services.admin import (
     IdentityConflictError,
     SystemAlreadyInitializedError,
     initialize_system_admin,
     list_managed_users_page,
 )
-from yuxi.services.operation_log_service import log_operation
-from yuxi.services.user_identity_service import generate_unique_uid, is_valid_phone_number, validate_username
+from counseling.identity.services.audit import log_operation
+from counseling.identity.services.user_identity import generate_unique_uid, is_valid_phone_number, validate_username
 from yuxi.storage.minio import upload_image_to_minio
 from yuxi.storage.minio.client import normalize_public_minio_url
-from yuxi.storage.postgres.models_business import User
-from yuxi.repositories.department_repository import DepartmentRepository
-from yuxi.repositories.user_repository import UserRepository
-from yuxi.permissions import (
+from counseling.identity.models import User
+from counseling.identity.repositories.department import DepartmentRepository
+from counseling.identity.repositories.user import UserRepository
+from counseling.identity.permissions import (
     BusinessRole,
-    default_business_roles_for_platform_role,
+    has_business_role,
     normalize_business_roles,
 )
 from yuxi.utils import logger
-from yuxi.utils.auth_utils import AuthUtils
+from counseling.identity.auth import AuthUtils
 from yuxi.utils.datetime_utils import utc_now_naive
 
 # OIDC 认证相关导入
-from yuxi.services.oidc_service import (
+from counseling.identity.services.oidc import (
     get_oidc_config_handler,
     oidc_callback_handler,
     oidc_exchange_code_handler,
@@ -581,13 +581,17 @@ async def create_user(
         )
 
     # 管理员只能创建普通用户
-    if current_user.role == "admin" and user_data.role != "user":
+    if (
+        has_business_role(current_user, BusinessRole.BUSINESS_ADMIN)
+        and not has_business_role(current_user, BusinessRole.SUPER_ADMIN)
+        and user_data.role != "user"
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="管理员只能创建普通用户账户",
         )
 
-    if user_data.business_roles is not None and current_user.role != "superadmin":
+    if user_data.business_roles is not None and not has_business_role(current_user, BusinessRole.SUPER_ADMIN):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="只有超级管理员才能指定业务角色",
@@ -596,11 +600,11 @@ async def create_user(
     requested_business_roles = (
         normalize_business_roles(user_data.business_roles)
         if user_data.business_roles is not None
-        else default_business_roles_for_platform_role(user_data.role)
+        else (BusinessRole.COUNSELOR,)
     )
 
     # 部门分配逻辑
-    if current_user.role == "superadmin":
+    if has_business_role(current_user, BusinessRole.SUPER_ADMIN):
         # 超级管理员创建用户时，使用指定的部门或默认部门
         department_id = user_data.department_id
         if department_id is None:
@@ -660,7 +664,7 @@ async def read_users_page(
         db,
         offset=offset,
         limit=limit,
-        is_superadmin=current_user.role == "superadmin",
+        is_superadmin=has_business_role(current_user, BusinessRole.SUPER_ADMIN),
         visible_department_id=current_user.department_id,
         department_id=department_id,
         role=role,
@@ -679,7 +683,7 @@ async def read_users(
     user_repo = UserRepository(db)
 
     # 部门隔离逻辑
-    if current_user.role == "superadmin":
+    if has_business_role(current_user, BusinessRole.SUPER_ADMIN):
         # 超级管理员可以看到所有用户
         users_with_dept = await user_repo.list_with_department(skip=skip, limit=limit)
     else:
@@ -697,7 +701,7 @@ async def read_users(
 
 
 def _ensure_user_in_current_department(current_user: User, target_user: User) -> None:
-    if current_user.role == "superadmin":
+    if has_business_role(current_user, BusinessRole.SUPER_ADMIN):
         return
     if target_user.department_id != current_user.department_id:
         raise HTTPException(
@@ -714,7 +718,7 @@ async def read_user_access_options(
     db: AsyncSession = Depends(get_db),
 ):
     user_repo = UserRepository(db)
-    if current_user.role == "superadmin":
+    if has_business_role(current_user, BusinessRole.SUPER_ADMIN):
         users_with_dept = await user_repo.list_with_department(skip=skip, limit=limit)
     else:
         users_with_dept = await user_repo.list_with_department(
@@ -770,14 +774,18 @@ async def update_user(
     _ensure_user_in_current_department(current_user, user)
 
     # 检查权限
-    if user.role == "superadmin" and current_user.role != "superadmin":
+    if has_business_role(user, BusinessRole.SUPER_ADMIN) and not has_business_role(
+        current_user, BusinessRole.SUPER_ADMIN
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="只有超级管理员才能修改超级管理员账户",
         )
 
-    if current_user.role == "admin":
-        if user.role != "user":
+    if has_business_role(current_user, BusinessRole.BUSINESS_ADMIN) and not has_business_role(
+        current_user, BusinessRole.SUPER_ADMIN
+    ):
+        if not has_business_role(user, BusinessRole.COUNSELOR):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="管理员只能修改普通用户账户",
@@ -787,7 +795,7 @@ async def update_user(
     update_details = []
 
     if user_data.business_roles is not None:
-        if current_user.role != "superadmin":
+        if not has_business_role(current_user, BusinessRole.SUPER_ADMIN):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="只有超级管理员才能修改业务角色",
@@ -820,14 +828,14 @@ async def update_user(
 
     # 部门修改权限控制（只有超级管理员可以修改用户部门）
     if user_data.department_id is not None and user_data.department_id != user.department_id:
-        if current_user.role != "superadmin":
+        if not has_business_role(current_user, BusinessRole.SUPER_ADMIN):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="只有超级管理员才能修改用户部门",
             )
 
         # 检查该用户是否是当前部门的唯一管理员
-        if user.role == "admin" and user.department_id is not None:
+        if has_business_role(user, BusinessRole.BUSINESS_ADMIN) and user.department_id is not None:
             admin_count = await user_repository.get_admin_count_in_department(
                 user.department_id, exclude_user_id=user_id
             )
@@ -868,20 +876,26 @@ async def delete_user(
     _ensure_user_in_current_department(current_user, user)
 
     # 不能删除超级管理员账户
-    if user.role == "superadmin":
+    if has_business_role(user, BusinessRole.SUPER_ADMIN):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="不能删除超级管理员账户",
         )
 
-    if current_user.role == "admin" and user.role != "user":
+    if (
+        has_business_role(current_user, BusinessRole.BUSINESS_ADMIN)
+        and not has_business_role(current_user, BusinessRole.SUPER_ADMIN)
+        and not has_business_role(user, BusinessRole.COUNSELOR)
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="管理员只能删除普通用户账户",
         )
 
     # 检查是否是部门的唯一管理员
-    if user.role == "admin" and current_user.role != "superadmin":
+    if has_business_role(user, BusinessRole.BUSINESS_ADMIN) and not has_business_role(
+        current_user, BusinessRole.SUPER_ADMIN
+    ):
         admin_count = await user_repository.get_admin_count_in_department(user.department_id)
         if admin_count <= 1:
             raise HTTPException(
@@ -1004,7 +1018,7 @@ async def impersonate_user(
         )
 
     # 不能模拟超级管理员
-    if target_user.role == "superadmin":
+    if has_business_role(target_user, BusinessRole.SUPER_ADMIN):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="不能模拟超级管理员账户",

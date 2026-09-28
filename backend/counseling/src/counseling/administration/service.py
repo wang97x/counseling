@@ -4,8 +4,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from counseling.storage.models import CounselingRecord, CounselingRecordDraft, CounselingRiskEvent, StudentRecord
-from yuxi.permissions.business_roles import BusinessCapability, resolve_business_capabilities
-from yuxi.storage.postgres.models_business import User
+from counseling.identity.permissions import BusinessCapability, resolve_business_capabilities
+from counseling.identity.models import User
 
 
 async def get_department_summary(db: AsyncSession, actor: User) -> dict:

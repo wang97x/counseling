@@ -983,7 +983,6 @@ class PostgresManager(metaclass=SingletonMeta):
         """确保业务 schema 包含后续新增字段（运行时 schema 演进）。"""
         self._check_initialized()
         stmts = [
-            *BUSINESS_ROLE_SCHEMA_STATEMENTS,
             "ALTER TABLE IF EXISTS skills ADD COLUMN IF NOT EXISTS tool_dependencies JSONB DEFAULT '[]'::jsonb",
             "ALTER TABLE IF EXISTS skills ADD COLUMN IF NOT EXISTS mcp_dependencies JSONB DEFAULT '[]'::jsonb",
             "ALTER TABLE IF EXISTS skills ADD COLUMN IF NOT EXISTS skill_dependencies JSONB DEFAULT '[]'::jsonb",
@@ -1585,7 +1584,7 @@ class PostgresManager(metaclass=SingletonMeta):
 
         self._check_initialized()
         async with self.get_async_session_context() as session:
-            from yuxi.storage.postgres.models_business import User
+            from counseling.identity.models import User
 
             result = await session.execute(select(func.count(User.id)))
             count = result.scalar()

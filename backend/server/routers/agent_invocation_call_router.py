@@ -23,10 +23,10 @@ from yuxi.services.input_message_service import (
     build_chat_input_message_from_openai_content,
 )
 from yuxi.services.run_submission_service import RunOrigin, RunSubmissionCommand, submit_run_command
-from yuxi.storage.postgres.models_business import User
+from counseling.identity.models import User
 from yuxi.utils.hash_utils import hash_id
 
-from server.utils.auth_middleware import get_db, get_required_user
+from counseling.identity.http.dependencies import get_db, get_required_user
 
 agent_invocation_call_router = APIRouter(prefix="/agent-invocation/agent-call", tags=["agent-invocation"])
 

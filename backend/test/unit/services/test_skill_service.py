@@ -961,7 +961,7 @@ def test_sync_user_accessible_skills_updates_executable_mode(
 @pytest.mark.asyncio
 async def test_refresh_user_skill_projection_serializes_authorization_snapshots(monkeypatch: pytest.MonkeyPatch):
     """旧 Run 不得在较新的撤权同步完成后复活已撤销 Skill。"""
-    from yuxi.repositories import user_repository
+    from counseling.identity.repositories import user as user_repository
     from yuxi.storage.postgres import manager as postgres_manager
 
     advisory_lock = asyncio.Lock()
@@ -1020,7 +1020,7 @@ async def test_refresh_user_skill_projection_serializes_authorization_snapshots(
 @pytest.mark.asyncio
 async def test_refresh_user_skill_projection_excludes_personal_skills(monkeypatch: pytest.MonkeyPatch):
     """共享只读投影不得复制 UserWorkspace 中的个人 Skill。"""
-    from yuxi.repositories import user_repository
+    from counseling.identity.repositories import user as user_repository
     from yuxi.storage.postgres import manager as postgres_manager
 
     synchronized_sources: list[dict[str, str]] = []

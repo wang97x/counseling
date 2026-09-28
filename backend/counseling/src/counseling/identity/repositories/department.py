@@ -9,7 +9,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from yuxi.storage.postgres.manager import pg_manager
-from yuxi.storage.postgres.models_business import APIKey, Department, User
+from counseling.identity.models import APIKey, Department, User
 from yuxi.utils.datetime_utils import utc_now_naive
 
 

@@ -9,7 +9,7 @@ import uuid
 import asyncpg
 import pytest
 
-from yuxi.utils.auth_utils import AuthUtils
+from counseling.identity.auth import AuthUtils
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 
@@ -120,7 +120,7 @@ async def test_team_knowledge_read_and_manage_boundaries(test_client) -> None:
             ("outsider", False, False, False),
             ("business", True, False, True),
             ("other_business", False, False, False),
-            ("platform_admin", True, False, False),
+            ("platform_admin", True, False, True),
         ):
             listed = await test_client.get("/api/knowledge/databases", headers=actors[name]["headers"])
             assert listed.status_code == 200, listed.text

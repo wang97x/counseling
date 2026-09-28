@@ -10,10 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from yuxi import get_version
 from yuxi.config.options import invalidate_option_cache, system_options, update_option_value
 from yuxi.services.readiness_service import get_readiness
-from yuxi.storage.postgres.models_business import User
+from counseling.identity.models import User
 from yuxi.utils.logging_config import LOG_FILE, logger
 
-from server.utils.auth_middleware import get_admin_user, get_db, get_required_user
+from counseling.identity.http.dependencies import get_admin_user, get_db, get_required_user
 
 system = APIRouter(prefix="/system", tags=["system"])
 

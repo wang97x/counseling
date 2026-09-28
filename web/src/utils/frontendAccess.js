@@ -1,21 +1,19 @@
-/** 根据平台角色与业务角色派生前端信息架构能力。 */
-export function resolveFrontendAccess(userRole, businessRoles = []) {
+/** 只根据业务角色派生前端信息架构能力。 */
+export function resolveFrontendAccess(_userRole, businessRoles = []) {
   const roles = new Set(Array.isArray(businessRoles) ? businessRoles : [])
-  const isSuperAdmin = userRole === 'superadmin'
-  const isPlatformAdmin = userRole === 'admin' || isSuperAdmin
+  const isSuperAdmin = roles.has('super_admin')
   const isCounselor = roles.has('counselor')
   const isBusinessAdmin = roles.has('business_admin')
-  const isTechnicalAdmin = roles.has('technical_admin')
   const canAccessStudentRecords = isCounselor || isBusinessAdmin
   const canAccessStudentDetail = isCounselor
-  const canAccessKnowledge = isPlatformAdmin || isCounselor || isBusinessAdmin
-  const canUseTechnicalConsole = isSuperAdmin || (userRole === 'admin' && !isBusinessAdmin) || isTechnicalAdmin
-  const canUsePlatformWorkspace = userRole === 'admin' && !isBusinessAdmin
+  const canAccessKnowledge = isCounselor || isBusinessAdmin
+  const canUseTechnicalConsole = isSuperAdmin
+  const canUsePlatformWorkspace = false
 
   return {
     isCounselor,
     isBusinessAdmin,
-    isTechnicalAdmin,
+    isSuperAdmin,
     canAccessStudentRecords,
     canAccessStudentDetail,
     canCreateStudentRecord: isCounselor,

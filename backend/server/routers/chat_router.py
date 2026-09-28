@@ -6,8 +6,8 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, UploadFile, 
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from yuxi.storage.postgres.models_business import User
-from server.utils.auth_middleware import get_db, get_required_user, get_superadmin_user
+from counseling.identity.models import User
+from counseling.identity.http.dependencies import get_db, get_required_user, get_superadmin_user
 from yuxi.config.options import system_options
 from yuxi.agents.tool_approval import ToolApprovalMode
 from yuxi.models import select_model

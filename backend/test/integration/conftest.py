@@ -216,11 +216,14 @@ async def standard_user(test_client: httpx.AsyncClient, admin_headers: dict[str,
             "headers": {"Authorization": f"Bearer {access_token}"},
         }
     finally:
-        await cleanup_test_chat_resources(
-            test_client,
-            {"Authorization": f"Bearer {access_token}"},
-            owner_uid=str(user_payload["uid"]),
-        )
+        user_headers = {"Authorization": f"Bearer {access_token}"}
+        profile_response = await test_client.get("/api/auth/me", headers=user_headers)
+        if profile_response.status_code == 200:
+            await cleanup_test_chat_resources(
+                test_client,
+                user_headers,
+                owner_uid=str(user_payload["uid"]),
+            )
         cleanup_error = None
         for _ in range(3):
             response = await test_client.delete(f"/api/auth/users/{user_payload['id']}", headers=admin_headers)

@@ -4,7 +4,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from server.routers.user_router import get_user_config, update_user_config
+from counseling.identity.http.user_settings import get_user_config, update_user_config
 from yuxi.config import UserConfigSchema
 from yuxi.storage.postgres.models_business import Base, Department, User
 

@@ -6,12 +6,12 @@ from fastapi import Request
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from yuxi.permissions import BusinessRole
-from yuxi.repositories.department_repository import DepartmentRepository
-from yuxi.repositories.user_repository import UserRepository
-from yuxi.services.operation_log_service import log_operation
-from yuxi.storage.postgres.models_business import Department, User
-from yuxi.utils.auth_utils import AuthUtils
+from counseling.identity.permissions import BusinessRole
+from counseling.identity.repositories.department import DepartmentRepository
+from counseling.identity.repositories.user import UserRepository
+from counseling.identity.services.audit import log_operation
+from counseling.identity.models import Department, User
+from counseling.identity.auth import AuthUtils
 from yuxi.utils.datetime_utils import utc_now_naive
 
 _INITIALIZATION_LOCK_KEY = 0x59555849
@@ -146,7 +146,7 @@ async def initialize_system_admin(
                     "avatar": None,
                     "password_hash": password_hash,
                     "role": "superadmin",
-                    "business_roles": [BusinessRole.TECHNICAL_ADMIN],
+                    "business_roles": [BusinessRole.SUPER_ADMIN],
                     "department_id": department.id,
                     "last_login": utc_now_naive(),
                 }

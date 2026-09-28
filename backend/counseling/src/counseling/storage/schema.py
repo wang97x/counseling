@@ -4,7 +4,7 @@ from sqlalchemy import text
 
 from yuxi.storage.postgres.manager import pg_manager
 
-COUNSELING_SCHEMA_VERSION = 2
+COUNSELING_SCHEMA_VERSION = 3
 COUNSELING_SCHEMA_V1_STATEMENTS = (
     """
     CREATE TABLE IF NOT EXISTS counseling_students (
@@ -230,7 +230,34 @@ COUNSELING_SCHEMA_V2_STATEMENTS = (
     """,
 )
 
-COUNSELING_SCHEMA_STATEMENTS = COUNSELING_SCHEMA_V1_STATEMENTS + COUNSELING_SCHEMA_V2_STATEMENTS
+COUNSELING_SCHEMA_V3_STATEMENTS = (
+    "ALTER TABLE users DROP CONSTRAINT IF EXISTS ck_users_business_roles",
+    """
+    UPDATE users
+    SET business_roles = COALESCE(
+        (
+            SELECT jsonb_agg(
+                CASE WHEN role.value = 'technical_admin' THEN 'super_admin' ELSE role.value END
+                ORDER BY role.ordinality
+            )
+            FROM jsonb_array_elements_text(users.business_roles) WITH ORDINALITY AS role(value, ordinality)
+        ),
+        '[]'::jsonb
+    )
+    WHERE business_roles ? 'technical_admin'
+    """,
+    """
+    ALTER TABLE users ADD CONSTRAINT ck_users_business_roles
+    CHECK (
+        jsonb_typeof(business_roles) = 'array'
+        AND business_roles <@ '["counselor", "business_admin", "super_admin"]'::jsonb
+    )
+    """,
+)
+
+COUNSELING_SCHEMA_STATEMENTS = (
+    COUNSELING_SCHEMA_V1_STATEMENTS + COUNSELING_SCHEMA_V2_STATEMENTS + COUNSELING_SCHEMA_V3_STATEMENTS
+)
 
 
 async def migrate_schema() -> None:
@@ -241,12 +268,17 @@ async def migrate_schema() -> None:
             await pg_manager.create_schema_version_table()
             versions = await pg_manager.get_schema_versions()
             actual = versions.get("counseling")
-            if actual not in {None, 1, COUNSELING_SCHEMA_VERSION}:
+            if actual not in {None, 1, 2, COUNSELING_SCHEMA_VERSION}:
                 raise RuntimeError(
-                    f"Unsupported counseling schema version: {actual}; supported upgrade sources are empty or v1"
+                    f"Unsupported counseling schema version: {actual}; supported upgrade sources are empty, v1 or v2"
                 )
             if actual != COUNSELING_SCHEMA_VERSION:
-                statements = COUNSELING_SCHEMA_STATEMENTS if actual is None else COUNSELING_SCHEMA_V2_STATEMENTS
+                if actual is None:
+                    statements = COUNSELING_SCHEMA_STATEMENTS
+                elif actual == 1:
+                    statements = COUNSELING_SCHEMA_V2_STATEMENTS + COUNSELING_SCHEMA_V3_STATEMENTS
+                else:
+                    statements = COUNSELING_SCHEMA_V3_STATEMENTS
                 async with pg_manager.async_engine.begin() as connection:
                     for statement in statements:
                         await connection.execute(text(statement))

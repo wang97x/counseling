@@ -1,6 +1,6 @@
 from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from yuxi.storage.postgres.models_business import OperationLog
+from counseling.identity.models import OperationLog
 
 
 async def log_operation(

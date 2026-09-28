@@ -12,9 +12,9 @@ from yuxi.services.scheduled_agent_service import (
     run_scheduled_job_now,
     update_scheduled_job,
 )
-from yuxi.storage.postgres.models_business import User
+from counseling.identity.models import User
 
-from server.utils.auth_middleware import get_db, get_required_user
+from counseling.identity.http.dependencies import get_db, get_required_user
 
 scheduled_agents = APIRouter(prefix="/scheduled-tasks", tags=["scheduled-tasks"])
 

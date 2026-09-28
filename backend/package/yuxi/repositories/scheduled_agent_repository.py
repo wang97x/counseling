@@ -7,12 +7,12 @@ from datetime import datetime
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from counseling.identity.models import User
 from yuxi.storage.postgres.models_business import (
     AgentRun,
     AgentRunRequest,
     ScheduledAgentJob,
     ScheduledAgentRun,
-    User,
 )
 from yuxi.utils.datetime_utils import utc_now_naive
 

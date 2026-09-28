@@ -152,7 +152,7 @@ def install(probe, app=None):
         "yuxi.agents.skills.service",
         "yuxi.agents.backends.composite",
         "yuxi.agents.buildin.chatbot.graph",
-        "server.utils.auth_middleware",
+        "counseling.identity.http.dependencies",
     )
     for name in modules:
         importlib.import_module(name)

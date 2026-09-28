@@ -37,9 +37,9 @@ from yuxi.services.agent_run_service import (
 from yuxi.services.input_message_service import build_chat_input_message
 from yuxi.services.run_submission_service import RunOrigin, RunSubmissionCommand, submit_run_command
 from yuxi.storage.postgres.manager import pg_manager
-from yuxi.storage.postgres.models_business import User
+from counseling.identity.models import User
 
-from server.utils.auth_middleware import get_admin_user, get_db, get_required_user, get_superadmin_user
+from counseling.identity.http.dependencies import get_admin_user, get_db, get_required_user, get_superadmin_user
 
 agent_router = APIRouter(prefix="/agent", tags=["agent"])
 

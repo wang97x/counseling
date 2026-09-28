@@ -25,8 +25,9 @@ from yuxi.knowledge.read_models import (
 )
 from yuxi.knowledge.schemas import FindOutputSchema, OpenOutputSchema
 from yuxi.knowledge.utils.security import redact_sensitive_params
-from yuxi.permissions import ResourcePermission, normalize_permission_config, resolve_knowledge_base_permission
-from yuxi.storage.postgres.models_business import User
+from counseling.identity.knowledge import resolve_knowledge_base_permission
+from yuxi.permissions import ResourcePermission, normalize_permission_config
+from counseling.identity.models import User
 from yuxi.utils import logger
 from yuxi.utils.datetime_utils import utc_isoformat
 
@@ -372,7 +373,7 @@ class KnowledgeBaseManager:
 
     async def get_databases_by_uid(self, uid: str) -> list[KnowledgeBaseSummary]:
         """根据 uid 获取知识库列表"""
-        from yuxi.repositories.user_repository import UserRepository
+        from counseling.identity.repositories.user import UserRepository
 
         # 通过数据库获取用户信息
         user_repo = UserRepository()
@@ -824,7 +825,7 @@ class KnowledgeBaseManager:
 
         folder_ids = [record.file_id for record in records if record.is_folder]
         creator_uids = [record.created_by for record in records if getattr(record, "created_by", None)]
-        from yuxi.repositories.user_repository import UserRepository
+        from counseling.identity.repositories.user import UserRepository
 
         child_counts, creators = await asyncio.gather(
             repo.count_children_by_parent_ids(kb_id=kb_id, parent_ids=folder_ids),

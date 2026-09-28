@@ -37,6 +37,7 @@ test('超级管理员布局只加载可见模块且不启动会话状态同步',
     userStore.token = 'layout-test-token'
     userStore.userId = 1
     userStore.userRole = 'superadmin'
+    userStore.businessRoles = ['super_admin']
     const { default: Layout } = await server.ssrLoadModule('/src/layouts/AppLayout.vue')
     const renderer = createRenderer({
       createElement: () => ({}),
@@ -65,7 +66,7 @@ test('超级管理员布局只加载可见模块且不启动会话状态同步',
     app.mount({})
     await Promise.resolve()
     assert.ok(calls.includes('loadInfoConfig'))
-    assert.ok(calls.includes('loadDatabases'))
+    assert.equal(calls.includes('loadDatabases'), false)
     assert.equal(calls.includes('loadThreads'), false)
     assert.equal(calls.includes('loadProjects'), false)
     assert.ok(calls.includes('refreshConfig'))

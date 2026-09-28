@@ -9,8 +9,8 @@ from counseling.documents.repository import CounselingRecordRepository
 from counseling.risks.repository import CounselingRiskRepository
 from counseling.storage.models import CounselingAuditEvent, CounselingRiskEvent
 from counseling.students.repository import StudentRepository
-from yuxi.permissions.business_roles import BusinessCapability, resolve_business_capabilities
-from yuxi.storage.postgres.models_business import User
+from counseling.identity.permissions import BusinessCapability, resolve_business_capabilities
+from counseling.identity.models import User
 from yuxi.utils.datetime_utils import format_utc_datetime, utc_now_naive
 
 RISK_LEVELS = {"normal", "watch", "urgent"}

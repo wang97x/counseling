@@ -7,9 +7,6 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, Protocol
 
-from yuxi.permissions.business_roles import BusinessCapability, resolve_business_capabilities
-
-
 class ResourcePermission(StrEnum):
     """资源权限等级，数值顺序用于判断权限是否足够。"""
 
@@ -208,40 +205,6 @@ def require_resource_permission(
         raise ResourcePermissionDenied(f"需要 {required.value} 权限，当前为 {actual.value}")
 
 
-def resolve_knowledge_base_permission(user: Any, resource: ShareableResource) -> ResourcePermission:
-    """个人库仅所有者维护；团队库按共享范围和业务能力授权。"""
-
-    if is_personal_knowledge_base(resource):
-        owner = str(_value(resource, "created_by", "") or "")
-        if not owner or owner != str(_value(user, "uid", "") or ""):
-            return ResourcePermission.NONE
-        if _value(user, "role") in {"admin", "superadmin"} or (
-            BusinessCapability.MANAGE_PERSONAL_KNOWLEDGE in resolve_business_capabilities(user)
-        ):
-            return ResourcePermission.MANAGE
-        return ResourcePermission.NONE
-
-    if _value(user, "role") == "user":
-        config = normalize_permission_config(_value(resource, "share_config"))
-        readable = scope_matches(user, config["read_scope"]) or (
-            config["read_scope"] is None and scope_matches(user, config["manage_scope"])
-        )
-        if not readable:
-            return ResourcePermission.NONE
-        capabilities = resolve_business_capabilities(user)
-        if BusinessCapability.MANAGE_TEAM_KNOWLEDGE in capabilities:
-            return ResourcePermission.MANAGE
-        if BusinessCapability.READ_AUTHORIZED_TEAM_KNOWLEDGE in capabilities:
-            return ResourcePermission.READ
-        return ResourcePermission.NONE
-
-    return resolve_resource_permission(
-        user,
-        resource,
-        KNOWLEDGE_BASE_PERMISSION_POLICY,
-    )
-
-
 def is_personal_knowledge_base(resource: ShareableResource) -> bool:
     """用既有空共享范围识别仅所有者的个人知识库。"""
 
@@ -252,18 +215,6 @@ def is_personal_knowledge_base(resource: ShareableResource) -> bool:
         and config.get("read_scope") is None
         and config.get("manage_scope") is None
     )
-
-
-def require_knowledge_base_permission(
-    user: Any,
-    resource: ShareableResource,
-    required: ResourcePermission,
-) -> ResourcePermission:
-    """校验用户是否具备知识库所需权限，并返回实际权限。"""
-
-    actual = resolve_knowledge_base_permission(user, resource)
-    require_resource_permission(actual, required)
-    return actual
 
 
 def resolve_agent_permission(user: Any, resource: ShareableResource) -> ResourcePermission:

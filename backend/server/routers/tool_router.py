@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends
 
 from yuxi.agents.toolkits.service import get_tool_metadata
-from server.utils.auth_middleware import get_required_user
-from yuxi.storage.postgres.models_business import User
+from counseling.identity.http.dependencies import get_required_user
+from counseling.identity.models import User
 
 tools = APIRouter(prefix="/system/tools", tags=["tools"])
 

@@ -6,7 +6,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from yuxi.services.auth_service import (
+from counseling.identity.services.auth import (
     CLIAuthError,
     approve_cli_auth_session,
     create_cli_auth_session,

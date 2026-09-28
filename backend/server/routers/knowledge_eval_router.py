@@ -4,7 +4,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
-from server.utils.auth_middleware import get_admin_user
+from counseling.identity.http.dependencies import get_admin_user
 from server.utils.knowledge_permissions import (
     ensure_knowledge_base_permission,
     require_knowledge_base_manage,
@@ -17,7 +17,7 @@ from yuxi.knowledge.eval.benchmark_generation import (
 from yuxi.knowledge.eval.service import EvaluationService
 from yuxi.permissions import ResourcePermission
 from yuxi.repositories.evaluation_repository import EvaluationRepository
-from yuxi.storage.postgres.models_business import User
+from counseling.identity.models import User
 from yuxi.utils import logger
 
 

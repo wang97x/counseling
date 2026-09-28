@@ -812,6 +812,9 @@ async def cleanup_pytest_knowledge_resources(
     """通过公开 API 删除 pytest 前缀的评估资源和知识库。"""
 
     list_response = await client.get("/api/knowledge/databases", headers=headers)
+    if list_response.status_code == 403:
+        # 超级管理仅负责系统配置，不因测试清理获得业务知识访问权。
+        return
     if list_response.status_code != 200:
         raise RuntimeError(f"Failed to list knowledge databases for cleanup: {list_response.text}")
 

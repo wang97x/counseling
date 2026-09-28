@@ -17,10 +17,11 @@ from yuxi.agents.mcp.service import (
     toggle_tool_enabled,
     update_mcp_server,
 )
-from yuxi.storage.postgres.models_business import User
+from counseling.identity.models import User
 from yuxi.utils import logger
 
-from server.utils.auth_middleware import get_admin_user, get_db, get_required_user
+from counseling.identity.http.dependencies import get_admin_user, get_db, get_required_user
+from counseling.identity.permissions import BusinessCapability, resolve_business_capabilities
 
 mcp = APIRouter(prefix="/system/mcp-servers", tags=["mcp"])
 
@@ -105,7 +106,7 @@ async def get_mcp_servers(
     """获取所有 MCP 服务器配置（普通用户仅获取脱敏的基础信息）"""
     try:
         servers = await get_all_mcp_servers(db)
-        if current_user.role in ["admin", "superadmin"]:
+        if BusinessCapability.MANAGE_SYSTEM in resolve_business_capabilities(current_user):
             return {"success": True, "data": [serialize_mcp_server(s) for s in servers]}
 
         data = []

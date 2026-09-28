@@ -12,7 +12,7 @@ from counseling.documents.service import (
 from yuxi.config.options import system_options
 from yuxi.models.chat import select_model
 from yuxi.services.conversation_service import create_thread_view
-from yuxi.storage.postgres.models_business import User
+from counseling.identity.models import User
 
 
 class YuxiConversationAdapter:

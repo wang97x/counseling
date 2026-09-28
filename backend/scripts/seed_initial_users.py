@@ -8,12 +8,15 @@ from typing import TypedDict
 from dotenv import load_dotenv
 from sqlalchemy import func, select
 
-
 APP_ROOT = Path(__file__).resolve().parents[1]
 for import_path in (APP_ROOT, APP_ROOT / "package"):
     import_path_str = str(import_path)
     if import_path_str not in sys.path:
         sys.path.insert(0, import_path_str)
+
+from counseling.identity.models import Department, User
+from counseling.identity.permissions import BusinessRole
+from yuxi.utils.datetime_utils import utc_now_naive
 
 SUPERADMIN_UID = "zwj"
 SUPERADMIN_NAME = "张文杰"
@@ -47,8 +50,6 @@ def load_project_env() -> None:
 
 
 async def ensure_uninitialized(session) -> None:
-    from yuxi.storage.postgres.models_business import User
-
     user_count = await session.scalar(select(func.count(User.id)))
     if user_count:
         raise SeedError(f"系统已初始化：users 表已有 {user_count} 个用户，脚本已退出。")
@@ -58,11 +59,56 @@ async def ensure_uninitialized(session) -> None:
         raise SeedError("系统已初始化：已存在超级管理员，脚本已退出。")
 
 
+def build_initial_users(
+    departments: dict[str, Department],
+    *,
+    superadmin_password_hash: str,
+    default_password_hash: str,
+) -> list[User]:
+    """构造带显式业务角色的初始账号。"""
+
+    users = [
+        User(
+            username=SUPERADMIN_NAME,
+            uid=SUPERADMIN_UID,
+            phone_number=SUPERADMIN_PHONE_NUMBER,
+            password_hash=superadmin_password_hash,
+            role="superadmin",
+            business_roles=[BusinessRole.SUPER_ADMIN],
+            department_id=departments["dev"].id,
+            last_login=utc_now_naive(),
+        )
+    ]
+    for department_seed in DEPARTMENTS:
+        department = departments[department_seed["prefix"]]
+        for index in range(1, 3):
+            users.append(
+                User(
+                    username=f"{department_seed['name']}管理员{index}",
+                    uid=f"{department_seed['prefix']}_admin_{index}",
+                    password_hash=default_password_hash,
+                    role="admin",
+                    business_roles=[BusinessRole.BUSINESS_ADMIN],
+                    department_id=department.id,
+                )
+            )
+        for index in range(1, department_seed["normal_count"] + 1):
+            users.append(
+                User(
+                    username=f"{department_seed['name']}用户{index}",
+                    uid=f"{department_seed['prefix']}_user_{index:02d}",
+                    password_hash=default_password_hash,
+                    role="user",
+                    business_roles=[BusinessRole.COUNSELOR],
+                    department_id=department.id,
+                )
+            )
+    return users
+
+
 async def seed_initial_users() -> None:
-    from yuxi.utils.auth_utils import AuthUtils
+    from counseling.identity.auth import AuthUtils
     from yuxi.storage.postgres.manager import pg_manager
-    from yuxi.storage.postgres.models_business import Department, User
-    from yuxi.utils.datetime_utils import utc_now_naive
 
     try:
         pg_manager.initialize()
@@ -83,41 +129,11 @@ async def seed_initial_users() -> None:
 
             await session.flush()
 
-            users = [
-                User(
-                    username=SUPERADMIN_NAME,
-                    uid=SUPERADMIN_UID,
-                    phone_number=SUPERADMIN_PHONE_NUMBER,
-                    password_hash=AuthUtils.hash_password(SUPERADMIN_PASSWORD),
-                    role="superadmin",
-                    department_id=departments["dev"].id,
-                    last_login=utc_now_naive(),
-                )
-            ]
-
-            for department_seed in DEPARTMENTS:
-                department = departments[department_seed["prefix"]]
-                for index in range(1, 3):
-                    users.append(
-                        User(
-                            username=f"{department_seed['name']}管理员{index}",
-                            uid=f"{department_seed['prefix']}_admin_{index}",
-                            password_hash=AuthUtils.hash_password(DEFAULT_USER_PASSWORD),
-                            role="admin",
-                            department_id=department.id,
-                        )
-                    )
-                for index in range(1, department_seed["normal_count"] + 1):
-                    users.append(
-                        User(
-                            username=f"{department_seed['name']}用户{index}",
-                            uid=f"{department_seed['prefix']}_user_{index:02d}",
-                            password_hash=AuthUtils.hash_password(DEFAULT_USER_PASSWORD),
-                            role="user",
-                            department_id=department.id,
-                        )
-                    )
-
+            users = build_initial_users(
+                departments,
+                superadmin_password_hash=AuthUtils.hash_password(SUPERADMIN_PASSWORD),
+                default_password_hash=AuthUtils.hash_password(DEFAULT_USER_PASSWORD),
+            )
             session.add_all(users)
     finally:
         await pg_manager.close()

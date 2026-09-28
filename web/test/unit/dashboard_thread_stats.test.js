@@ -53,6 +53,7 @@ async function prepareStores(server) {
   userStore.token = 'dashboard-test-token'
   userStore.userId = 1
   userStore.userRole = 'superadmin'
+  userStore.businessRoles = ['super_admin']
   return userStore
 }
 

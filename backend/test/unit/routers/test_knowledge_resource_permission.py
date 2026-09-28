@@ -47,7 +47,12 @@ async def test_non_manager_cannot_manage_global_read_knowledge_base(monkeypatch,
         return database
 
     monkeypatch.setattr(knowledge_router.knowledge_base, "get_database_info", fake_get_database_info)
-    user = SimpleNamespace(uid=uid, role=role, department_id=2)
+    user = SimpleNamespace(
+        uid=uid,
+        role=role,
+        department_id=2,
+        business_roles=["counselor"] if can_read else [],
+    )
 
     if can_read:
         assert await knowledge_router.require_knowledge_base_read("kb-1", user) is user
@@ -72,12 +77,14 @@ async def test_query_parameter_routes_apply_knowledge_base_acl(monkeypatch):
         return database
 
     monkeypatch.setattr(knowledge_router.knowledge_base, "get_database_info", fake_get_database_info)
-    readonly_admin = SimpleNamespace(uid="admin-1", role="admin", department_id=2)
+    readonly_admin = SimpleNamespace(
+        uid="admin-1", role="admin", department_id=2, business_roles=["counselor"]
+    )
 
     assert await knowledge_router.require_knowledge_base_read("kb-1", readonly_admin) is readonly_admin
 
     with pytest.raises(HTTPException) as exc_info:
         await knowledge_router.require_knowledge_base_read(
-            "kb-1", SimpleNamespace(uid="admin-2", role="admin", department_id=2)
+            "kb-1", SimpleNamespace(uid="admin-2", role="admin", department_id=2, business_roles=[])
         )
     assert exc_info.value.status_code == 403

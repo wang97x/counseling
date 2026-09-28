@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from server.utils.auth_middleware import get_db, get_required_user
+from counseling.identity.http.dependencies import get_db, get_required_user
 from sqlalchemy.ext.asyncio import AsyncSession
 from yuxi.services.mention_search_service import (
     InvalidMentionThreadError,
     MentionThreadNotFoundError,
     search_mentions,
 )
-from yuxi.storage.postgres.models_business import User
+from counseling.identity.models import User
 
 mention_router = APIRouter(prefix="/mention", tags=["mention"])
 

@@ -6,8 +6,8 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from server.routers.auth_router import auth
-from server.utils.auth_middleware import get_db, get_required_user
+from counseling.identity.http.auth import auth
+from counseling.identity.http.dependencies import get_db, get_required_user
 from yuxi.storage.postgres.models_business import Base, Department, User
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.unit]

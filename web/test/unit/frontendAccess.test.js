@@ -29,7 +29,7 @@ test('三类产品角色获得约定首页和前端模块能力', () => {
   assert.equal(businessAdmin.canUsePlatformWorkspace, false)
   assert.equal(businessAdmin.canAccessLinkedConversation, false)
 
-  const superAdmin = resolveFrontendAccess('superadmin', [])
+  const superAdmin = resolveFrontendAccess('superadmin', ['super_admin'])
   assert.equal(superAdmin.defaultHome, '/dashboard')
   assert.equal(superAdmin.canUseTechnicalConsole, true)
   assert.equal(superAdmin.canUsePlatformWorkspace, false)
@@ -59,7 +59,7 @@ test('辅导员直接访问技术或平台工作区会回到档案首页，档�
   assert.match(routes, /name: 'CLIAuthAuthorize'[\s\S]*?requiresPlatformWorkspace: true/)
 })
 
-test('未知业务用户不能继承档案或技术入口，无业务角色的平台管理员保留原控制台', () => {
+test('未知业务用户和无业务角色的平台管理员都不能继承业务入口', () => {
   const unknown = resolveFrontendAccess('user', [])
   assert.equal(unknown.defaultHome, '/')
   assert.equal(unknown.canAccessStudentRecords, false)
@@ -70,14 +70,14 @@ test('未知业务用户不能继承档案或技术入口，无业务角色的�
   )
 
   const legacyAdmin = resolveFrontendAccess('admin', [])
-  assert.equal(legacyAdmin.defaultHome, '/agent-manage')
-  assert.equal(legacyAdmin.canUseTechnicalConsole, true)
-  assert.equal(legacyAdmin.canUsePlatformWorkspace, true)
+  assert.equal(legacyAdmin.defaultHome, '/')
+  assert.equal(legacyAdmin.canUseTechnicalConsole, false)
+  assert.equal(legacyAdmin.canUsePlatformWorkspace, false)
 
-  const legacyTechnicalAdmin = resolveFrontendAccess('user', ['technical_admin'])
-  assert.equal(legacyTechnicalAdmin.defaultHome, '/agent-manage')
-  assert.equal(legacyTechnicalAdmin.canUseTechnicalConsole, true)
-  assert.equal(legacyTechnicalAdmin.canUsePlatformWorkspace, false)
+  const superAdmin = resolveFrontendAccess('user', ['super_admin'])
+  assert.equal(superAdmin.defaultHome, '/dashboard')
+  assert.equal(superAdmin.canUseTechnicalConsole, true)
+  assert.equal(superAdmin.canUsePlatformWorkspace, false)
 })
 
 test('档案角色只能打开后端确认属于该档案的关联会话', async () => {
@@ -114,7 +114,7 @@ test('档案角色只能打开后端确认属于该档案的关联会话', async
     await resolveLinkedConversationRedirect(unrelatedRoute, platformAdmin, async () => {
       throw new Error('should not load')
     }),
-    null,
+    '/',
   )
 })
 
@@ -182,7 +182,7 @@ test('业务管理员不能用直接 URL 进入技术控制台、通用聊天或
 })
 
 test('超级管理员保留技术管理，但不能进入通用聊天或个人空间', () => {
-  const superAdmin = resolveFrontendAccess('superadmin', [])
+  const superAdmin = resolveFrontendAccess('superadmin', ['super_admin'])
   assert.equal(superAdmin.canUseTechnicalConsole, true)
   assert.equal(
     resolveFrontendRouteRedirect({ requiresPlatformWorkspace: true }, superAdmin),
