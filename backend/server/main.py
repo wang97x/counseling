@@ -20,6 +20,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from server.composition import configure_platform_ports
+
+configure_platform_ports()
 from server.routers import router
 from server.utils.lifespan import lifespan
 from server.utils.common_utils import setup_logging

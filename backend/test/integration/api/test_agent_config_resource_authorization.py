@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from yuxi.agents.buildin.chatbot.context import ChatBotContext
 from yuxi.agents.context import normalize_agent_context_config
-from yuxi.storage.postgres.models_business import User
+from counseling.identity.models import User
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 

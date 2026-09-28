@@ -203,6 +203,58 @@ async def test_run_now_rejects_request_id_reused_for_another_job(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_dispatch_locks_identity_before_scheduled_run(monkeypatch):
+    events = []
+    scheduled_run = SimpleNamespace(
+        id="run-1",
+        status="dispatching",
+        job_id="job-1",
+        trigger="manual",
+        to_dict=lambda: {"status": scheduled_run.status},
+    )
+    job = SimpleNamespace(id="job-1", uid="user-1")
+
+    class Repository:
+        async def peek_run_owner(self, run_id):
+            events.append("peek")
+            assert run_id == "run-1"
+            return "job-1", "user-1"
+
+        async def get_run(self, run_id, *, lock):
+            events.append("run_lock")
+            assert (run_id, lock) == ("run-1", True)
+            return scheduled_run
+
+    class IdentityReader:
+        async def get_by_uid(self, db, uid, *, active_only, for_update):
+            del db
+            events.append("user_lock")
+            assert (uid, active_only, for_update) == ("user-1", True, True)
+            return None
+
+    class Db:
+        async def get(self, model, object_id):
+            assert (model, object_id) == (service.ScheduledAgentJob, "job-1")
+            return job
+
+        async def commit(self):
+            return None
+
+    @asynccontextmanager
+    async def session_context():
+        yield Db()
+
+    monkeypatch.setattr(service.pg_manager, "get_async_session_context", session_context)
+    monkeypatch.setattr(service, "ScheduledAgentRepository", lambda _db: Repository())
+    monkeypatch.setattr(service, "get_identity_reader", lambda: IdentityReader())
+
+    result = await service.dispatch_scheduled_run(scheduled_run_id="run-1")
+
+    assert result["status"] == "cancelled"
+    assert events == ["peek", "user_lock", "run_lock"]
+
+
+@pytest.mark.asyncio
 async def test_recovery_continues_after_one_dispatch_fails(monkeypatch):
     records = [SimpleNamespace(id="run-failing"), SimpleNamespace(id="run-success")]
     dispatched = []
@@ -289,9 +341,22 @@ async def test_claim_disables_invalid_schedule_and_continues_to_next_job(monkeyp
     commits = 0
 
     class Repository:
-        async def claim_due_job(self, *, now):
+        current = None
+
+        async def peek_due_job_owner(self, *, now):
             assert now == datetime(2026, 8, 27, 10, 0)
-            return next(jobs)
+            self.current = next(jobs)
+            return self.current.id, "uid-active"
+
+        async def claim_due_job(self, *, job_id, now):
+            assert now == datetime(2026, 8, 27, 10, 0)
+            assert self.current.id == job_id
+            return self.current
+
+    class IdentityReader:
+        async def get_by_uid(self, db, uid, *, active_only, for_update):
+            assert (uid, active_only, for_update) == ("uid-active", True, True)
+            return SimpleNamespace(uid=uid)
 
     class Db:
         async def commit(self):
@@ -305,6 +370,7 @@ async def test_claim_disables_invalid_schedule_and_continues_to_next_job(monkeyp
         return run
 
     monkeypatch.setattr(service, "ScheduledAgentRepository", lambda _db: Repository())
+    monkeypatch.setattr(service, "get_identity_reader", lambda: IdentityReader())
     monkeypatch.setattr(service, "_create_run_record", create_run_record)
 
     result = await service._claim_due_run(db=Db(), now=datetime(2026, 8, 27, 10, 0))

@@ -15,7 +15,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from yuxi.agents.skills import service as skill_service
 from yuxi.storage_migrations import v071_skills
 from yuxi.storage.postgres.manager import pg_manager
-from yuxi.storage.postgres.models_business import Skill, User
+from counseling.identity.models import User
+from yuxi.storage.postgres.models_business import Skill
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 

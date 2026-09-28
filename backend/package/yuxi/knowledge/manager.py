@@ -25,9 +25,9 @@ from yuxi.knowledge.read_models import (
 )
 from yuxi.knowledge.schemas import FindOutputSchema, OpenOutputSchema
 from yuxi.knowledge.utils.security import redact_sensitive_params
-from counseling.identity.knowledge import resolve_knowledge_base_permission
+from yuxi.business_capabilities import get_business_capability_mapper
 from yuxi.permissions import ResourcePermission, normalize_permission_config
-from counseling.identity.models import User
+from yuxi.identity import IdentitySnapshot as User
 from yuxi.utils import logger
 from yuxi.utils.datetime_utils import utc_isoformat
 
@@ -324,7 +324,7 @@ class KnowledgeBaseManager:
 
     @staticmethod
     def _database_info_accessible(user: dict, db_info: Any) -> bool:
-        return resolve_knowledge_base_permission(user, db_info) != ResourcePermission.NONE
+        return get_business_capability_mapper().resolve_knowledge_permission(user, db_info) != ResourcePermission.NONE
 
     async def check_accessible(self, user: dict, kb_id: str) -> bool:
         """检查用户是否有权限访问数据库
@@ -373,11 +373,11 @@ class KnowledgeBaseManager:
 
     async def get_databases_by_uid(self, uid: str) -> list[KnowledgeBaseSummary]:
         """根据 uid 获取知识库列表"""
-        from counseling.identity.repositories.user import UserRepository
+        from yuxi.identity import get_identity_reader
 
         # 通过数据库获取用户信息
-        user_repo = UserRepository()
-        user: User | None = await user_repo.get_by_uid(uid)
+        user_repo = get_identity_reader()
+        user: User | None = await user_repo.get_by_uid(None, uid)
         if not user:
             logger.warning(f"User not found: {uid}")
             return []
@@ -406,7 +406,7 @@ class KnowledgeBaseManager:
         # 超级管理员可以看到所有知识库
         filtered_databases: list[KnowledgeBaseSummary] = []
         for database in all_databases:
-            permission = resolve_knowledge_base_permission(user_info, database)
+            permission = get_business_capability_mapper().resolve_knowledge_permission(user_info, database)
             if permission == ResourcePermission.NONE:
                 continue
             additional_params = database.additional_params
@@ -825,11 +825,11 @@ class KnowledgeBaseManager:
 
         folder_ids = [record.file_id for record in records if record.is_folder]
         creator_uids = [record.created_by for record in records if getattr(record, "created_by", None)]
-        from counseling.identity.repositories.user import UserRepository
+        from yuxi.identity import get_identity_reader
 
         child_counts, creators = await asyncio.gather(
             repo.count_children_by_parent_ids(kb_id=kb_id, parent_ids=folder_ids),
-            UserRepository().list_by_uids(creator_uids),
+            get_identity_reader().list_by_uids(None, creator_uids),
         )
         creators = {user.uid: user for user in creators}
         items = [

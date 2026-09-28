@@ -1172,6 +1172,3 @@ Index(
     AgentRunRequest.created_at,
     AgentRunRequest.id,
 )
-
-# 仓库外已发布代码仍可能从本模块导入；实现与表语义由 counseling.identity 拥有。
-from counseling.identity.models import APIKey, CLIAuthSession, Department, OperationLog, User  # noqa: E402,F401

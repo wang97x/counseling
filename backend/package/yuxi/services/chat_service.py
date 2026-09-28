@@ -49,7 +49,7 @@ from yuxi.services.subagent_run_service import serialize_subagent_run_state
 from yuxi.services.tool_message_audit_service import ToolMessageAuditCollector
 from yuxi.services.workdir_service import resolve_conversation_workdir_path
 from yuxi.storage.postgres.manager import pg_manager
-from counseling.identity.models import User
+from yuxi.identity import IdentitySnapshot as User
 from yuxi.storage.postgres.models_business import MODEL_AUDIT_MESSAGE_TYPE, Agent
 from yuxi.utils.datetime_utils import utc_now_naive
 from yuxi.utils.logging_config import logger

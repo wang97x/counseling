@@ -1,6 +1,7 @@
 """通过 Yuxi 平台能力实现心理辅导业务端口。"""
 
 import json
+from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,6 +11,8 @@ from counseling.documents.service import (
     validate_summary,
 )
 from yuxi.config.options import system_options
+from yuxi.services.ocr_service import parse_document
+from yuxi.storage.minio.client import get_minio_client
 from yuxi.models.chat import select_model
 from yuxi.services.conversation_service import create_thread_view
 from counseling.identity.models import User
@@ -40,6 +43,29 @@ class YuxiConversationAdapter:
         )
 
 
+class YuxiDocumentParserAdapter:
+    """使用 Yuxi 文档解析链实现业务 OCR 端口。"""
+
+    async def parse(self, path: Path, *, db: AsyncSession) -> str:
+        """解析业务临时文件。"""
+        return await parse_document(str(path), db=db)
+
+
+class YuxiObjectStorageAdapter:
+    """使用 Yuxi MinIO 客户端实现业务对象存储端口。"""
+
+    async def upload(self, bucket: str, object_name: str, data: bytes, content_type: str) -> None:
+        """上传业务来源文件。"""
+        await get_minio_client().aupload_file(bucket, object_name, data, content_type)
+
+    async def download(self, bucket: str, object_name: str) -> bytes:
+
+        """下载业务来源文件。"""
+        return await get_minio_client().adownload_file(bucket, object_name)
+
+    async def delete(self, bucket: str, object_name: str) -> None:
+        """删除需要补偿的业务来源文件。"""
+        await get_minio_client().adelete_file(bucket, object_name)
 class YuxiGenerationAdapter:
     """使用 Yuxi 当前默认模型生成业务摘要草稿。"""
 

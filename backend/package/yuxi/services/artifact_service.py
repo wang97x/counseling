@@ -19,7 +19,7 @@ from yuxi.agents.backends.paths import (
     workspace_scope_from_runtime_path,
 )
 from yuxi.agents.skills.service import ResolvedSkill, list_accessible_skills
-from counseling.identity.repositories.user import UserRepository
+from yuxi.identity import get_identity_reader
 from yuxi.services.file_preview import render_file_preview
 from yuxi.services.workdir_service import resolve_authorized_workdir
 from yuxi.utils.filepreview import (
@@ -55,7 +55,7 @@ async def _require_skill_artifact_access(
     if not normalized_path.startswith(skills_prefix):
         return None
     slug = normalized_path[len(skills_prefix) :].split("/", 1)[0]
-    user = await UserRepository(db).get_by_uid(str(current_uid))
+    user = await get_identity_reader().get_by_uid(db, str(current_uid))
     if user is None or bool(user.is_deleted):
         raise HTTPException(status_code=403, detail="artifact access denied")
     accessible = {skill.slug: skill for skill in await list_accessible_skills(db, user)}

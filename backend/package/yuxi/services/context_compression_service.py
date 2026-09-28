@@ -26,7 +26,7 @@ from yuxi.repositories.agent_state_repository import AgentStateRepository
 from yuxi.repositories.conversation_repository import ConversationRepository
 from yuxi.services.agent_run_service import resolve_agent_run_model_spec
 from yuxi.services.workdir_service import ensure_conversation_workdir_available
-from counseling.identity.models import User
+from yuxi.identity import IdentitySnapshot as User
 from yuxi.utils.logging_config import logger
 
 

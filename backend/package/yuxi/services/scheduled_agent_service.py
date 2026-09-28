@@ -22,7 +22,7 @@ from yuxi.repositories.scheduled_agent_repository import ScheduledAgentRepositor
 from yuxi.services.input_message_service import build_chat_input_message
 from yuxi.services.run_submission_service import RunOrigin, RunSubmissionCommand, submit_run_command
 from yuxi.storage.postgres.manager import pg_manager
-from counseling.identity.models import User
+from yuxi.identity import IdentitySnapshot as User, get_identity_reader
 from yuxi.storage.postgres.models_business import ScheduledAgentJob, ScheduledAgentRun
 from yuxi.utils.datetime_utils import format_utc_datetime, utc_now_naive
 from yuxi.utils.logging_config import logger
@@ -398,17 +398,16 @@ async def dispatch_scheduled_run(*, scheduled_run_id: str) -> dict | None:
     """将持久触发意图幂等提交到统一 AgentRun 链路。"""
     try:
         async with pg_manager.get_async_session_context() as db:
-            scheduled_run = await db.scalar(
-                select(ScheduledAgentRun).where(ScheduledAgentRun.id == scheduled_run_id).with_for_update()
-            )
+            repo = ScheduledAgentRepository(db)
+            owner = await repo.peek_run_owner(scheduled_run_id)
+            if owner is None:
+                return None
+            job_id, uid = owner
+            user = await get_identity_reader().get_by_uid(db, uid, active_only=True, for_update=True)
+            scheduled_run = await repo.get_run(scheduled_run_id, lock=True)
             if scheduled_run is None or scheduled_run.status != "dispatching":
                 return scheduled_run.to_dict() if scheduled_run else None
-            job = await db.get(ScheduledAgentJob, scheduled_run.job_id)
-            user = (
-                await db.scalar(select(User).where(User.uid == job.uid, User.is_deleted == 0).with_for_update())
-                if job
-                else None
-            )
+            job = await db.get(ScheduledAgentJob, job_id)
             if job is None or user is None:
                 scheduled_run.status = "cancelled"
                 scheduled_run.error_message = "任务已删除、停用或用户不存在"
@@ -481,7 +480,20 @@ async def recover_scheduled_dispatches(*, limit: int = 100) -> int:
 async def _claim_due_run(*, db: AsyncSession, now: datetime) -> ScheduledAgentRun | None:
     """在一个事务中领取到期任务、推进计划并创建触发意图。"""
     repo = ScheduledAgentRepository(db)
-    while job := await repo.claim_due_job(now=now):
+    while candidate := await repo.peek_due_job_owner(now=now):
+        job_id, uid = candidate
+        user = await get_identity_reader().get_by_uid(db, uid, active_only=True, for_update=True)
+        job = await repo.claim_due_job(job_id=job_id, now=now)
+        if job is None:
+            await db.rollback()
+            continue
+
+        if user is None:
+            job.enabled = False
+            job.updated_at = now
+            await db.commit()
+            continue
+
         scheduled_for = job.next_run_at
         try:
             job.next_run_at = next_run_at(job.cron_expression, job.timezone, now)

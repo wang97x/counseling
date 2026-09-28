@@ -13,7 +13,8 @@ from types import SimpleNamespace
 import pytest
 from yuxi.agents.skills import service as svc
 from yuxi.agents.toolkits import service as tool_service
-from yuxi.storage.postgres.models_business import Skill, User
+from counseling.identity.models import User
+from yuxi.storage.postgres.models_business import Skill
 
 
 _MULTIPROCESS_SKILL_SYNC_SCRIPT = """

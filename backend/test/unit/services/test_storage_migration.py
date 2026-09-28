@@ -283,7 +283,7 @@ async def test_main_v2_business_schema_is_converged_and_versioned_as_current(mon
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("starting_version", [7, 8])
-async def test_main_existing_business_schema_upgrades_to_student_records(monkeypatch, starting_version: int):
+async def test_main_delegates_legacy_business_schema_before_version_publish(monkeypatch, starting_version: int):
     calls: list[str] = []
     sessions = [_Session(), _Session(), _Session()]
 
@@ -302,8 +302,6 @@ async def test_main_existing_business_schema_upgrades_to_student_records(monkeyp
         create_business_tables=lambda: _record(calls, "create_business"),
         create_knowledge_tables=lambda: _record(calls, "create_knowledge"),
         ensure_business_schema=lambda: _record(calls, "business_schema"),
-        upgrade_business_schema_v7_to_v8=lambda: _record(calls, "business_roles_schema"),
-        upgrade_business_schema_v8_to_v9=lambda: _record(calls, "student_schema"),
         ensure_knowledge_schema=lambda: _record(calls, "knowledge_schema"),
         setup_langgraph_checkpointer=lambda: _record(calls, "checkpoint"),
         get_async_session_context=session_context,
@@ -327,10 +325,12 @@ async def test_main_existing_business_schema_upgrades_to_student_records(monkeyp
     monkeypatch.setattr(storage_migration, "mark_v071_skills_migrated", lambda: calls.append("mark_skills"))
     monkeypatch.setattr(storage_migration, "migrate_runtime_storage_identity", lambda: calls.append("runtime_identity"))
 
-    await storage_migration.main()
+    async def migrate_legacy(version: int) -> None:
+        calls.append(f"legacy_business:{version}")
 
-    assert ("business_roles_schema" in calls) is (starting_version == 7)
-    assert "student_schema" in calls
+    await storage_migration.main(legacy_business_migrator=migrate_legacy)
+
+    assert f"legacy_business:{starting_version}" in calls
     assert f"version:business:{storage_migration.BUSINESS_SCHEMA_VERSION}" in calls
     assert {"create_business", "business_schema", "checkpoint", "knowledge_schema"}.isdisjoint(calls)
 

@@ -14,6 +14,7 @@ from fastapi import HTTPException
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from counseling.identity.models import User
 from yuxi.repositories.agent_run_request_repository import AgentRunRequestRepository
 from yuxi.repositories.agent_run_repository import AgentRunRepository
 from yuxi.services import agent_request_queue_service
@@ -27,7 +28,6 @@ from yuxi.storage.postgres.models_business import (
     Message,
     Project,
     SubagentThread,
-    User,
 )
 from yuxi.utils.datetime_utils import utc_now_naive
 

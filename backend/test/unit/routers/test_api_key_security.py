@@ -9,7 +9,8 @@ from counseling.identity.http.auth import delete_user
 from counseling.identity.http.user_settings import APIKeyCreate, create_api_key, get_accessible_api_key
 from counseling.identity.http.dependencies import _verify_api_key
 from counseling.identity.repositories.api_key import APIKeyRepository
-from yuxi.storage.postgres.models_business import APIKey, Base, Department, User
+from counseling.identity.models import APIKey, Department, User
+from yuxi.storage.postgres.models_business import Base
 from counseling.identity.auth import AuthUtils
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.unit]

@@ -569,7 +569,7 @@ async def prepare_agent_runtime_context(
         return context
 
     from yuxi.agents.skills.runtime import resolve_runtime_skills_for_context
-    from counseling.identity.repositories.user import UserRepository
+    from yuxi.identity import get_identity_reader
     from yuxi.storage.postgres.manager import pg_manager
 
     resource_fields = AGENT_RUNTIME_RESOURCE_FIELDS
@@ -577,7 +577,7 @@ async def prepare_agent_runtime_context(
     async with pg_manager.get_async_session_context() as db:
         if not str(getattr(context, "model", "") or "").strip():
             setattr(context, "model", (await system_options.get(db))["default_model"])
-        user = await UserRepository().get_by_uid_with_db(db, uid)
+        user = await get_identity_reader().get_by_uid(db, uid)
         if user is None:
             for field_name in context_resource_fields:
                 if hasattr(context, field_name):

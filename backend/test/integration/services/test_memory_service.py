@@ -13,6 +13,7 @@ import pytest_asyncio
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from counseling.identity.models import User
 from yuxi.repositories.conversation_repository import ConversationRepository
 from yuxi.services import memory_service
 from yuxi.storage.postgres.manager import pg_manager
@@ -23,7 +24,6 @@ from yuxi.storage.postgres.models_business import (
     Project,
     SubagentThread,
     ToolCall,
-    User,
     UserConfig,
 )
 from yuxi.utils.datetime_utils import utc_now_naive

@@ -8,7 +8,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from counseling.identity.repositories.department import DepartmentRepository
-from yuxi.storage.postgres.models_business import APIKey, Base, Department, User
+from counseling.identity.models import APIKey, Department, User
+from yuxi.storage.postgres.models_business import Base
 from counseling.identity.auth import AuthUtils
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.unit]

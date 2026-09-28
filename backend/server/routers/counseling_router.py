@@ -10,7 +10,12 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from counseling.identity.http.dependencies import get_db, get_required_user
-from counseling.integrations.yuxi import YuxiConversationAdapter, YuxiGenerationAdapter
+from counseling.integrations.yuxi import (
+    YuxiConversationAdapter,
+    YuxiDocumentParserAdapter,
+    YuxiGenerationAdapter,
+    YuxiObjectStorageAdapter,
+)
 from counseling.documents.service import (
     CounselingConflictError,
     CounselingGenerationError,
@@ -303,7 +308,15 @@ async def upload_record_draft_route(
 ):
     """上传并解析当前档案的 TXT、DOCX 或 PDF 记录。"""
     try:
-        return await upload_record_draft(db, actor, student_id, file, request_id)
+        return await upload_record_draft(
+            db,
+            actor,
+            student_id,
+            file,
+            request_id,
+            parser=YuxiDocumentParserAdapter(),
+            storage=YuxiObjectStorageAdapter(),
+        )
     except (PermissionError, LookupError, ValueError, CounselingConflictError) as exc:
         _raise_counseling_error(exc)
 
@@ -470,7 +483,13 @@ async def download_record_source_route(
 ):
     """经档案归属校验下载原始记录文件。"""
     try:
-        data, file_name, content_type = await download_source(db, actor, student_id, draft_id)
+        data, file_name, content_type = await download_source(
+            db,
+            actor,
+            student_id,
+            draft_id,
+            storage=YuxiObjectStorageAdapter(),
+        )
     except (PermissionError, LookupError) as exc:
         _raise_counseling_error(exc)
     encoded = quote(file_name)

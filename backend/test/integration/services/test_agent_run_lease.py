@@ -19,6 +19,7 @@ from sqlalchemy import delete, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from counseling.identity.models import User
 from yuxi.repositories.agent_run_repository import AgentRunRepository
 from yuxi.repositories.conversation_repository import ConversationRepository
 from yuxi.repositories.model_message_audit_repository import ModelMessageAuditRepository
@@ -37,7 +38,6 @@ from yuxi.storage.postgres.models_business import (
     Project,
     SubagentThread,
     ToolCall,
-    User,
 )
 from yuxi.utils.datetime_utils import utc_now_naive
 

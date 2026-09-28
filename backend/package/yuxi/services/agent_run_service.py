@@ -50,7 +50,7 @@ from yuxi.services.run_queue_service import (
     publish_cancel_signals,
 )
 from yuxi.storage.postgres.manager import pg_manager
-from counseling.identity.models import User
+from yuxi.identity import get_identity_reader
 from yuxi.storage.postgres.models_business import Message, build_agent_run_timing
 from yuxi.utils.datetime_utils import utc_now_naive
 from yuxi.utils.hash_utils import hash_id
@@ -733,8 +733,7 @@ async def prepare_agent_run_creation_scope(
     if conversation.agent_id != agent_slug:
         raise HTTPException(status_code=409, detail="已有线程已绑定智能体，不能切换")
 
-    user_result = await db.execute(select(User).where(User.uid == str(current_uid)))
-    current_user = user_result.scalar_one_or_none()
+    current_user = await get_identity_reader().get_by_uid(db, str(current_uid))
     if not current_user:
         raise HTTPException(status_code=404, detail="用户不存在")
 

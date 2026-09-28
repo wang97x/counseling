@@ -6,7 +6,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from counseling.identity.http.user_settings import get_user_config, update_user_config
 from yuxi.config import UserConfigSchema
-from yuxi.storage.postgres.models_business import Base, Department, User
+from counseling.identity.models import Department, User
+from yuxi.storage.postgres.models_business import Base
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.unit]
 

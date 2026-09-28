@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from counseling.documents.ports import CounselingDocumentParser, CounselingObjectStorage
 from counseling.documents.repository import CounselingRecordRepository
 from counseling.risks.repository import CounselingRiskRepository
 from counseling.storage.models import (
@@ -26,8 +27,6 @@ from counseling.storage.models import (
 )
 from counseling.students.repository import StudentRepository
 from counseling.identity.permissions import BusinessCapability, resolve_business_capabilities
-from yuxi.services.ocr_service import parse_document
-from yuxi.storage.minio.client import get_minio_client
 from counseling.identity.models import User
 from yuxi.utils.datetime_utils import format_utc_datetime, utc_now_naive
 from yuxi.utils.upload_utils import read_upload_with_limit
@@ -209,7 +208,14 @@ async def _owned_draft(
 
 
 async def upload_record_draft(
-    db: AsyncSession, actor: User, student_id: int, upload: UploadFile, request_id: str
+    db: AsyncSession,
+    actor: User,
+    student_id: int,
+    upload: UploadFile,
+    request_id: str,
+    *,
+    parser: CounselingDocumentParser,
+    storage: CounselingObjectStorage,
 ) -> dict:
     """解析有效记录文件，稳定存储来源并创建首个修订。"""
     request_id = _validate_key(request_id, "request_id")
@@ -229,7 +235,7 @@ async def upload_record_draft(
         temp_file.write(data)
         temp_file.flush()
         try:
-            parsed_text = (await parse_document(temp_file.name, db=db)).strip()
+            parsed_text = (await parser.parse(Path(temp_file.name), db=db)).strip()
         except Exception as exc:
             raise ValueError(f"记录文件解析失败: {exc}") from exc
     if not parsed_text:
@@ -240,9 +246,8 @@ async def upload_record_draft(
     draft_id = uuid.uuid4().hex
     object_name = f"counseling/{actor.uid}/{student_id}/{draft_id}/{safe_name}"
     content_type = upload.content_type or "application/octet-stream"
-    storage = get_minio_client()
     await db.rollback()
-    await storage.aupload_file(RECORD_BUCKET, object_name, data, content_type)
+    await storage.upload(RECORD_BUCKET, object_name, data, content_type)
     repository = CounselingRecordRepository(db)
     draft = CounselingRecordDraft(
         id=draft_id,
@@ -277,7 +282,7 @@ async def upload_record_draft(
         await db.commit()
     except Exception:
         await db.rollback()
-        await storage.adelete_file(RECORD_BUCKET, object_name)
+        await storage.delete(RECORD_BUCKET, object_name)
         raise
     await db.refresh(draft)
     return _draft_payload(draft, revision)
@@ -587,13 +592,18 @@ async def confirm_archive(
 
 
 async def download_source(
-    db: AsyncSession, actor: User, student_id: int, draft_id: str
+    db: AsyncSession,
+    actor: User,
+    student_id: int,
+    draft_id: str,
+    *,
+    storage: CounselingObjectStorage,
 ) -> tuple[bytes, str, str]:
     """鉴权读取草稿来源文件并记录访问审计。"""
     repository, draft, _ = await _owned_draft(db, actor, student_id, draft_id)
     if draft.record_kind != "upload" or not draft.source_bucket or not draft.source_object_name:
         raise LookupError("该咨询记录没有来源文件")
-    data = await get_minio_client().adownload_file(draft.source_bucket, draft.source_object_name)
+    data = await storage.download(draft.source_bucket, draft.source_object_name)
     repository.audit(
         student_id=student_id,
         draft_id=draft.id,

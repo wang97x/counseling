@@ -2,13 +2,16 @@
 
 import asyncio
 
-from counseling.storage.schema import migrate_schema as migrate_counseling_schema
+from counseling.storage.schema import (
+    migrate_legacy_business_schema,
+    migrate_schema as migrate_counseling_schema,
+)
 from yuxi.storage_migration import main as migrate_yuxi_schema
 
 
 async def main() -> None:
     """先迁移 Yuxi 平台事实，再迁移心理辅导领域事实。"""
-    await migrate_yuxi_schema()
+    await migrate_yuxi_schema(legacy_business_migrator=migrate_legacy_business_schema)
     await migrate_counseling_schema()
 
 

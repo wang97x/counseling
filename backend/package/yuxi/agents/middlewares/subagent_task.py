@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from yuxi.repositories.agent_repository import AgentRepository
 from yuxi.repositories.agent_run_repository import TERMINAL_RUN_STATUSES
-from counseling.identity.repositories.user import UserRepository
+from yuxi.identity import get_identity_reader
 from yuxi.services.input_message_service import build_chat_input_message
 from yuxi.storage.postgres.manager import pg_manager
 from yuxi.storage.postgres.models_business import Agent
@@ -111,7 +111,7 @@ async def create_subagent_task_middleware(parent_context) -> YuxiSubAgentMiddlew
         return None
 
     async with pg_manager.get_async_session_context() as db:
-        user = await UserRepository().get_by_uid_with_db(db, uid)
+        user = await get_identity_reader().get_by_uid(db, uid)
         if user is None:
             return None
         repo = AgentRepository(db)

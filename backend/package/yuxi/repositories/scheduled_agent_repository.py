@@ -7,7 +7,6 @@ from datetime import datetime
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from counseling.identity.models import User
 from yuxi.storage.postgres.models_business import (
     AgentRun,
     AgentRunRequest,
@@ -119,20 +118,33 @@ class ScheduledAgentRepository:
         ).one_or_none()
         return row if row else (None, None)
 
-    async def claim_due_job(self, *, now: datetime) -> ScheduledAgentJob | None:
-        """锁定活动用户的一个到期任务；触发事实由 service 在同一事务内创建。"""
+    async def peek_due_job_owner(self, *, now: datetime) -> tuple[str, str] | None:
+        """读取一个到期任务及其 owner，不在身份行之前取得任务行锁。"""
+        row = (
+            await self.db.execute(
+                select(ScheduledAgentJob.id, ScheduledAgentJob.uid)
+                .where(
+                    ScheduledAgentJob.enabled.is_(True),
+                    ScheduledAgentJob.deleted_at.is_(None),
+                    ScheduledAgentJob.next_run_at <= now,
+                )
+                .order_by(ScheduledAgentJob.next_run_at.asc(), ScheduledAgentJob.id.asc())
+                .limit(1)
+            )
+        ).one_or_none()
+        return (str(row.id), str(row.uid)) if row else None
+
+    async def claim_due_job(self, *, job_id: str, now: datetime) -> ScheduledAgentJob | None:
+        """在身份行之后锁定仍然到期的指定任务。"""
         return await self.db.scalar(
             select(ScheduledAgentJob)
-            .join(User, User.uid == ScheduledAgentJob.uid)
             .where(
-                User.is_deleted == 0,
+                ScheduledAgentJob.id == job_id,
                 ScheduledAgentJob.enabled.is_(True),
                 ScheduledAgentJob.deleted_at.is_(None),
                 ScheduledAgentJob.next_run_at <= now,
             )
-            .order_by(ScheduledAgentJob.next_run_at.asc(), ScheduledAgentJob.id.asc())
             .with_for_update(skip_locked=True)
-            .limit(1)
         )
 
     async def has_active_run(self, job_id: str) -> bool:
@@ -171,9 +183,23 @@ class ScheduledAgentRepository:
         await self.db.flush()
         return run
 
-    async def get_run(self, run_id: str) -> ScheduledAgentRun | None:
-        """按稳定 ID 读取一次触发意图。"""
-        return await self.db.get(ScheduledAgentRun, run_id)
+    async def peek_run_owner(self, run_id: str) -> tuple[str, str] | None:
+        """在取得 run 行锁前读取任务与身份 owner。"""
+        row = (
+            await self.db.execute(
+                select(ScheduledAgentRun.job_id, ScheduledAgentJob.uid)
+                .join(ScheduledAgentJob, ScheduledAgentJob.id == ScheduledAgentRun.job_id)
+                .where(ScheduledAgentRun.id == run_id)
+            )
+        ).one_or_none()
+        return (str(row.job_id), str(row.uid)) if row else None
+
+    async def get_run(self, run_id: str, *, lock: bool = False) -> ScheduledAgentRun | None:
+        """按稳定 ID 读取一次触发意图，可在身份行之后锁定。"""
+        stmt = select(ScheduledAgentRun).where(ScheduledAgentRun.id == run_id)
+        if lock:
+            stmt = stmt.with_for_update()
+        return await self.db.scalar(stmt)
 
     async def list_dispatching_runs(self, *, before: datetime, limit: int = 100) -> list[ScheduledAgentRun]:
         result = await self.db.execute(

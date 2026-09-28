@@ -14,7 +14,7 @@ from sqlalchemy import update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from counseling.identity.services import login_rate_limit as login_limiter
-from yuxi.storage.postgres.models_business import User as UserModel
+from counseling.identity.models import User as UserModel
 from yuxi.storage.redis import close_async_redis_client, create_async_redis_client, get_async_redis_client
 from yuxi.utils.datetime_utils import utc_now_naive
 

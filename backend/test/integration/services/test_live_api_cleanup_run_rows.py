@@ -24,6 +24,7 @@ from test.live_api_cleanup import (
     validate_test_runs_terminal,
     validate_test_workdirs_exclusive,
 )
+from counseling.identity.models import User
 from yuxi.services import project_service
 from yuxi.storage.postgres.models_business import (
     AgentRun,
@@ -34,7 +35,6 @@ from yuxi.storage.postgres.models_business import (
     MessageFeedback,
     Project,
     ToolCall,
-    User,
 )
 from yuxi.workspace.paths import ensure_bound_user_workdir, user_workdir_host_dir
 

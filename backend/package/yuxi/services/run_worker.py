@@ -57,7 +57,7 @@ from yuxi.services.workdir_service import (
     resolve_conversation_workdir_path,
 )
 from yuxi.storage.postgres.manager import pg_manager
-from counseling.identity.models import User
+from yuxi.identity import get_identity_reader
 from yuxi.storage.postgres.models_business import AgentRun, Conversation, Message
 from yuxi.storage.redis import get_arq_redis_settings
 from yuxi.utils.datetime_utils import utc_now_naive
@@ -555,8 +555,7 @@ async def _record_run_timing_best_effort(
 
 async def _load_user(uid: str):
     async with pg_manager.get_async_session_context() as db:
-        result = await db.execute(select(User).where(User.uid == uid, User.is_deleted == 0))
-        return result.scalar_one_or_none()
+        return await get_identity_reader().get_by_uid(db, uid, active_only=True)
 
 
 async def _is_cancel_requested(run_id: str) -> bool:

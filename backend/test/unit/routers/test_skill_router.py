@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
-from yuxi.storage.postgres.models_business import Skill, User
+from counseling.identity.models import User
+from yuxi.storage.postgres.models_business import Skill
 
 from server.routers.skill_router import skills, user_skills
 from counseling.identity.http.dependencies import get_admin_user, get_db, get_required_user

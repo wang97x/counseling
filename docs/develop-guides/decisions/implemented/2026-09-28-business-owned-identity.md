@@ -5,6 +5,9 @@
 Owner：backend/counseling/src/counseling/identity/__init__.py
 取代：无
 
+其中“Yuxi 直接读取 counseling 身份契约”和“保留身份 re-export”的条款，已由
+[心理辅导与 Yuxi 端口边界收敛](2026-09-28-counseling-yuxi-port-boundaries.md)取代；其余身份 Owner 决策继续有效。
+
 ## 问题
 
 账号、密码与 OIDC 登录、API Key、部门、业务角色和用户管理曾分散在 `yuxi`
@@ -31,7 +34,7 @@ Owner：backend/counseling/src/counseling/identity/__init__.py
 - 只迁移业务角色映射：认证、部门和持久化 Owner 仍在 Yuxi，未采用。
 - 在 Yuxi 保留身份 repository 并让 counseling 包装：仍存在两个身份 Owner，未采用。
 - 恢复按平台角色自动回填业务权限：会重新建立平台字段到业务授权的隐式关系，未采用。
-- 删除全部身份模型 re-export：可能破坏仓库外已发布 Python import，当前只禁止仓库内运行时代码消费兼容出口。
+- 删除全部身份模型 re-export：后续确认仓库内无消费者，并由端口边界决策接受该兼容收窄，已采用。
 - 同时改表名、HTTP 路径或拆分微服务：把领域迁移与公开兼容、分布式事务叠加，
   当前没有消费者收益，未采用。
 
@@ -39,11 +42,8 @@ Owner：backend/counseling/src/counseling/identity/__init__.py
 
 - 身份写入和授权规则只有一个业务 Owner；Yuxi 不再提供身份 service、repository、
   router 或业务角色实现。
-- Yuxi 的 AI 查询仍需消费用户主体和可见性，因此允许依赖
-  `counseling.identity` 的只读契约；架构守卫禁止其导入其他 counseling 领域。
-- 仓库内运行时消费者直接导入 `counseling.identity`；
-  `yuxi.storage.postgres.models_business` 只为已发布 Python import 保留身份模型 re-export，
-  不构成第二个身份 Owner。
+- Yuxi 的 AI 查询通过自身只读身份端口消费脱敏快照，不直接导入 counseling；
+  `server` composition root 装配业务实现，Yuxi 不再保留身份模型 re-export。
 - 超级管理不因系统配置身份获得个案正文或个人知识访问；团队知识管理只由显式
   `business_admin` 及共享范围共同决定。
 - 旧表名和 HTTP 契约保留，避免用户重新登录或下游同步切换。

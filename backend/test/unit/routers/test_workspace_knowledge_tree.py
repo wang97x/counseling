@@ -8,7 +8,7 @@ from server.routers.workspace_router import workspace_knowledge
 from counseling.identity.http.dependencies import get_required_user
 from yuxi.knowledge import preview
 from yuxi.knowledge.read_models import KnowledgeBaseDetail
-from yuxi.storage.postgres.models_business import User
+from counseling.identity.models import User
 
 
 class FakeKnowledgeBase:

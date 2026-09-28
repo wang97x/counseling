@@ -13,7 +13,8 @@ from counseling.identity.services.auth import (
     exchange_cli_auth_token,
     get_cli_auth_session_for_user,
 )
-from yuxi.storage.postgres.models_business import APIKey, Base, Department, User
+from counseling.identity.models import APIKey, Department, User
+from yuxi.storage.postgres.models_business import Base
 from yuxi.utils.datetime_utils import utc_now_naive
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.unit]

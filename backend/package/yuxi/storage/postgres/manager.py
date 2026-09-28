@@ -26,55 +26,6 @@ AGENT_RUN_TERMINAL_STATUS_SQL = ", ".join(f"'{status}'" for status in AGENT_RUN_
 BUSINESS_SCHEMA_VERSION = 9
 KNOWLEDGE_SCHEMA_VERSION = 2
 SCHEMA_VERSION_TABLE = "yuxi_schema_migrations"
-BUSINESS_ROLE_SCHEMA_STATEMENTS = (
-    "ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS business_roles JSONB",
-    """
-    UPDATE users
-    SET business_roles = CASE role
-        WHEN 'user' THEN '["counselor"]'::jsonb
-        WHEN 'admin' THEN '["business_admin"]'::jsonb
-        WHEN 'superadmin' THEN '["technical_admin"]'::jsonb
-        ELSE '[]'::jsonb
-    END
-    WHERE business_roles IS NULL
-    """,
-    "ALTER TABLE IF EXISTS users ALTER COLUMN business_roles SET DEFAULT '[]'::jsonb",
-    "ALTER TABLE IF EXISTS users ALTER COLUMN business_roles SET NOT NULL",
-    """
-    DO $$
-    BEGIN
-        IF NOT EXISTS (
-            SELECT 1 FROM pg_constraint
-            WHERE conname = 'ck_users_business_roles'
-              AND conrelid = 'users'::regclass
-        ) THEN
-            ALTER TABLE users
-            ADD CONSTRAINT ck_users_business_roles
-            CHECK (
-                jsonb_typeof(business_roles) = 'array'
-                AND business_roles <@ '["counselor", "business_admin", "technical_admin"]'::jsonb
-            );
-        END IF;
-    END $$;
-    """,
-)
-COUNSELING_STUDENT_SCHEMA_STATEMENTS = (
-    """
-    CREATE TABLE IF NOT EXISTS counseling_students (
-        id SERIAL PRIMARY KEY,
-        department_id INTEGER NOT NULL REFERENCES departments(id),
-        student_code VARCHAR(64) NOT NULL,
-        counselor_id INTEGER NOT NULL REFERENCES users(id),
-        background_summary TEXT NOT NULL DEFAULT '',
-        status VARCHAR(16) NOT NULL DEFAULT 'active',
-        created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
-        CONSTRAINT uq_counseling_students_department_code UNIQUE (department_id, student_code),
-        CONSTRAINT ck_counseling_students_status CHECK (status IN ('active', 'closed'))
-    )
-    """,
-    "CREATE INDEX IF NOT EXISTS ix_counseling_students_owner ON counseling_students(department_id, counselor_id)",
-)
 AGENT_RUN_LEASE_SCHEMA_STATEMENTS = (
     "ALTER TABLE IF EXISTS agent_runs ADD COLUMN IF NOT EXISTS worker_id VARCHAR(128)",
     "ALTER TABLE IF EXISTS agent_runs ADD COLUMN IF NOT EXISTS heartbeat_at TIMESTAMP WITHOUT TIME ZONE",
@@ -583,19 +534,6 @@ class PostgresManager(metaclass=SingletonMeta):
             for statement in KNOWLEDGE_FILE_TASK_OWNER_SCHEMA_STATEMENTS:
                 await conn.execute(text(statement))
 
-    async def upgrade_business_schema_v7_to_v8(self) -> None:
-        """增加可组合业务角色，并按旧平台角色回填最小默认值。"""
-        self._check_initialized()
-        async with self.async_engine.begin() as conn:
-            for statement in BUSINESS_ROLE_SCHEMA_STATEMENTS:
-                await conn.execute(text(statement))
-
-    async def upgrade_business_schema_v8_to_v9(self) -> None:
-        """为既有业务数据库增加最小学生档案表。"""
-        self._check_initialized()
-        async with self.async_engine.begin() as conn:
-            for statement in COUNSELING_STUDENT_SCHEMA_STATEMENTS:
-                await conn.execute(text(statement))
 
     async def drop_tables(self):
         """删除所有表（慎用！）"""
@@ -1578,17 +1516,6 @@ class PostgresManager(metaclass=SingletonMeta):
         self._langgraph_checkpointer_setup = False
         self._initialized = False
 
-    async def async_check_first_run(self):
-        """检查是否首次运行（异步版本）- 检查用户表是否有数据"""
-        from sqlalchemy import func, select
-
-        self._check_initialized()
-        async with self.get_async_session_context() as session:
-            from counseling.identity.models import User
-
-            result = await session.execute(select(func.count(User.id)))
-            count = result.scalar()
-            return count == 0
 
     async def commit(self):
         """提交当前会话"""

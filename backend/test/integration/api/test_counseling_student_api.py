@@ -16,6 +16,7 @@ from yuxi.workspace.paths import global_user_data_dir
 
 import asyncpg
 import pytest
+from counseling.storage.schema import migrate_legacy_business_schema
 
 from yuxi.storage.postgres.manager import pg_manager
 from counseling.identity.auth import AuthUtils
@@ -320,8 +321,8 @@ async def test_student_owner_and_manager_access_are_isolated(test_client):
 async def test_student_migration_is_idempotent_and_checks_status():
     """迁移可重复执行，数据库拒绝非法状态。"""
     pg_manager.initialize()
-    await pg_manager.upgrade_business_schema_v8_to_v9()
-    await pg_manager.upgrade_business_schema_v8_to_v9()
+    await migrate_legacy_business_schema(8)
+    await migrate_legacy_business_schema(8)
     conn = await asyncpg.connect(os.environ["POSTGRES_URL"].replace("+asyncpg", ""))
     try:
         columns = {

@@ -5,7 +5,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from counseling.identity.models import User
+from yuxi.identity import get_identity_reader
 from yuxi.models.utils import parse_assistant_message_body
 from yuxi.repositories.agent_repository import AgentRepository
 from yuxi.repositories.agent_run_repository import AgentRunRepository
@@ -85,8 +85,7 @@ async def create_thread_view(
     reserved_metadata = {"attachments", "model_context"}
     if metadata and reserved_metadata.intersection(metadata):
         raise HTTPException(status_code=400, detail="metadata 包含服务端保留字段")
-    user_result = await db.execute(select(User).where(User.uid == str(current_uid)))
-    current_user = user_result.scalar_one_or_none()
+    current_user = await get_identity_reader().get_by_uid(db, str(current_uid))
     if not current_user:
         raise HTTPException(status_code=404, detail="用户不存在")
 

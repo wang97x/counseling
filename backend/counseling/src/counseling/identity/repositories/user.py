@@ -85,6 +85,15 @@ class UserRepository:
         result = await db.execute(select(User).where(User.uid == uid))
         return result.scalar_one_or_none()
 
+    async def get_active_by_uid(self, uid: str, *, for_update: bool = False) -> User | None:
+        """读取有效账号，并可在当前事务中锁定。"""
+        async with self._session() as session:
+            query = select(User).where(User.uid == uid, User.is_deleted == 0)
+            if for_update:
+                query = query.with_for_update()
+            result = await session.execute(query)
+            return result.scalar_one_or_none()
+
     async def list_by_uids(self, uids: list[str]) -> list[User]:
         """批量获取指定 uid 的用户。"""
         normalized_uids = sorted({str(uid).strip() for uid in uids if str(uid).strip()})
@@ -94,6 +103,27 @@ class UserRepository:
         async with self._session() as session:
             result = await session.execute(select(User).where(User.uid.in_(normalized_uids)))
             return list(result.scalars().all())
+
+    async def list_active_uids(self) -> list[str]:
+        """按账号主键顺序返回有效 uid。"""
+        async with self._session() as session:
+            result = await session.execute(select(User.uid).where(User.is_deleted == 0).order_by(User.id))
+            return [str(uid) for uid in result.scalars().all()]
+
+    async def search_uids(self, query: str) -> list[str]:
+        """按 uid 或用户名模糊查找账号。"""
+        pattern = f"%{query.strip()}%"
+        async with self._session() as session:
+            result = await session.execute(
+                select(User.uid).where(or_(User.uid.ilike(pattern), User.username.ilike(pattern))).order_by(User.id)
+            )
+            return [str(uid) for uid in result.scalars().all()]
+
+    async def count_active(self) -> int:
+        """返回有效账号数量。"""
+        async with self._session() as session:
+            result = await session.execute(select(func.count(User.id)).where(User.is_deleted == 0))
+            return int(result.scalar() or 0)
 
     async def get_by_phone(self, phone: str) -> User | None:
         """根据手机号获取用户"""

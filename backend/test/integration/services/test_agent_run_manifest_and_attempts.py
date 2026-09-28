@@ -14,7 +14,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from yuxi.repositories.agent_run_repository import AgentRunRepository
 from yuxi.storage.postgres.manager import AGENT_RUN_FACT_SCHEMA_STATEMENTS, AGENT_RUN_TIMING_SCHEMA_STATEMENTS
-from yuxi.storage.postgres.models_business import AgentRun, AgentRunAttempt, Conversation, Message, Project, User
+from counseling.identity.models import User
+from yuxi.storage.postgres.models_business import AgentRun, AgentRunAttempt, Conversation, Message, Project
 from yuxi.utils.datetime_utils import utc_now_naive
 
 from agent_run_test_helpers import create_agent_run

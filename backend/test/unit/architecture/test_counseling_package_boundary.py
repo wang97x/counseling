@@ -12,6 +12,7 @@ RUNTIME_ROOTS = (
     YUXI_ROOT,
     BACKEND_ROOT / "server",
     BACKEND_ROOT / "scripts",
+    BACKEND_ROOT / "test",
 )
 IDENTITY_MODEL_NAMES = {"APIKey", "CLIAuthSession", "Department", "OperationLog", "User"}
 
@@ -28,14 +29,13 @@ def _imports(path: Path) -> set[str]:
     return modules
 
 
-def test_yuxi_package_only_imports_identity_contract_from_counseling_domain() -> None:
-    """AI 包只能读取业务身份契约，不得依赖档案等业务领域。"""
+def test_yuxi_package_does_not_import_counseling_domain() -> None:
+    """Yuxi 只能通过应用装配的端口消费业务能力。"""
     violations = {
         str(path.relative_to(BACKEND_ROOT)): sorted(
             module
             for module in _imports(path)
-            if (module == "counseling" or module.startswith("counseling."))
-            and not module.startswith("counseling.identity")
+            if module == "counseling" or module.startswith("counseling.")
         )
         for path in YUXI_ROOT.rglob("*.py")
     }
@@ -49,18 +49,18 @@ def test_counseling_domain_is_not_kept_under_yuxi_namespace() -> None:
     assert not list((YUXI_ROOT / "repositories").glob("counseling*.py"))
     assert not list((YUXI_ROOT / "storage" / "postgres").glob("models_counseling*.py"))
     manager_source = (YUXI_ROOT / "storage" / "postgres" / "manager.py").read_text(encoding="utf-8")
-    assert "COUNSELING_RECORD_SCHEMA_STATEMENTS" not in manager_source
+    assert "COUNSELING_STUDENT_SCHEMA_STATEMENTS" not in manager_source
+    assert "BUSINESS_ROLE_SCHEMA_STATEMENTS" not in manager_source
+    assert "upgrade_business_schema_v8_to_v9" not in manager_source
 
 
 def test_runtime_consumers_import_identity_models_from_business_owner() -> None:
-    """仓库运行时代码不能把 Yuxi 兼容出口继续当成身份 Owner。"""
+    """仓库运行时代码不能从 Yuxi 模型模块导入身份类型。"""
 
     compatibility_module = YUXI_ROOT / "storage" / "postgres" / "models_business.py"
     violations: dict[str, list[str]] = {}
     for root in RUNTIME_ROOTS:
         for path in root.rglob("*.py"):
-            if path == compatibility_module:
-                continue
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
             imported_names = sorted(
                 alias.name
@@ -73,6 +73,8 @@ def test_runtime_consumers_import_identity_models_from_business_owner() -> None:
             if imported_names:
                 violations[str(path.relative_to(BACKEND_ROOT))] = imported_names
 
+    compatibility_source = compatibility_module.read_text(encoding="utf-8")
+    assert "from counseling.identity.models import" not in compatibility_source
     assert not violations
 
 
@@ -93,3 +95,13 @@ def test_yuxi_no_longer_defines_identity_lifecycle_modules() -> None:
         YUXI_ROOT / "utils" / "auth_utils.py",
     )
     assert not [path for path in removed_paths if path.exists()]
+
+
+def test_document_service_uses_parser_and_storage_ports() -> None:
+    """业务文档用例不能直接创建 Yuxi OCR 或 MinIO 实现。"""
+    service = COUNSELING_ROOT / "documents" / "service.py"
+    modules = _imports(service)
+
+    assert "counseling.documents.ports" in modules
+    assert "yuxi.services.ocr_service" not in modules
+    assert "yuxi.storage.minio.client" not in modules

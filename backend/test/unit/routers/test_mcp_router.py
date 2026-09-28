@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from yuxi.agents.mcp.service import MCPServerNotFoundError
-from yuxi.storage.postgres.models_business import User
+from counseling.identity.models import User
 
 from server.routers.mcp_router import mcp
 from counseling.identity.http.dependencies import get_admin_user, get_db, get_required_user

@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from yuxi.agents.context import AGENT_RUNTIME_RESOURCE_FIELDS
 from yuxi.permissions import ResourcePermission, normalize_permission_config, resolve_agent_permission
-from counseling.identity.models import User
+from yuxi.identity import IdentitySnapshot as User
 from yuxi.storage.postgres.models_business import Agent
 from yuxi.utils.datetime_utils import utc_now_naive
 

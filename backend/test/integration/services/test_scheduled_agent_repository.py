@@ -13,6 +13,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 from yuxi.repositories.scheduled_agent_repository import ScheduledAgentRepository
+from counseling.identity.models import User
 from counseling.identity.repositories.user import UserRepository
 from yuxi.services import scheduled_agent_service as service
 from yuxi.services.scheduled_agent_service import _claim_due_run, _create_run_record
@@ -24,7 +25,6 @@ from yuxi.storage.postgres.models_business import (
     Project,
     ScheduledAgentJob,
     ScheduledAgentRun,
-    User,
 )
 from yuxi.utils.datetime_utils import utc_now_naive
 
@@ -198,8 +198,8 @@ async def test_claim_concurrency_coalesce_and_soft_delete_history():
 
 
 @pytest.mark.asyncio
-async def test_deleted_user_job_is_not_claimed():
-    """软删除用户的任务不能继续产生后台副作用。"""
+async def test_due_job_claim_does_not_interpret_identity_state():
+    """仓储只锁定任务；活动身份由事务用例在锁任务前判断。"""
     database_url = os.environ["POSTGRES_URL"]
     engine = create_async_engine(database_url, poolclass=NullPool)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -241,7 +241,10 @@ async def test_deleted_user_job_is_not_claimed():
             await db.commit()
 
         async with session_factory() as db:
-            assert await ScheduledAgentRepository(db).claim_due_job(now=utc_now_naive()) is None
+            repo = ScheduledAgentRepository(db)
+            now = utc_now_naive()
+            assert await repo.peek_due_job_owner(now=now) == (job_id, uid)
+            assert await repo.claim_due_job(job_id=job_id, now=now) is not None
     finally:
         async with session_factory() as db:
             await db.execute(delete(ScheduledAgentJob).where(ScheduledAgentJob.id == job_id))

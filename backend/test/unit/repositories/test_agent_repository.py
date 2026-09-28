@@ -17,7 +17,8 @@ from yuxi.repositories.agent_repository import (
     user_can_access_agent,
     user_can_manage_agent,
 )
-from yuxi.storage.postgres.models_business import Agent, User
+from counseling.identity.models import User
+from yuxi.storage.postgres.models_business import Agent
 
 
 class FakeDb:

@@ -6,7 +6,8 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from yuxi.storage.postgres.models_business import AgentRun, Conversation, Message, Project, User
+from counseling.identity.models import User
+from yuxi.storage.postgres.models_business import AgentRun, Conversation, Message, Project
 from yuxi.utils.datetime_utils import utc_now_naive
 
 

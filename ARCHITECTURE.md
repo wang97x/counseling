@@ -57,15 +57,15 @@ Yuxi 只交付完整知识能力路径。API 始终注册 `external_kb`、`knowl
 ### `backend/counseling/src/counseling`
 
 - `identity` 拥有用户与部门模型、密码/JWT、OIDC、API Key、业务角色、身份仓储、管理用例及 `/api/auth/*`、`/api/departments/*`、`/api/user/*` HTTP 入口。既有表名和 wire 字段保持兼容，但授权只解释显式业务角色。
-- 仓库内消费者直接从 `counseling.identity` 读取身份契约；Yuxi 模型模块中的身份类型 re-export 仅用于已发布 Python import 兼容，不能作为新代码依赖入口。
+- Yuxi 只通过 `yuxi.identity` 只读端口消费脱敏身份快照；`server` composition root 装配 counseling 实现，不保留 Yuxi 身份类型 re-export。
 - `students` 拥有学生档案、归属查询和档案关联会话用例。
-- `documents` 拥有文件型与手工型咨询记录草稿、追加修订、人工确认、不可变正式记录、追加更正和统一时间线装配。
+- `documents` 拥有文件型与手工型咨询记录草稿、追加修订、人工确认、不可变正式记录、追加更正和统一时间线装配，并以业务侧端口表达 OCR 与对象存储依赖。
 - `risks` 拥有辅导员人工风险事件及其档案当前风险投影；不执行自动风险判断或干预。
 - `administration` 只拥有业务管理员本部门的最小聚合查询，不读取个案正文。
 - `storage` 拥有心理辅导模型、DDL 和独立 `counseling` Schema 版本；新业务表不进入 Yuxi 的 `business` Schema 版本。
-- `integrations.yuxi` 是业务端口到 Yuxi 通用 Conversation 与模型能力的适配边界。Yuxi 的 AI 链路可以消费有界业务身份读取能力，但不能创建用户、解释业务角色、管理部门或持有认证密钥逻辑。
+- `integrations.yuxi` 是身份读取、业务能力映射、文档解析、对象存储以及 Conversation/模型能力的双向适配边界。Yuxi 不能创建用户、解释业务角色、管理部门或持有认证密钥逻辑。
 
-`server.storage_migration` 是迁移 composition root，先执行 Yuxi 平台迁移，再执行心理辅导领域迁移。Yuxi 中只保留已发布 v8→v9 的历史学生表迁移以兼容旧库；当前新库和后续辅导 Schema 均由业务包拥有。
+`server.storage_migration` 是迁移 composition root。历史 business v7/v8 counseling DDL 由 counseling Schema Owner 通过显式回调执行，Yuxi 编排器只在成功后记录 business v9；随后再执行当前 counseling Schema 迁移。未知版本和缺失历史迁移回调均 fail-closed。
 
 ### 后台任务
 

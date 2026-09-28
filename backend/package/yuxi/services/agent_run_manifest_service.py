@@ -21,7 +21,7 @@ from yuxi.agents.context import normalize_agent_context_config
 from yuxi.agents.skills.runtime import resolve_runtime_skills_for_context
 from yuxi.agents.skills.service import PERSONAL_SKILL_SOURCE_TYPE
 from yuxi.repositories.agent_repository import AgentRepository
-from counseling.identity.models import User
+from yuxi.identity import IdentitySnapshot as User
 from yuxi.storage.postgres.models_business import AgentRun, Skill
 
 MANIFEST_SCHEMA_VERSION = 1

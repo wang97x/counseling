@@ -23,7 +23,7 @@ from yuxi.services.agent_request_queue_service import finalize_intake, intake_re
 from yuxi.services.input_message_service import AgentRunInputMessage
 from yuxi.services.project_service import create_implicit_project
 from yuxi.services.workdir_service import resolve_conversation_workdir_binding
-from counseling.identity.models import User
+from yuxi.identity import IdentitySnapshot as User
 
 
 @dataclass(frozen=True)

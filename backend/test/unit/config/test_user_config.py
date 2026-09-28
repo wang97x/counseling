@@ -6,7 +6,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from yuxi.config import UserConfig, UserConfigSchema
-from yuxi.storage.postgres.models_business import Base, Department, User
+from counseling.identity.models import Department, User
+from yuxi.storage.postgres.models_business import Base
 from yuxi.storage.postgres.models_business import UserConfig as UserConfigRecord
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.unit]

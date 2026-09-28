@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hmac
+from collections.abc import Awaitable, Callable
 import os
 from pathlib import Path
 
@@ -101,7 +102,10 @@ def _require_supported_version(
         raise RuntimeError(f"Unsupported {domain} schema version: {actual}; expected {expected}")
 
 
-async def main() -> None:
+async def main(
+    *,
+    legacy_business_migrator: Callable[[int], Awaitable[None]] | None = None,
+) -> None:
     """独占迁移数据库 Schema，并在停机窗口切换历史文件 Owner。"""
     pg_manager.initialize()
     try:
@@ -150,12 +154,12 @@ async def main() -> None:
                 if business_version is None:
                     await pg_manager.setup_langgraph_checkpointer()
                 await pg_manager.record_schema_version("business", BUSINESS_SCHEMA_VERSION)
-            elif business_version == 7:
-                await pg_manager.upgrade_business_schema_v7_to_v8()
-                await pg_manager.upgrade_business_schema_v8_to_v9()
-                await pg_manager.record_schema_version("business", BUSINESS_SCHEMA_VERSION)
-            elif business_version == 8:
-                await pg_manager.upgrade_business_schema_v8_to_v9()
+            elif business_version in {7, 8}:
+                if legacy_business_migrator is None:
+                    raise RuntimeError(
+                        "Legacy business schema requires the application-owned counseling migrator"
+                    )
+                await legacy_business_migrator(business_version)
                 await pg_manager.record_schema_version("business", BUSINESS_SCHEMA_VERSION)
 
             if knowledge_version is None:

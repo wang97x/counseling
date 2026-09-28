@@ -9,7 +9,8 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from counseling.identity.repositories.user import UserRepository
-from yuxi.storage.postgres.models_business import APIKey, Base, Department, User
+from counseling.identity.models import APIKey, Department, User
+from yuxi.storage.postgres.models_business import Base
 from counseling.identity.auth import AuthUtils
 from yuxi.utils.datetime_utils import utc_now_naive
 

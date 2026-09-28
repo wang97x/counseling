@@ -19,7 +19,8 @@ from server.routers.chat_router import chat
 from counseling.identity.http.dependencies import get_db, get_required_user
 from yuxi.services import context_compression_service
 from yuxi.storage.postgres.manager import pg_manager
-from yuxi.storage.postgres.models_business import Conversation, Project, User
+from counseling.identity.models import User
+from yuxi.storage.postgres.models_business import Conversation, Project
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 

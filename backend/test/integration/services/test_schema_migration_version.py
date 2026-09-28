@@ -10,6 +10,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from counseling.storage.schema import migrate_legacy_business_schema
 
 from yuxi.storage.postgres.manager import BUSINESS_SCHEMA_VERSION, KNOWLEDGE_SCHEMA_VERSION, PostgresManager
 from yuxi.storage.postgres.models_knowledge import KnowledgeBase
@@ -290,10 +291,10 @@ async def test_business_v7_to_v8_backfills_fixed_roles_and_rejects_unknown_value
                 )
             )
 
-        await manager.upgrade_business_schema_v7_to_v8()
+        await migrate_legacy_business_schema(7, manager=manager)
         async with scoped_engine.begin() as connection:
             await connection.execute(text("UPDATE users SET business_roles = '[]'::jsonb WHERE uid = 'counselor'"))
-        await manager.upgrade_business_schema_v7_to_v8()
+        await migrate_legacy_business_schema(7, manager=manager)
 
         async with scoped_engine.connect() as connection:
             rows = (await connection.execute(text("SELECT uid, business_roles FROM users ORDER BY uid"))).all()
@@ -320,8 +321,8 @@ async def test_business_v8_to_v9_creates_student_schema_idempotently() -> None:
         async with scoped_engine.begin() as connection:
             await connection.execute(text("DROP TABLE counseling_students"))
 
-        await manager.upgrade_business_schema_v8_to_v9()
-        await manager.upgrade_business_schema_v8_to_v9()
+        await migrate_legacy_business_schema(8, manager=manager)
+        await migrate_legacy_business_schema(8, manager=manager)
         async with scoped_engine.connect() as connection:
             defaults = dict(
                 (await connection.execute(text(

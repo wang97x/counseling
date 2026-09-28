@@ -18,7 +18,8 @@ from counseling.identity.services.admin import (
     create_department_with_admin,
     initialize_system_admin,
 )
-from yuxi.storage.postgres.models_business import Base, Department, OperationLog, User
+from counseling.identity.models import Department, OperationLog, User
+from yuxi.storage.postgres.models_business import Base
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 

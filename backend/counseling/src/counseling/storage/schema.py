@@ -2,7 +2,7 @@
 
 from sqlalchemy import text
 
-from yuxi.storage.postgres.manager import pg_manager
+from yuxi.storage.postgres.manager import PostgresManager, pg_manager
 
 COUNSELING_SCHEMA_VERSION = 3
 COUNSELING_SCHEMA_V1_STATEMENTS = (
@@ -132,6 +132,40 @@ COUNSELING_SCHEMA_V1_STATEMENTS = (
     """,
 )
 
+LEGACY_BUSINESS_V7_IDENTITY_STATEMENTS = (
+    "ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS business_roles JSONB",
+    """
+    UPDATE users
+    SET business_roles = CASE role
+        WHEN 'user' THEN '["counselor"]'::jsonb
+        WHEN 'admin' THEN '["business_admin"]'::jsonb
+        WHEN 'superadmin' THEN '["technical_admin"]'::jsonb
+        ELSE '[]'::jsonb
+    END
+    WHERE business_roles IS NULL
+    """,
+    "ALTER TABLE IF EXISTS users ALTER COLUMN business_roles SET DEFAULT '[]'::jsonb",
+    "ALTER TABLE IF EXISTS users ALTER COLUMN business_roles SET NOT NULL",
+    """
+    DO $$
+    BEGIN
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conname = 'ck_users_business_roles'
+              AND conrelid = 'users'::regclass
+        ) THEN
+            ALTER TABLE users
+            ADD CONSTRAINT ck_users_business_roles
+            CHECK (
+                jsonb_typeof(business_roles) = 'array'
+                AND business_roles <@ '["counselor", "business_admin", "technical_admin"]'::jsonb
+            );
+        END IF;
+    END $$;
+    """,
+)
+LEGACY_BUSINESS_V8_STUDENT_STATEMENTS = COUNSELING_SCHEMA_V1_STATEMENTS[:2]
+
 COUNSELING_SCHEMA_V2_STATEMENTS = (
     "ALTER TABLE counseling_students ADD COLUMN IF NOT EXISTS display_name VARCHAR(128) NOT NULL DEFAULT ''",
     "ALTER TABLE counseling_students ADD COLUMN IF NOT EXISTS class_name VARCHAR(128) NOT NULL DEFAULT ''",
@@ -258,6 +292,23 @@ COUNSELING_SCHEMA_V3_STATEMENTS = (
 COUNSELING_SCHEMA_STATEMENTS = (
     COUNSELING_SCHEMA_V1_STATEMENTS + COUNSELING_SCHEMA_V2_STATEMENTS + COUNSELING_SCHEMA_V3_STATEMENTS
 )
+
+
+async def migrate_legacy_business_schema(
+    business_version: int,
+    *,
+    manager: PostgresManager | None = None,
+) -> None:
+    """在 business 版本发布前执行由业务侧拥有的历史兼容 DDL。"""
+    if business_version not in {7, 8}:
+        raise ValueError(f"Unsupported legacy business schema version: {business_version}")
+    manager = manager or pg_manager
+    statements = LEGACY_BUSINESS_V8_STUDENT_STATEMENTS
+    if business_version == 7:
+        statements = LEGACY_BUSINESS_V7_IDENTITY_STATEMENTS + statements
+    async with manager.async_engine.begin() as connection:
+        for statement in statements:
+            await connection.execute(text(statement))
 
 
 async def migrate_schema() -> None:

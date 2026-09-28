@@ -8,17 +8,16 @@ import pytest_asyncio
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from counseling.identity.models import Department, User
 from yuxi.services.dashboard_service import DashboardService
 from yuxi.storage.postgres.models_business import (
     Agent,
     Base,
     Conversation,
     ConversationStats,
-    Department,
     Message,
     MessageFeedback,
     ToolCall,
-    User,
 )
 from yuxi.utils.datetime_utils import utc_now_naive
 

@@ -31,7 +31,7 @@ from yuxi.config import (
     get_skill_projection_dir,
 )
 from yuxi.permissions import ResourcePermission, normalize_permission_config, resolve_skill_permission
-from counseling.identity.models import User
+from yuxi.identity import IdentitySnapshot as User
 from yuxi.storage.postgres.models_business import Skill
 from yuxi.utils.logging_config import logger
 from yuxi.utils.paths import ensure_within_root, open_directory_fd, open_regular_file_fd
@@ -341,7 +341,7 @@ async def sync_user_accessible_skills_async(
 
 async def refresh_user_skill_projection_async(uid: str) -> dict[str, str]:
     """按数据库中的最新授权快照重建用户共享 Skill 投影。"""
-    from counseling.identity.repositories.user import UserRepository
+    from yuxi.identity import get_identity_reader
     from yuxi.storage.postgres.manager import pg_manager
 
     normalized_uid = str(uid or "").strip()
@@ -353,7 +353,7 @@ async def refresh_user_skill_projection_async(uid: str) -> dict[str, str]:
             text("SELECT pg_advisory_xact_lock(hashtext(:lock_scope))"),
             {"lock_scope": f"{_USER_SKILL_PROJECTION_LOCK_SCOPE}{normalized_uid}"},
         )
-        user = await UserRepository().get_by_uid_with_db(db, normalized_uid)
+        user = await get_identity_reader().get_by_uid(db, normalized_uid)
         if user is None or bool(user.is_deleted):
             source_dirs: dict[str, str] = {}
         else:
@@ -378,9 +378,9 @@ async def apply_skill_projection_policy_change(db: AsyncSession, slug: str) -> N
     """提交 Skill 授权变更，并同步所有已存在的 uid 投影。"""
     from yuxi.workspace.paths import workspace_uid_dirname
 
-    result = await db.execute(select(User.uid).where(User.is_deleted == 0).order_by(User.id))
+    active_uids = await get_identity_reader().list_active_uids(db)
     projection_root = get_skill_projection_dir()
-    uids = [str(uid) for uid in result.scalars().all() if (projection_root / workspace_uid_dirname(str(uid))).is_dir()]
+    uids = [uid for uid in active_uids if (projection_root / workspace_uid_dirname(uid)).is_dir()]
     for uid in uids:
         await db.execute(
             text("SELECT pg_advisory_xact_lock(hashtext(:lock_scope))"),
