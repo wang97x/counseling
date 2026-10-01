@@ -11,6 +11,21 @@ const consultationDraftUrl = (studentId, draftId) => (
 
 export const counselingApi = {
   listStudents: () => apiGet(root),
+  listScales: () => apiGet(`${root}/scales`),
+  listAssessments: (studentId) => apiGet(`${studentRoot(studentId)}/assessments`),
+  createAssessment: (studentId, payload) => apiPost(
+    `${studentRoot(studentId)}/assessments`, payload,
+  ),
+  listAppointments: (studentId) => apiGet(`${studentRoot(studentId)}/appointments`),
+  createAppointment: (studentId, payload) => apiPost(
+    `${studentRoot(studentId)}/appointments`, payload,
+  ),
+  updateAppointment: (studentId, appointmentId, payload) => apiPut(
+    `${studentRoot(studentId)}/appointments/${encodeURIComponent(appointmentId)}`, payload,
+  ),
+  updateAppointmentStatus: (studentId, appointmentId, payload) => apiPost(
+    `${studentRoot(studentId)}/appointments/${encodeURIComponent(appointmentId)}/status`, payload,
+  ),
   listConversations: (id) => apiGet(`${studentRoot(id)}/conversations`),
   getDataUseNotice: () => apiGet('/api/counseling/data-use-notice'),
   acknowledgeDataUseNotice: (version) => apiPost(

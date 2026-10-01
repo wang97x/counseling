@@ -14,6 +14,19 @@ from counseling.ai_work.service import (
     preflight_material,
     reject_material,
 )
+from counseling.appointments.service import (
+    AppointmentConflictError,
+    change_appointment_status,
+    create_appointment,
+    list_appointments,
+    update_appointment,
+)
+from counseling.assessments.service import (
+    AssessmentConflictError,
+    create_assessment,
+    list_assessments,
+    list_scale_catalog,
+)
 from counseling.documents.service import (
     ConsultationContent,
     CounselingConflictError,
@@ -54,7 +67,7 @@ from counseling.students.service import (
     update_student,
 )
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictInt
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from server.routers.counseling_governance_router import require_acknowledged_counseling_user
@@ -222,6 +235,49 @@ class RiskEventCreate(BaseModel):
     source_record_id: str | None = Field(default=None, max_length=64)
 
 
+class AssessmentCreate(BaseModel):
+    """提交一次固定版本量表施测。"""
+
+    model_config = ConfigDict(extra="forbid")
+    request_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    scale_code: Literal["phq9"]
+    scale_version: Literal[1]
+    answers: list[StrictInt] = Field(min_length=9, max_length=9)
+    administered_at: datetime
+
+
+class AppointmentCreate(BaseModel):
+    """创建内部预约。"""
+
+    model_config = ConfigDict(extra="forbid")
+    request_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    scheduled_start: datetime
+    scheduled_end: datetime
+    appointment_type: str = Field(min_length=1, max_length=32)
+    location: str = Field(default="", max_length=500)
+    note: str = Field(default="", max_length=2000)
+
+
+class AppointmentUpdate(BaseModel):
+    """按版本修改内部预约。"""
+
+    model_config = ConfigDict(extra="forbid")
+    expected_version: int = Field(ge=1)
+    scheduled_start: datetime
+    scheduled_end: datetime
+    appointment_type: str = Field(min_length=1, max_length=32)
+    location: str = Field(default="", max_length=500)
+    note: str = Field(default="", max_length=2000)
+
+
+class AppointmentStatusUpdate(BaseModel):
+    """按版本推进预约状态。"""
+
+    model_config = ConfigDict(extra="forbid")
+    expected_version: int = Field(ge=1)
+    status: Literal["arrived", "completed", "no_show", "canceled"]
+
+
 def _raise_counseling_error(exc: Exception) -> None:
     """把业务边界错误映射为稳定 HTTP 状态。"""
     if isinstance(exc, PermissionError):
@@ -229,7 +285,16 @@ def _raise_counseling_error(exc: Exception) -> None:
     elif isinstance(exc, LookupError):
         code = 404
     elif isinstance(
-        exc, (FileExistsError, AIWorkConflictError, CounselingConflictError, RiskConflictError, StudentConflictError)
+        exc,
+        (
+            FileExistsError,
+            AIWorkConflictError,
+            AppointmentConflictError,
+            AssessmentConflictError,
+            CounselingConflictError,
+            RiskConflictError,
+            StudentConflictError,
+        ),
     ):
         code = 409
     elif isinstance(exc, CounselingGenerationError):
@@ -237,6 +302,12 @@ def _raise_counseling_error(exc: Exception) -> None:
     else:
         code = 422
     raise HTTPException(status_code=code, detail=str(exc)) from exc
+
+
+@counseling.get("/scales")
+async def list_scale_catalog_route():
+    """返回服务端固定量表定义。"""
+    return list_scale_catalog()
 
 
 @counseling.post("", status_code=status.HTTP_201_CREATED)
@@ -501,6 +572,127 @@ async def list_risk_events_route(
     try:
         return await list_risk_events(db, actor, student_id)
     except (PermissionError, LookupError) as exc:
+        _raise_counseling_error(exc)
+
+
+@counseling.post("/{student_id}/assessments", status_code=status.HTTP_201_CREATED)
+async def create_assessment_route(
+    student_id: int,
+    payload: AssessmentCreate,
+    actor: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """服务端计分并保存一次冻结施测。"""
+    try:
+        return await create_assessment(
+            db,
+            actor,
+            student_id,
+            request_id=payload.request_id,
+            scale_code=payload.scale_code,
+            scale_version=payload.scale_version,
+            answers=payload.answers,
+            administered_at=payload.administered_at,
+        )
+    except (PermissionError, LookupError, ValueError, AssessmentConflictError) as exc:
+        _raise_counseling_error(exc)
+
+
+@counseling.get("/{student_id}/assessments")
+async def list_assessments_route(
+    student_id: int,
+    actor: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """列出负责人档案的量表历史。"""
+    try:
+        return await list_assessments(db, actor, student_id)
+    except (PermissionError, LookupError) as exc:
+        _raise_counseling_error(exc)
+
+
+@counseling.post("/{student_id}/appointments", status_code=status.HTTP_201_CREATED)
+async def create_appointment_route(
+    student_id: int,
+    payload: AppointmentCreate,
+    actor: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """创建档案内的内部预约。"""
+    try:
+        return await create_appointment(
+            db,
+            actor,
+            student_id,
+            request_id=payload.request_id,
+            scheduled_start=payload.scheduled_start,
+            scheduled_end=payload.scheduled_end,
+            appointment_type=payload.appointment_type,
+            location=payload.location,
+            note=payload.note,
+        )
+    except (PermissionError, LookupError, ValueError, AppointmentConflictError) as exc:
+        _raise_counseling_error(exc)
+
+
+@counseling.get("/{student_id}/appointments")
+async def list_appointments_route(
+    student_id: int,
+    actor: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """列出负责人档案的内部预约。"""
+    try:
+        return await list_appointments(db, actor, student_id)
+    except (PermissionError, LookupError) as exc:
+        _raise_counseling_error(exc)
+
+
+@counseling.put("/{student_id}/appointments/{appointment_id}")
+async def update_appointment_route(
+    student_id: int,
+    appointment_id: str,
+    payload: AppointmentUpdate,
+    actor: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """按版本改期或修改预约说明。"""
+    try:
+        return await update_appointment(
+            db,
+            actor,
+            student_id,
+            appointment_id,
+            expected_version=payload.expected_version,
+            scheduled_start=payload.scheduled_start,
+            scheduled_end=payload.scheduled_end,
+            appointment_type=payload.appointment_type,
+            location=payload.location,
+            note=payload.note,
+        )
+    except (PermissionError, LookupError, ValueError, AppointmentConflictError) as exc:
+        _raise_counseling_error(exc)
+
+
+@counseling.post("/{student_id}/appointments/{appointment_id}/status")
+async def change_appointment_status_route(
+    student_id: int,
+    appointment_id: str,
+    payload: AppointmentStatusUpdate,
+    actor: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """记录取消、到访、完成或未到访状态。"""
+    try:
+        return await change_appointment_status(
+            db,
+            actor,
+            student_id,
+            appointment_id,
+            expected_version=payload.expected_version,
+            status=payload.status,
+        )
+    except (PermissionError, LookupError, ValueError, AppointmentConflictError) as exc:
         _raise_counseling_error(exc)
 
 

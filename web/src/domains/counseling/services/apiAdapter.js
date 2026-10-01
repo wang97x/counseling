@@ -34,11 +34,14 @@ export function createCounselingApiAdapter() {
     },
 
     async getWorkspace(studentId) {
-      const [detail, timeline, drafts, materials] = await Promise.all([
+      const [detail, timeline, drafts, materials, scales, assessments, appointments] = await Promise.all([
         counselingApi.getStudent(studentId),
         counselingApi.getTimeline(studentId),
         counselingApi.listRecordDrafts(studentId),
         counselingApi.listMaterials(studentId),
+        counselingApi.listScales(),
+        counselingApi.listAssessments(studentId),
+        counselingApi.listAppointments(studentId),
       ])
       const items = timeline?.timeline || timeline?.items || timeline || []
       const draftItems = drafts?.drafts || drafts?.items || drafts || []
@@ -51,6 +54,9 @@ export function createCounselingApiAdapter() {
           drafts: draftItems.map(mapApiRecordDraft)
             .filter((item) => item.recordKind === 'manual' && item.status === 'draft'),
           materials: materials?.materials || materials?.items || materials || [],
+          scales: scales?.items || scales || [],
+          assessments: assessments?.items || assessments || [],
+          appointments: appointments?.items || appointments || [],
         },
       }
     },
@@ -66,6 +72,31 @@ export function createCounselingApiAdapter() {
         data: await counselingApi.closeStudent(studentId, {
           expected_version: expectedVersion,
           closure_note: closureNote,
+        }),
+      }
+    },
+
+    async createAssessment(studentId, payload) {
+      return { status: 'ok', data: await counselingApi.createAssessment(studentId, payload) }
+    },
+
+    async createAppointment(studentId, payload) {
+      return { status: 'ok', data: await counselingApi.createAppointment(studentId, payload) }
+    },
+
+    async updateAppointment(studentId, appointmentId, payload) {
+      return {
+        status: 'ok',
+        data: await counselingApi.updateAppointment(studentId, appointmentId, payload),
+      }
+    },
+
+    async updateAppointmentStatus(studentId, appointmentId, expectedVersion, status) {
+      return {
+        status: 'ok',
+        data: await counselingApi.updateAppointmentStatus(studentId, appointmentId, {
+          expected_version: expectedVersion,
+          status,
         }),
       }
     },

@@ -2,12 +2,13 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
-  ArrowLeft, Bot, CheckCircle2, ClipboardPenLine, FileClock, FileText,
-  History, PencilLine, ShieldAlert, UserRoundCheck,
+  ArrowLeft, Bot, CalendarDays, CheckCircle2, ClipboardList, ClipboardPenLine,
+  FileClock, FileText, History, PencilLine, ShieldAlert, UserRoundCheck,
 } from '@lucide/vue'
 import { message } from 'ant-design-vue'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import RiskTag from '../components/RiskTag.vue'
+import { formatLocalDateTime } from '../dateTime.js'
 import { counselingWorkspaceService } from '../workspaceService.js'
 import { createLatestOperation, isCurrentStudentRequest } from '../requestGuard.js'
 
@@ -19,6 +20,8 @@ const loading = ref(false)
 const error = ref('')
 const editOpen = ref(false)
 const recordOpen = ref(false)
+const assessmentOpen = ref(false)
+const appointmentOpen = ref(false)
 const riskOpen = ref(false)
 const correctionOpen = ref(false)
 const closeOpen = ref(false)
@@ -27,6 +30,14 @@ const busy = ref(false)
 const editForm = reactive({ displayName: '', className: '', chiefConcern: '' })
 const recordForm = reactive(emptyRecordForm())
 const riskForm = reactive({ level: 'watch', basis: '', actionTaken: '', status: 'monitoring' })
+const assessmentForm = reactive({
+  administeredAt: localDateTimeValue(),
+  requestId: '',
+  answers: Array(9).fill(null),
+})
+const appointmentForm = reactive({
+  id: '', version: 0, requestId: '', scheduledStart: localDateTimeValue(), scheduledEnd: '', appointmentType: '面谈', location: '', note: '',
+})
 const correctionForm = reactive({ recordId: '', reason: '', ...emptyContent() })
 const closeForm = reactive({ closureNote: '' })
 const aiForm = reactive({ instruction: '', requestId: '' })
@@ -48,6 +59,7 @@ function localDateTimeValue(value = new Date()) {
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
   return local.toISOString().slice(0, 16)
 }
+
 
 function emptyRecordForm() {
   return {
@@ -208,6 +220,104 @@ async function saveRisk() {
   }, '保存风险记录失败')
 }
 
+function openAssessment() {
+  assessmentForm.administeredAt = localDateTimeValue()
+  assessmentForm.answers = Array(9).fill(null)
+  assessmentForm.requestId = crypto.randomUUID()
+  assessmentOpen.value = true
+}
+
+async function saveAssessment() {
+  if (assessmentForm.answers.some((value) => !Number.isInteger(value))) {
+    return message.error('请完成全部 9 项评分')
+  }
+  await runAction(async () => {
+    await service.createAssessment(studentId.value, {
+      request_id: assessmentForm.requestId,
+      scale_code: 'phq9',
+      scale_version: 1,
+      answers: assessmentForm.answers,
+      administered_at: new Date(assessmentForm.administeredAt).toISOString(),
+    })
+    assessmentOpen.value = false
+    await loadWorkspace()
+    message.success('量表结果已计分并保存')
+  }, '保存量表结果失败')
+}
+
+function openAppointment(item = null) {
+  const start = item ? new Date(item.scheduled_start) : new Date()
+  const end = item ? new Date(item.scheduled_end) : new Date(start.getTime() + 60 * 60 * 1000)
+  Object.assign(appointmentForm, {
+    id: item?.id || '',
+    version: Number(item?.version || 0),
+    scheduledStart: localDateTimeValue(start),
+    scheduledEnd: localDateTimeValue(end),
+    appointmentType: item?.appointment_type || '面谈',
+    location: item?.location || '',
+    requestId: item ? '' : crypto.randomUUID(),
+    note: item?.note || '',
+  })
+  appointmentOpen.value = true
+}
+
+async function saveAppointment() {
+  if (!appointmentForm.scheduledStart || !appointmentForm.scheduledEnd) {
+    return message.error('请选择预约起止时间')
+  }
+  const payload = {
+    scheduled_start: new Date(appointmentForm.scheduledStart).toISOString(),
+    scheduled_end: new Date(appointmentForm.scheduledEnd).toISOString(),
+    appointment_type: appointmentForm.appointmentType,
+    location: appointmentForm.location.trim(),
+    note: appointmentForm.note.trim(),
+  }
+  await runAction(async () => {
+    if (appointmentForm.id) {
+      await service.updateAppointment(studentId.value, appointmentForm.id, {
+        ...payload,
+        expected_version: appointmentForm.version,
+      })
+    } else {
+      await service.createAppointment(studentId.value, {
+        ...payload,
+        request_id: appointmentForm.requestId,
+      })
+    }
+    appointmentOpen.value = false
+    await loadWorkspace()
+    message.success(appointmentForm.id ? '预约已更新' : '预约已创建')
+  }, '保存预约失败')
+}
+
+async function setAppointmentStatus(item, status) {
+  await runAction(async () => {
+    await service.updateAppointmentStatus(studentId.value, item.id, item.version, status)
+    await loadWorkspace()
+    message.success('预约状态已更新')
+  }, '更新预约状态失败')
+}
+
+function appointmentStatusLabel(status) {
+  return {
+    scheduled: '待到访',
+    arrived: '已到访',
+    completed: '已完成',
+    no_show: '未到访',
+    canceled: '已取消',
+  }[status] || status
+}
+
+function assessmentSeverityLabel(severity) {
+  return {
+    minimal: '最低',
+    mild: '轻度',
+    moderate: '中度',
+    moderately_severe: '中重度',
+    severe: '重度',
+  }[severity] || severity
+}
+
 function openClose() {
   closeForm.closureNote = ''
   closeOpen.value = true
@@ -306,6 +416,8 @@ function timelineLabel(item) {
     risk_event: '人工风险记录',
     record: '文件记录',
     conversation: '历史会话',
+    assessment: '固定量表',
+    appointment: '内部预约',
   }[item.type] || '档案记录'
 }
 
@@ -313,7 +425,7 @@ watch(studentId, (id) => {
   operations.invalidate()
   materialConfirmationKeys.clear()
   materialRejectionKeys.clear()
-  for (const modal of [editOpen, recordOpen, riskOpen, correctionOpen, closeOpen, aiOpen]) modal.value = false
+  for (const modal of [editOpen, recordOpen, riskOpen, correctionOpen, closeOpen, aiOpen, assessmentOpen, appointmentOpen]) modal.value = false
   busy.value = false
   workspace.value = null
   if (id) void loadWorkspace(id)
@@ -361,6 +473,8 @@ watch(studentId, (id) => {
           </div>
           <div class="business-actions">
             <a-button @click="openRisk"><ShieldAlert :size="15" />记录人工风险</a-button>
+            <a-button v-if="workspace.student.status !== 'closed'" @click="openAssessment"><ClipboardList :size="15" />录入量表</a-button>
+            <a-button v-if="workspace.student.status !== 'closed'" @click="openAppointment()"><CalendarDays :size="15" />创建预约</a-button>
             <a-button v-if="workspace.student.status !== 'closed'" danger @click="openClose"><CheckCircle2 :size="15" />结束当前阶段</a-button>
           </div>
           <a-alert
@@ -424,6 +538,50 @@ watch(studentId, (id) => {
           </div>
         </section>
 
+        <div class="p1-grid">
+          <section class="panel">
+            <div class="section-heading">
+              <div><span>服务端确定性计分</span><h3>量表历史</h3></div>
+              <ClipboardList :size="21" />
+            </div>
+            <a-empty v-if="!workspace.assessments.length" description="暂无量表结果" />
+            <div v-else class="compact-list">
+              <article v-for="item in workspace.assessments" :key="item.id">
+                <div>
+                  <strong>PHQ-9 · {{ item.total_score }} 分</strong>
+                  <span>{{ formatLocalDateTime(item.administered_at) }} · v{{ item.scale_version }}</span>
+                </div>
+                <a-tag>{{ assessmentSeverityLabel(item.severity) }}</a-tag>
+              </article>
+            </div>
+            <p class="boundary-note">量表结果不构成诊断，也不会自动改变风险等级。</p>
+          </section>
+
+          <section class="panel">
+            <div class="section-heading">
+              <div><span>仅机构内部</span><h3>预约</h3></div>
+              <CalendarDays :size="21" />
+            </div>
+            <a-empty v-if="!workspace.appointments.length" description="暂无预约" />
+            <div v-else class="compact-list">
+              <article v-for="item in workspace.appointments" :key="item.id">
+                <div>
+                  <strong>{{ item.appointment_type }} · {{ appointmentStatusLabel(item.status) }}</strong>
+                  <span>{{ formatLocalDateTime(item.scheduled_start) }} 至 {{ formatLocalDateTime(item.scheduled_end) }}</span>
+                  <span v-if="item.location">{{ item.location }}</span>
+                </div>
+                <div class="material-actions">
+                  <a-button v-if="item.status === 'scheduled'" size="small" @click="openAppointment(item)">改期</a-button>
+                  <a-button v-if="item.status === 'scheduled'" size="small" type="primary" @click="setAppointmentStatus(item, 'arrived')">已到访</a-button>
+                  <a-button v-if="item.status === 'scheduled'" size="small" @click="setAppointmentStatus(item, 'no_show')">未到访</a-button>
+                  <a-button v-if="item.status === 'scheduled'" size="small" danger @click="setAppointmentStatus(item, 'canceled')">取消</a-button>
+                  <a-button v-if="item.status === 'arrived'" size="small" type="primary" @click="setAppointmentStatus(item, 'completed')">完成</a-button>
+                </div>
+              </article>
+            </div>
+          </section>
+        </div>
+
         <section class="panel timeline-panel">
           <div class="section-heading">
             <div><span>完整历史</span><h3>统一时间线</h3></div>
@@ -435,7 +593,7 @@ watch(studentId, (id) => {
               <span class="timeline-dot"></span>
               <div class="timeline-body">
                 <header>
-                  <div><span>{{ item.occurredAt }}</span><h4>{{ item.title }}</h4></div>
+                  <div><span>{{ formatLocalDateTime(item.occurredAt) }}</span><h4>{{ item.title }}</h4></div>
                   <a-tag>{{ timelineLabel(item) }}</a-tag>
                 </header>
                 <p class="timeline-summary">{{ item.summary }}</p>
@@ -457,6 +615,42 @@ watch(studentId, (id) => {
         </section>
       </template>
     </main>
+
+    <a-modal v-model:open="assessmentOpen" title="录入 PHQ-9" :confirm-loading="busy" width="760px" ok-text="计分并保存" @ok="saveAssessment">
+      <a-alert type="info" show-icon message="由辅导员录入完整答案，服务端按冻结的 v1 规则计分；结果不构成诊断。" />
+      <a-form v-if="workspace?.scales?.[0]" layout="vertical" class="modal-form">
+        <a-form-item label="施测时间" required>
+          <a-input v-model:value="assessmentForm.administeredAt" type="datetime-local" />
+        </a-form-item>
+        <a-form-item v-for="(item, index) in workspace.scales[0].items" :key="item" :label="(index + 1) + '. ' + item" required>
+          <a-radio-group v-model:value="assessmentForm.answers[index]">
+            <a-radio v-for="option in workspace.scales[0].options" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </a-radio>
+          </a-radio-group>
+        </a-form-item>
+      </a-form>
+    </a-modal>
+
+    <a-modal v-model:open="appointmentOpen" :title="appointmentForm.id ? '修改内部预约' : '创建内部预约'" :confirm-loading="busy" @ok="saveAppointment">
+      <a-alert type="info" show-icon message="预约仅保存在本机构档案中，不会同步外部日历或发送通知。" />
+      <a-form layout="vertical" class="modal-form">
+        <div class="form-row">
+          <a-form-item label="开始时间" required><a-input v-model:value="appointmentForm.scheduledStart" type="datetime-local" /></a-form-item>
+          <a-form-item label="结束时间" required><a-input v-model:value="appointmentForm.scheduledEnd" type="datetime-local" /></a-form-item>
+        </div>
+        <a-form-item label="预约方式" required>
+          <a-select v-model:value="appointmentForm.appointmentType">
+            <a-select-option value="面谈">面谈</a-select-option>
+            <a-select-option value="电话">电话</a-select-option>
+            <a-select-option value="线上">线上</a-select-option>
+            <a-select-option value="其他">其他</a-select-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item label="地点"><a-input v-model:value="appointmentForm.location" maxlength="500" /></a-form-item>
+        <a-form-item label="内部备注"><a-textarea v-model:value="appointmentForm.note" :rows="3" maxlength="2000" /></a-form-item>
+      </a-form>
+    </a-modal>
 
     <a-modal v-model:open="aiOpen" title="AI 协助" :confirm-loading="busy" ok-text="创建协作任务" @ok="createAIWork">
       <a-alert
@@ -564,6 +758,12 @@ watch(studentId, (id) => {
 .material-list strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .material-list span { color: var(--gray-500); font-size: 12px; }
 .material-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.p1-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.compact-list { display: grid; gap: 10px; }
+.compact-list article { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px; border: 1px solid var(--gray-150); border-radius: 10px; }
+.compact-list article > div:first-child { display: grid; gap: 4px; }
+.compact-list span, .boundary-note { color: var(--gray-500); font-size: 12px; }
+.boundary-note { margin: 12px 0 0; }
 .timeline-list { display: grid; gap: 0; }
 .timeline-list article { position: relative; display: grid; grid-template-columns: 22px 1fr; gap: 12px; padding-bottom: 20px; }
 .timeline-list article:not(:last-child)::before { position: absolute; top: 16px; bottom: 0; left: 6px; width: 1px; background: var(--gray-200); content: ''; }
@@ -584,5 +784,7 @@ watch(studentId, (id) => {
   .form-row { grid-template-columns: 1fr; gap: 0; }
   .record-details { grid-template-columns: 1fr; }
   .material-list article { grid-template-columns: auto 1fr; } .material-actions { grid-column: 1 / -1; justify-content: flex-start; }
+  .p1-grid { grid-template-columns: 1fr; }
+  .compact-list article { align-items: flex-start; flex-direction: column; }
 }
 </style>

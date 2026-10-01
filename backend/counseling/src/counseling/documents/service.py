@@ -14,6 +14,8 @@ from typing import Protocol
 from fastapi import UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.exc import IntegrityError
+from counseling.appointments.repository import AppointmentRepository
+from counseling.assessments.repository import AssessmentRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from counseling.documents.ports import CounselingDocumentParser, CounselingObjectStorage
@@ -886,6 +888,12 @@ async def list_timeline(db: AsyncSession, actor: User, student_id: int) -> list[
     corrections = await repository.list_corrections(student_id, actor.department_id, actor.id)
     risk_events = await CounselingRiskRepository(db).list_for_owner(student_id, actor.department_id, actor.id)
     conversations = await StudentRepository(db).list_conversations(student_id, actor.uid)
+    assessments = await AssessmentRepository(db).list_for_owner(
+        student_id, actor.department_id, actor.id
+    )
+    appointments = await AppointmentRepository(db).list_for_owner(
+        student_id, actor.department_id, actor.id
+    )
     items = []
     for record in records:
         if record.record_kind == "manual":
@@ -935,6 +943,34 @@ async def list_timeline(db: AsyncSession, actor: User, student_id: int) -> list[
             "source_record_id": event.source_record_id,
         }
         for event in risk_events
+    )
+    items.extend(
+        {
+            "id": result.id,
+            "type": "assessment",
+            "title": "PHQ-9 量表",
+            "occurred_at": format_utc_datetime(result.administered_at),
+            "summary": f"总分 {result.total_score}",
+            "scale_code": result.scale_code,
+            "scale_version": result.scale_version,
+            "total_score": result.total_score,
+            "severity": result.severity,
+        }
+        for result in assessments
+    )
+    items.extend(
+        {
+            "id": appointment.id,
+            "type": "appointment",
+            "title": f"{appointment.appointment_type}预约",
+            "occurred_at": format_utc_datetime(appointment.scheduled_start),
+            "summary": appointment.note,
+            "scheduled_start": format_utc_datetime(appointment.scheduled_start),
+            "scheduled_end": format_utc_datetime(appointment.scheduled_end),
+            "appointment_status": appointment.status,
+            "location": appointment.location,
+        }
+        for appointment in appointments
     )
     items.extend(
         {

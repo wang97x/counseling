@@ -267,6 +267,66 @@ class CounselingAuditEvent(Base):
     created_at = Column(DateTime, nullable=False, server_default=func.now())
 
 
+class CounselingAssessmentResult(Base):
+    """冻结一次固定版本量表的答案与服务端计分结果。"""
+
+    __tablename__ = "counseling_assessment_results"
+    __table_args__ = (
+        UniqueConstraint("counselor_id", "request_id", name="uq_counseling_assessment_request"),
+        CheckConstraint("scale_code = 'phq9' AND scale_version = 1", name="ck_counseling_assessment_scale"),
+        CheckConstraint("total_score BETWEEN 0 AND 27", name="ck_counseling_assessment_score"),
+        Index("ix_counseling_assessments_student", "student_id", "administered_at"),
+    )
+
+    id = Column(String(64), primary_key=True)
+    student_id = Column(Integer, ForeignKey("counseling_students.id"), nullable=False)
+    department_id = Column(Integer, ForeignKey("departments.id"), nullable=False)
+    counselor_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    request_id = Column(String(64), nullable=False)
+    scale_code = Column(String(32), nullable=False)
+    scale_version = Column(Integer, nullable=False)
+    answers = Column(JSON_VALUE, nullable=False)
+    total_score = Column(Integer, nullable=False)
+    severity = Column(String(32), nullable=False)
+    administered_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+
+
+class CounselingAppointment(Base):
+    """保存负责人档案内的内部预约及其当前状态。"""
+
+    __tablename__ = "counseling_appointments"
+    __table_args__ = (
+        UniqueConstraint("counselor_id", "request_id", name="uq_counseling_appointment_request"),
+        CheckConstraint(
+            "status IN ('scheduled', 'arrived', 'completed', 'no_show', 'canceled')",
+            name="ck_counseling_appointment_status",
+        ),
+        CheckConstraint("scheduled_end > scheduled_start", name="ck_counseling_appointment_time"),
+        Index("ix_counseling_appointments_student", "student_id", "scheduled_start"),
+    )
+
+    id = Column(String(64), primary_key=True)
+    student_id = Column(Integer, ForeignKey("counseling_students.id"), nullable=False)
+    department_id = Column(Integer, ForeignKey("departments.id"), nullable=False)
+    counselor_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    request_id = Column(String(64), nullable=False)
+    scheduled_start = Column(DateTime, nullable=False)
+    created_scheduled_start = Column(DateTime, nullable=False)
+    created_scheduled_end = Column(DateTime, nullable=False)
+    created_appointment_type = Column(String(32), nullable=False)
+    created_location = Column(Text, nullable=False, default="", server_default="")
+    created_note = Column(Text, nullable=False, default="", server_default="")
+    scheduled_end = Column(DateTime, nullable=False)
+    appointment_type = Column(String(32), nullable=False)
+    location = Column(Text, nullable=False, default="", server_default="")
+    note = Column(Text, nullable=False, default="", server_default="")
+    status = Column(String(16), nullable=False, default="scheduled", server_default="scheduled")
+    version = Column(Integer, nullable=False, default=1, server_default="1")
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+    updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
+
+
 class CounselingDataUseAcknowledgment(Base):
     """保存业务用户对指定版本数据用途告知的阅读确认。"""
 

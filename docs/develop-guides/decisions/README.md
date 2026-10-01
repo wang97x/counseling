@@ -27,6 +27,7 @@
 | 心理辅导工作台 | counseling Web domain | [手工优先工作台](implemented/2026-09-24-manual-first-counseling-workspace.md) | 前端演示原型与早期最小发布方案 |
 | 心理辅导交付阶段 | `docs/develop-guides/roadmap.md` | [按依赖拆分交付切片](implemented/2026-10-01-counseling-roadmap-delivery-slices.md) | 无 |
 | 心理辅导 P0 发布收口 | `backend/counseling/src/counseling/storage/schema.py` | [P0 与 P0.5 发布收口](implemented/2026-10-01-counseling-p0-release-closure.md) | 无 |
+| 心理辅导 P1B 量表与预约 | `counseling.assessments`、`counseling.appointments` | [固定量表与内部预约闭环](implemented/2026-10-01-counseling-p1b-assessments-appointments.md) | 无 |
 | 档案驱动 AI 协作 | `counseling.ai_work` | [AI 协作与材料回填](implemented/2026-09-29-counseling-ai-work-items.md) | 手工优先工作台中的“无 AI 主入口”绝对结论 |
 
 ## 生命周期

@@ -55,7 +55,7 @@ def test_counseling_schema_v2_adds_minimal_workflow_guards() -> None:
     """v2 同时拥有风险历史、追加更正和数据库不可变保护。"""
     migration_sql = "\n".join(schema.COUNSELING_SCHEMA_V2_STATEMENTS)
 
-    assert schema.COUNSELING_SCHEMA_VERSION == 5
+    assert schema.COUNSELING_SCHEMA_VERSION == 8
     assert "current_risk_level" in migration_sql
     assert "counseling_risk_events" in migration_sql
     assert "counseling_record_corrections" in migration_sql
@@ -84,6 +84,35 @@ def test_counseling_schema_v4_adds_ai_work_items_and_materials() -> None:
     assert "uq_counseling_material_source" in migration_sql
 
 
+
+def test_counseling_schema_v6_adds_assessments_and_appointments() -> None:
+    """v6 保存冻结量表结果与带乐观版本的内部预约。"""
+    migration_sql = "\n".join(schema.COUNSELING_SCHEMA_V6_STATEMENTS)
+
+    assert schema.COUNSELING_SCHEMA_VERSION == 8
+    assert "counseling_assessment_results" in migration_sql
+    assert "scale_code = 'phq9' AND scale_version = 1" in migration_sql
+    assert "trg_counseling_assessments_immutable" in migration_sql
+    assert "counseling_appointments" in migration_sql
+    assert "scheduled_end > scheduled_start" in migration_sql
+    assert "'scheduled', 'arrived', 'completed', 'no_show', 'canceled'" in migration_sql
+
+def test_counseling_schema_v7_freezes_appointment_creation_intent() -> None:
+    """v7 回填并冻结预约创建时的幂等比较字段。"""
+    migration_sql = "\n".join(schema.COUNSELING_SCHEMA_V7_STATEMENTS)
+
+    assert "created_scheduled_start" in migration_sql
+    assert "COALESCE(created_scheduled_start, scheduled_start)" in migration_sql
+    assert "ALTER COLUMN created_note SET NOT NULL" in migration_sql
+
+
+def test_counseling_schema_v8_guards_appointment_creation_intent() -> None:
+    """v8 在数据库边界拒绝修改预约创建意图。"""
+    migration_sql = "\n".join(schema.COUNSELING_SCHEMA_V8_STATEMENTS)
+
+    assert "creation intent is immutable" in migration_sql
+    assert "IS DISTINCT FROM OLD.created_note" in migration_sql
+    assert "BEFORE UPDATE ON counseling_appointments" in migration_sql
 def test_counseling_schema_v5_adds_immutable_data_use_acknowledgments() -> None:
     """v5 持久保存按版本确认且数据库拒绝覆盖。"""
     migration_sql = "\n".join(schema.COUNSELING_SCHEMA_V5_STATEMENTS)

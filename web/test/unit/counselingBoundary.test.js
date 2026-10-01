@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import test from 'node:test'
+import { formatLocalDateTime } from '../../src/domains/counseling/dateTime.js'
 
 const source = (relativePath) => readFileSync(new URL(relativePath, import.meta.url), 'utf8')
 
@@ -38,4 +39,23 @@ test('工作台和交付卡片暴露人工回填而不自动进入正式记录',
   assert.match(artifacts, /run_id: props\.runId/)
   assert.match(chat, /:run-id="row\.conv\.run\?\.run_id \|\| null"/)
   assert.match(chat, /资料仅供参考，不会自动改变档案、风险或业务状态/)
+})
+
+test('P1B 量表和预约只通过档案业务 API 并明确人工边界', () => {
+  const api = source('../../src/domains/counseling/api.js')
+  const workspace = source('../../src/domains/counseling/views/StudentWorkspaceView.vue')
+
+  assert.match(api, /studentRoot\(studentId\).*\/assessments/)
+  assert.match(api, /studentRoot\(studentId\).*\/appointments/)
+  assert.match(workspace, /服务端按冻结的 v1 规则计分/)
+  assert.match(workspace, /不会自动改变风险等级/)
+  assert.match(workspace, /不会同步外部日历或发送通知/)
+  assert.match(workspace, /expected_version: appointmentForm\.version/)
+})
+
+test('工作台把 UTC 时间按辅导员本地时区展示', () => {
+  const displayed = formatLocalDateTime('2026-10-01T01:00:00Z', {
+    timeZone: 'Asia/Shanghai',
+  })
+  assert.match(displayed, /09:00/)
 })

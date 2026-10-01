@@ -3,7 +3,7 @@
 from sqlalchemy import text
 from yuxi.storage.postgres.manager import PostgresManager, pg_manager
 
-COUNSELING_SCHEMA_VERSION = 5
+COUNSELING_SCHEMA_VERSION = 8
 COUNSELING_SCHEMA_V1_STATEMENTS = (
     """
     CREATE TABLE IF NOT EXISTS counseling_students (
@@ -379,12 +379,138 @@ COUNSELING_SCHEMA_V5_STATEMENTS = (
     """,
 )
 
+COUNSELING_SCHEMA_V6_STATEMENTS = (
+    """
+    CREATE TABLE IF NOT EXISTS counseling_assessment_results (
+        id VARCHAR(64) PRIMARY KEY,
+        student_id INTEGER NOT NULL REFERENCES counseling_students(id),
+        department_id INTEGER NOT NULL REFERENCES departments(id),
+        counselor_id INTEGER NOT NULL REFERENCES users(id),
+        request_id VARCHAR(64) NOT NULL,
+        scale_code VARCHAR(32) NOT NULL,
+        scale_version INTEGER NOT NULL,
+        answers JSONB NOT NULL,
+        total_score INTEGER NOT NULL,
+        severity VARCHAR(32) NOT NULL,
+        administered_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+        CONSTRAINT uq_counseling_assessment_request UNIQUE (counselor_id, request_id),
+        CONSTRAINT ck_counseling_assessment_scale CHECK (scale_code = 'phq9' AND scale_version = 1),
+        CONSTRAINT ck_counseling_assessment_score CHECK (total_score BETWEEN 0 AND 27)
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS ix_counseling_assessments_student
+    ON counseling_assessment_results(student_id, administered_at)
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS counseling_appointments (
+        id VARCHAR(64) PRIMARY KEY,
+        student_id INTEGER NOT NULL REFERENCES counseling_students(id),
+        department_id INTEGER NOT NULL REFERENCES departments(id),
+        counselor_id INTEGER NOT NULL REFERENCES users(id),
+        request_id VARCHAR(64) NOT NULL,
+        scheduled_start TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        scheduled_end TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        appointment_type VARCHAR(32) NOT NULL,
+        location TEXT NOT NULL DEFAULT '',
+        note TEXT NOT NULL DEFAULT '',
+        status VARCHAR(16) NOT NULL DEFAULT 'scheduled',
+        version INTEGER NOT NULL DEFAULT 1,
+        created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+        CONSTRAINT uq_counseling_appointment_request UNIQUE (counselor_id, request_id),
+        CONSTRAINT ck_counseling_appointment_status
+            CHECK (status IN ('scheduled', 'arrived', 'completed', 'no_show', 'canceled')),
+        CONSTRAINT ck_counseling_appointment_time CHECK (scheduled_end > scheduled_start)
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS ix_counseling_appointments_student
+    ON counseling_appointments(student_id, scheduled_start)
+    """,
+    """
+    CREATE OR REPLACE FUNCTION reject_counseling_assessment_mutation() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+    BEGIN
+        RAISE EXCEPTION 'counseling_assessment_results are immutable';
+    END;
+    $$
+    """,
+    "DROP TRIGGER IF EXISTS trg_counseling_assessments_immutable ON counseling_assessment_results",
+    """
+    CREATE TRIGGER trg_counseling_assessments_immutable
+    BEFORE UPDATE OR DELETE ON counseling_assessment_results
+    FOR EACH ROW EXECUTE FUNCTION reject_counseling_assessment_mutation()
+    """,
+)
+
+COUNSELING_SCHEMA_V7_STATEMENTS = (
+    "ALTER TABLE counseling_appointments ADD COLUMN IF NOT EXISTS "
+    "created_scheduled_start TIMESTAMP WITHOUT TIME ZONE",
+    "ALTER TABLE counseling_appointments ADD COLUMN IF NOT EXISTS "
+    "created_scheduled_end TIMESTAMP WITHOUT TIME ZONE",
+    "ALTER TABLE counseling_appointments ADD COLUMN IF NOT EXISTS "
+    "created_appointment_type VARCHAR(32)",
+    "ALTER TABLE counseling_appointments ADD COLUMN IF NOT EXISTS "
+    "created_location TEXT",
+    "ALTER TABLE counseling_appointments ADD COLUMN IF NOT EXISTS "
+    "created_note TEXT",
+    """
+    UPDATE counseling_appointments
+    SET created_scheduled_start = COALESCE(created_scheduled_start, scheduled_start),
+        created_scheduled_end = COALESCE(created_scheduled_end, scheduled_end),
+        created_appointment_type = COALESCE(created_appointment_type, appointment_type),
+        created_location = COALESCE(created_location, location),
+        created_note = COALESCE(created_note, note)
+    WHERE created_scheduled_start IS NULL
+       OR created_scheduled_end IS NULL
+       OR created_appointment_type IS NULL
+       OR created_location IS NULL
+       OR created_note IS NULL
+    """,
+    "ALTER TABLE counseling_appointments ALTER COLUMN created_scheduled_start SET NOT NULL",
+    "ALTER TABLE counseling_appointments ALTER COLUMN created_scheduled_end SET NOT NULL",
+    "ALTER TABLE counseling_appointments ALTER COLUMN created_appointment_type SET NOT NULL",
+    "ALTER TABLE counseling_appointments ALTER COLUMN created_location SET NOT NULL",
+    "ALTER TABLE counseling_appointments ALTER COLUMN created_note SET NOT NULL",
+)
+
+COUNSELING_SCHEMA_V8_STATEMENTS = (
+    """
+    CREATE OR REPLACE FUNCTION reject_counseling_appointment_creation_intent_mutation()
+    RETURNS trigger
+    LANGUAGE plpgsql AS $$
+    BEGIN
+        IF NEW.created_scheduled_start IS DISTINCT FROM OLD.created_scheduled_start
+           OR NEW.created_scheduled_end IS DISTINCT FROM OLD.created_scheduled_end
+           OR NEW.created_appointment_type IS DISTINCT FROM OLD.created_appointment_type
+           OR NEW.created_location IS DISTINCT FROM OLD.created_location
+           OR NEW.created_note IS DISTINCT FROM OLD.created_note THEN
+            RAISE EXCEPTION 'counseling appointment creation intent is immutable';
+        END IF;
+        RETURN NEW;
+    END;
+    $$
+    """,
+    "DROP TRIGGER IF EXISTS trg_counseling_appointment_creation_intent_immutable "
+    "ON counseling_appointments",
+    """
+    CREATE TRIGGER trg_counseling_appointment_creation_intent_immutable
+    BEFORE UPDATE ON counseling_appointments
+    FOR EACH ROW EXECUTE FUNCTION reject_counseling_appointment_creation_intent_mutation()
+    """,
+)
+
 COUNSELING_SCHEMA_STATEMENTS = (
     COUNSELING_SCHEMA_V1_STATEMENTS
     + COUNSELING_SCHEMA_V2_STATEMENTS
     + COUNSELING_SCHEMA_V3_STATEMENTS
     + COUNSELING_SCHEMA_V4_STATEMENTS
     + COUNSELING_SCHEMA_V5_STATEMENTS
+    + COUNSELING_SCHEMA_V6_STATEMENTS
+    + COUNSELING_SCHEMA_V7_STATEMENTS
+    + COUNSELING_SCHEMA_V8_STATEMENTS
 )
 
 
@@ -413,10 +539,10 @@ async def migrate_schema() -> None:
             await pg_manager.create_schema_version_table()
             versions = await pg_manager.get_schema_versions()
             actual = versions.get("counseling")
-            if actual not in {None, 1, 2, 3, 4, COUNSELING_SCHEMA_VERSION}:
+            if actual not in {None, 1, 2, 3, 4, 5, 6, 7, COUNSELING_SCHEMA_VERSION}:
                 raise RuntimeError(
                     "Unsupported counseling schema version: "
-                    f"{actual}; supported upgrade sources are empty, v1, v2, v3 or v4"
+                    f"{actual}; supported upgrade sources are empty or v1 through v7"
                 )
             if actual != COUNSELING_SCHEMA_VERSION:
                 if actual is None:
@@ -427,17 +553,44 @@ async def migrate_schema() -> None:
                         + COUNSELING_SCHEMA_V3_STATEMENTS
                         + COUNSELING_SCHEMA_V4_STATEMENTS
                         + COUNSELING_SCHEMA_V5_STATEMENTS
+                        + COUNSELING_SCHEMA_V6_STATEMENTS
+                        + COUNSELING_SCHEMA_V7_STATEMENTS
+                        + COUNSELING_SCHEMA_V8_STATEMENTS
                     )
                 elif actual == 2:
                     statements = (
                         COUNSELING_SCHEMA_V3_STATEMENTS
                         + COUNSELING_SCHEMA_V4_STATEMENTS
                         + COUNSELING_SCHEMA_V5_STATEMENTS
+                        + COUNSELING_SCHEMA_V6_STATEMENTS
+                        + COUNSELING_SCHEMA_V7_STATEMENTS
+                        + COUNSELING_SCHEMA_V8_STATEMENTS
                     )
                 elif actual == 3:
-                    statements = COUNSELING_SCHEMA_V4_STATEMENTS + COUNSELING_SCHEMA_V5_STATEMENTS
+                    statements = (
+                        COUNSELING_SCHEMA_V4_STATEMENTS
+                        + COUNSELING_SCHEMA_V5_STATEMENTS
+                        + COUNSELING_SCHEMA_V6_STATEMENTS
+                        + COUNSELING_SCHEMA_V7_STATEMENTS
+                        + COUNSELING_SCHEMA_V8_STATEMENTS
+                    )
+                elif actual == 4:
+                    statements = (
+                        COUNSELING_SCHEMA_V5_STATEMENTS
+                        + COUNSELING_SCHEMA_V6_STATEMENTS
+                        + COUNSELING_SCHEMA_V7_STATEMENTS
+                        + COUNSELING_SCHEMA_V8_STATEMENTS
+                    )
+                elif actual == 5:
+                    statements = (
+                        COUNSELING_SCHEMA_V6_STATEMENTS
+                        + COUNSELING_SCHEMA_V7_STATEMENTS
+                        + COUNSELING_SCHEMA_V8_STATEMENTS
+                    )
+                elif actual == 6:
+                    statements = COUNSELING_SCHEMA_V7_STATEMENTS + COUNSELING_SCHEMA_V8_STATEMENTS
                 else:
-                    statements = COUNSELING_SCHEMA_V5_STATEMENTS
+                    statements = COUNSELING_SCHEMA_V8_STATEMENTS
                 async with pg_manager.async_engine.begin() as connection:
                     for statement in statements:
                         await connection.execute(text(statement))
