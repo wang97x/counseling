@@ -21,5 +21,21 @@ test('档案会话通过业务 API 创建而不直连通用线程入口', () => 
   const api = source('../../src/domains/counseling/api.js')
 
   assert.match(api, /studentRoot\(studentId\).*\/conversations/)
+  assert.match(api, /studentRoot\(studentId\).*\/ai-work-items/)
+  assert.match(api, /materials\/import/)
   assert.doesNotMatch(api, /\/api\/chat\/thread/)
+})
+
+test('工作台和交付卡片暴露人工回填而不自动进入正式记录', () => {
+  const workspace = source('../../src/domains/counseling/views/StudentWorkspaceView.vue')
+  const artifacts = source('../../src/components/AgentArtifactsCard.vue')
+  const chat = source('../../src/components/AgentChatComponent.vue')
+
+  assert.match(workspace, />AI 协助</)
+  assert.match(workspace, />待整理</)
+  assert.match(workspace, />档案材料</)
+  assert.match(artifacts, /回填档案/)
+  assert.match(artifacts, /run_id: props\.runId/)
+  assert.match(chat, /:run-id="row\.conv\.run\?\.run_id \|\| null"/)
+  assert.match(chat, /资料仅供参考，不会自动改变档案、风险或业务状态/)
 })

@@ -13,7 +13,13 @@
         <RouterLink :to="`/students/${currentThread.metadata.counseling.student_id}`">
           学生 {{ currentThread.metadata.counseling.student_code }} · 返回档案
         </RouterLink>
-        <details>
+        <template v-if="currentThread.metadata.counseling.work_item_id">
+          <strong>{{ currentThread.metadata.counseling.instruction }}</strong>
+          <span>快照时间：{{ currentThread.metadata.counseling.snapshot_at }}</span>
+          <span>包含：{{ (currentThread.metadata.counseling.context_scope || []).join('；') }}</span>
+          <span>资料仅供参考，不会自动改变档案、风险或业务状态。</span>
+        </template>
+        <details v-else>
           <summary>已确认的背景快照</summary>
           <p>{{ currentThread.metadata.counseling.background_snapshot || '未填写背景' }}</p>
         </details>
@@ -134,6 +140,9 @@
                   v-if="row.artifacts.length"
                   :artifacts="row.artifacts"
                   :thread-id="currentChatId"
+                  :run-id="row.conv.run?.run_id || null"
+                  :student-id="currentThread?.metadata?.counseling?.student_id || null"
+                  :work-item-id="currentThread?.metadata?.counseling?.work_item_id || null"
                   @saved="handleArtifactSaved"
                   @open-preview="openPanelPreview"
                 />
@@ -3882,6 +3891,23 @@ watch(
     }
   },
   { deep: false }
+)
+
+watch(
+  [currentThread, currentThreadHasHistory],
+  ([thread, hasHistory]) => {
+    const counseling = thread?.metadata?.counseling
+    const instruction = String(counseling?.instruction || '').trim()
+    if (
+      counseling?.work_item_id &&
+      instruction &&
+      !hasHistory &&
+      !String(userInput.value || '').trim()
+    ) {
+      userInput.value = instruction
+    }
+  },
+  { immediate: true },
 )
 
 watch(currentAgentId, (newAgentId, oldAgentId) => {

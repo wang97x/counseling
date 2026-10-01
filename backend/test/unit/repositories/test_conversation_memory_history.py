@@ -5,7 +5,6 @@ import json
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from yuxi.repositories.conversation_repository import (
     MEMORY_HISTORY_READ_RESPONSE_MAX_BYTES,
     ConversationRepository,
@@ -46,6 +45,11 @@ async def test_memory_search_excludes_hidden_subagent_and_non_user_messages(sess
     invocation = await _conversation(session, thread_id="invocation", metadata={"source": "agent_call"})
     parent = await _conversation(session, thread_id="parent")
     child = await _conversation(session, thread_id="child")
+    counseling = await _conversation(
+        session,
+        thread_id="counseling",
+        metadata={"counseling": {"student_id": 7}},
+    )
     session.add(
         SubagentThread(
             uid="user-1",
@@ -64,6 +68,7 @@ async def test_memory_search_excludes_hidden_subagent_and_non_user_messages(sess
             Message(conversation_id=other.id, role="user", content="needle other", message_type="text"),
             Message(conversation_id=invocation.id, role="user", content="needle invocation", message_type="text"),
             Message(conversation_id=child.id, role="assistant", content="needle child", message_type="text"),
+            Message(conversation_id=counseling.id, role="user", content="needle counseling", message_type="text"),
         ]
     )
     await session.commit()

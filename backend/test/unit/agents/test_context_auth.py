@@ -354,8 +354,8 @@ async def test_prepare_agent_runtime_context_filters_resources_and_derives_runti
     context_module = _load_context_module()
     monkeypatch.setattr(context_module, "system_options", FakeSystemOptions())
 
-    class FakeUserRepository:
-        async def get_by_uid_with_db(self, _db, uid):
+    class FakeIdentityReader:
+        async def get_by_uid(self, _db, uid, **_kwargs):
             assert uid == "u1"
             return types.SimpleNamespace(role="user", uid="u1", department_id=None)
 
@@ -379,11 +379,7 @@ async def test_prepare_agent_runtime_context_filters_resources_and_derives_runti
             resolve_runtime_skills_for_context=fake_resolve_runtime_skills_for_context,
         ),
     )
-    monkeypatch.setitem(
-        sys.modules,
-        "counseling.identity.repositories.user",
-        types.SimpleNamespace(UserRepository=FakeUserRepository),
-    )
+    monkeypatch.setattr("yuxi.identity._reader", FakeIdentityReader())
     monkeypatch.setitem(
         sys.modules,
         "yuxi.storage.postgres.manager",
@@ -462,8 +458,8 @@ async def test_prepare_agent_runtime_context_clears_resources_for_missing_user(m
     context_module = _load_context_module()
     monkeypatch.setattr(context_module, "system_options", FakeSystemOptions())
 
-    class FakeUserRepository:
-        async def get_by_uid_with_db(self, _db, _uid):
+    class FakeIdentityReader:
+        async def get_by_uid(self, _db, _uid, **_kwargs):
             return None
 
     monkeypatch.setitem(
@@ -476,11 +472,7 @@ async def test_prepare_agent_runtime_context_clears_resources_for_missing_user(m
         "yuxi.agents.skills.runtime",
         types.SimpleNamespace(resolve_runtime_skills_for_context=lambda _context, db=None, user=None: None),
     )
-    monkeypatch.setitem(
-        sys.modules,
-        "counseling.identity.repositories.user",
-        types.SimpleNamespace(UserRepository=FakeUserRepository),
-    )
+    monkeypatch.setattr("yuxi.identity._reader", FakeIdentityReader())
     monkeypatch.setitem(
         sys.modules,
         "yuxi.storage.postgres.manager",

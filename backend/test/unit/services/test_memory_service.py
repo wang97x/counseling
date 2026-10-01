@@ -4,7 +4,6 @@ from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
 import pytest
-
 from yuxi.services import memory_service
 from yuxi.workspace import paths as workspace_paths
 from yuxi.workspace.filesystem import Workspace
@@ -111,6 +110,41 @@ async def test_remember_memory_validates_run_and_publishes_append(
     assert result["start_line"] == 5
     assert result["end_line"] == 5
     assert stored.endswith("请使用中文\n")
+
+
+async def test_remember_memory_rejects_counseling_run(tmp_path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("YUXI_USER_DATA_DIR", str(tmp_path / "threads"))
+    workspace_paths.ensure_user_workspace("user-1")
+
+    class FakeDB:
+        async def execute(self, _statement, _params):
+            return None
+
+    @asynccontextmanager
+    async def fake_session():
+        yield FakeDB()
+
+    class FakeRunRepository:
+        def __init__(self, _db):
+            pass
+
+        async def lock_memory_write(self, *_args, **_kwargs):
+            return SimpleNamespace(
+                input_payload={"runtime": {"counseling_context_thread_id": "thread-1"}}
+            )
+
+    monkeypatch.setattr(memory_service.pg_manager, "get_async_session_context", fake_session)
+    monkeypatch.setattr(memory_service, "AgentRunRepository", FakeRunRepository)
+
+    with pytest.raises(ValueError, match="档案 AI 协作"):
+        await memory_service.remember_memory(
+            uid="user-1",
+            thread_id="thread-1",
+            run_id="run-1",
+            request_id="request-1",
+            worker_id="worker-1",
+            content="学生秘密",
+        )
 
 
 async def test_remember_memory_fails_closed_when_config_disabled(tmp_path, monkeypatch: pytest.MonkeyPatch):

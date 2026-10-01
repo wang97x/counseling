@@ -2,7 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
-  ArrowLeft, CheckCircle2, ClipboardPenLine, FileClock,
+  ArrowLeft, Bot, CheckCircle2, ClipboardPenLine, FileClock, FileText,
   History, PencilLine, ShieldAlert, UserRoundCheck,
 } from '@lucide/vue'
 import { message } from 'ant-design-vue'
@@ -22,14 +22,20 @@ const recordOpen = ref(false)
 const riskOpen = ref(false)
 const correctionOpen = ref(false)
 const closeOpen = ref(false)
+const aiOpen = ref(false)
 const busy = ref(false)
 const editForm = reactive({ displayName: '', className: '', chiefConcern: '' })
 const recordForm = reactive(emptyRecordForm())
 const riskForm = reactive({ level: 'watch', basis: '', actionTaken: '', status: 'monitoring' })
 const correctionForm = reactive({ recordId: '', reason: '', ...emptyContent() })
 const closeForm = reactive({ closureNote: '' })
+const aiForm = reactive({ instruction: '', requestId: '' })
+const materialConfirmationKeys = new Map()
+const materialRejectionKeys = new Map()
 const studentId = computed(() => String(route.params.studentId || ''))
 const activeDrafts = computed(() => workspace.value?.drafts || [])
+const pendingMaterials = computed(() => (workspace.value?.materials || []).filter((item) => item.status === 'pending_review'))
+const activeMaterials = computed(() => (workspace.value?.materials || []).filter((item) => item.status === 'active'))
 const operations = createLatestOperation()
 let requestVersion = 0
 
@@ -217,6 +223,66 @@ async function closeStudent() {
   }, '结束阶段失败')
 }
 
+function openAIWork() {
+  Object.assign(aiForm, { instruction: '', requestId: crypto.randomUUID() })
+  aiOpen.value = true
+}
+
+async function createAIWork() {
+  if (!aiForm.instruction.trim()) return message.error('请填写希望 AI 完成的任务')
+  await runAction(async () => {
+    const result = await service.createAIWorkItem(
+      studentId.value,
+      aiForm.instruction.trim(),
+      aiForm.requestId,
+    )
+    aiOpen.value = false
+    await router.push(result.data.route)
+  }, '创建 AI 协作任务失败')
+}
+
+async function confirmMaterialItem(item) {
+  const confirmationKey = materialConfirmationKeys.get(item.id) || crypto.randomUUID()
+  materialConfirmationKeys.set(item.id, confirmationKey)
+  await runAction(async () => {
+    await service.confirmMaterial(studentId.value, item.id, confirmationKey)
+    materialConfirmationKeys.delete(item.id)
+    await loadWorkspace()
+    message.success('材料已收入档案材料列表')
+  }, '确认材料失败')
+}
+
+async function rejectMaterialItem(item) {
+  const requestId = materialRejectionKeys.get(item.id) || crypto.randomUUID()
+  materialRejectionKeys.set(item.id, requestId)
+  await runAction(async () => {
+    await service.rejectMaterial(studentId.value, item.id, requestId)
+    materialRejectionKeys.delete(item.id)
+    await loadWorkspace()
+    message.success('材料已从待整理区移除')
+  }, '拒绝材料失败')
+}
+
+async function openMaterial(item, mode = 'preview') {
+  try {
+    const response = await service.getMaterialContent(studentId.value, item.id, mode)
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    if (mode === 'download') {
+      const link = document.createElement('a')
+      link.href = url
+      link.download = item.file_name
+      link.click()
+      window.URL.revokeObjectURL(url)
+      return
+    }
+    window.open(url, '_blank', 'noopener,noreferrer')
+    window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000)
+  } catch (cause) {
+    message.error(cause.message || '读取材料失败')
+  }
+}
+
 async function runAction(action, fallback) {
   const id = studentId.value
   const version = requestVersion
@@ -245,7 +311,9 @@ function timelineLabel(item) {
 
 watch(studentId, (id) => {
   operations.invalidate()
-  for (const modal of [editOpen, recordOpen, riskOpen, correctionOpen, closeOpen]) modal.value = false
+  materialConfirmationKeys.clear()
+  materialRejectionKeys.clear()
+  for (const modal of [editOpen, recordOpen, riskOpen, correctionOpen, closeOpen, aiOpen]) modal.value = false
   busy.value = false
   workspace.value = null
   if (id) void loadWorkspace(id)
@@ -257,6 +325,7 @@ watch(studentId, (id) => {
     <PageHeader :title="workspace?.student?.name ? workspace.student.name + '的档案' : '档案工作台'" :loading="loading" :show-border="true">
       <template #actions>
         <a-button aria-label="返回档案列表" @click="router.push('/students')"><ArrowLeft :size="15" />返回列表</a-button>
+        <a-button type="primary" :disabled="!workspace" @click="openAIWork"><Bot :size="15" />AI 协助</a-button>
         <a-button :disabled="!workspace" @click="openEdit"><PencilLine :size="15" />编辑信息</a-button>
         <a-button v-if="workspace?.student?.status !== 'closed'" type="primary" :disabled="!workspace" @click="openNewRecord">
           <ClipboardPenLine :size="15" />新增咨询记录
@@ -317,6 +386,44 @@ watch(studentId, (id) => {
           </div>
         </section>
 
+        <section class="panel">
+          <div class="section-heading">
+            <div><span>AI 输出需人工确认</span><h3>待整理</h3></div>
+            <FileClock :size="21" />
+          </div>
+          <a-empty v-if="!pendingMaterials.length" description="暂无待整理材料" />
+          <div v-else class="material-list">
+            <article v-for="item in pendingMaterials" :key="item.id">
+              <FileText :size="20" />
+              <div><strong>{{ item.file_name }}</strong><span>{{ item.content_type }} · {{ Math.ceil(item.size / 1024) }} KB · AI 生成</span></div>
+              <div class="material-actions">
+                <a-button size="small" @click="openMaterial(item)">预览</a-button>
+                <a-button size="small" @click="openMaterial(item, 'download')">下载</a-button>
+                <a-button size="small" type="primary" @click="confirmMaterialItem(item)">确认收入材料</a-button>
+                <a-button size="small" danger @click="rejectMaterialItem(item)">拒绝</a-button>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="section-heading">
+            <div><span>独立于正式咨询记录</span><h3>档案材料</h3></div>
+            <FileText :size="21" />
+          </div>
+          <a-empty v-if="!activeMaterials.length" description="暂无已确认材料" />
+          <div v-else class="material-list">
+            <article v-for="item in activeMaterials" :key="item.id">
+              <FileText :size="20" />
+              <div><strong>{{ item.file_name }}</strong><span>{{ item.content_type }} · {{ Math.ceil(item.size / 1024) }} KB · AI 生成</span></div>
+              <div class="material-actions">
+                <a-button size="small" @click="openMaterial(item)">预览</a-button>
+                <a-button size="small" @click="openMaterial(item, 'download')">下载</a-button>
+              </div>
+            </article>
+          </div>
+        </section>
+
         <section class="panel timeline-panel">
           <div class="section-heading">
             <div><span>完整历史</span><h3>统一时间线</h3></div>
@@ -350,6 +457,19 @@ watch(studentId, (id) => {
         </section>
       </template>
     </main>
+
+    <a-modal v-model:open="aiOpen" title="AI 协助" :confirm-loading="busy" ok-text="创建协作任务" @ok="createAIWork">
+      <a-alert
+        type="info"
+        show-icon
+        message="将提供当前已确认档案事实，AI 输出需人工回填和确认"
+      />
+      <a-form layout="vertical" class="modal-form">
+        <a-form-item label="希望 AI 完成什么" required>
+          <a-textarea v-model:value="aiForm.instruction" :rows="6" maxlength="10000" placeholder="例如：根据已确认资料生成一份后续跟进计划，保存为 DOCX。" />
+        </a-form-item>
+      </a-form>
+    </a-modal>
 
     <a-modal v-model:open="editOpen" title="编辑学生信息" :confirm-loading="busy" @ok="saveEdit">
       <a-form layout="vertical">
@@ -437,6 +557,13 @@ watch(studentId, (id) => {
 .draft-list button div { display: flex; justify-content: space-between; gap: 12px; }
 .draft-list p { margin: 0; color: var(--gray-700); }
 .draft-list button > span, .draft-list button div span { color: var(--main-700); font-size: 12px; }
+.material-list { display: grid; gap: 10px; }
+.material-list article { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 14px; border: 1px solid var(--gray-150); border-radius: 11px; }
+.material-list article > svg { color: var(--main-600); }
+.material-list article > div:not(.material-actions) { display: grid; gap: 4px; min-width: 0; }
+.material-list strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.material-list span { color: var(--gray-500); font-size: 12px; }
+.material-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .timeline-list { display: grid; gap: 0; }
 .timeline-list article { position: relative; display: grid; grid-template-columns: 22px 1fr; gap: 12px; padding-bottom: 20px; }
 .timeline-list article:not(:last-child)::before { position: absolute; top: 16px; bottom: 0; left: 6px; width: 1px; background: var(--gray-200); content: ''; }
@@ -456,5 +583,6 @@ watch(studentId, (id) => {
   .student-card, .panel { padding: 16px; }
   .form-row { grid-template-columns: 1fr; gap: 0; }
   .record-details { grid-template-columns: 1fr; }
+  .material-list article { grid-template-columns: auto 1fr; } .material-actions { grid-column: 1 / -1; justify-content: flex-start; }
 }
 </style>

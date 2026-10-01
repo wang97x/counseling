@@ -109,6 +109,24 @@ test('档案角色只能打开后端确认属于该档案的关联会话', async
     '/students',
   )
 
+  const workItemRoute = {
+    params: { thread_id: 'thread-work' },
+    query: { student_id: '23', work_item_id: 'work-1' },
+  }
+  const workItemLoader = async () => [{ id: 'thread-work', work_item_id: 'work-1' }]
+  assert.equal(
+    await resolveLinkedConversationRedirect(workItemRoute, counselor, workItemLoader),
+    null,
+  )
+  assert.equal(
+    await resolveLinkedConversationRedirect(
+      { ...workItemRoute, query: { student_id: '23', work_item_id: 'forged' } },
+      counselor,
+      workItemLoader,
+    ),
+    '/students',
+  )
+
   const platformAdmin = resolveFrontendAccess('admin', [])
   assert.equal(
     await resolveLinkedConversationRedirect(unrelatedRoute, platformAdmin, async () => {

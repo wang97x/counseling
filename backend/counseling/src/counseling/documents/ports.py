@@ -6,6 +6,10 @@ from typing import Protocol
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
+class CounselingObjectStorageError(Exception):
+    """表示业务对象存储暂时无法提供完整对象。"""
+
+
 class CounselingDocumentParser(Protocol):
     """定义业务文件解析所需的最小能力。"""
 

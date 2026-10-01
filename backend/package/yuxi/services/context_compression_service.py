@@ -19,6 +19,8 @@ from yuxi.agents.context import (
 from yuxi.agents.middlewares import create_summary_middleware_from_context
 from yuxi.agents.middlewares.token_usage import TOKEN_USAGE_CONTEXT_FIELDS
 from yuxi.agents.skills.service import get_user_skills_root_dir
+from yuxi.conversation_access import require_conversation_access
+from yuxi.identity import IdentitySnapshot as User
 from yuxi.repositories.agent_repository import AgentRepository
 from yuxi.repositories.agent_run_repository import AgentRunRepository
 from yuxi.repositories.agent_run_request_repository import AgentRunRequestRepository
@@ -26,7 +28,6 @@ from yuxi.repositories.agent_state_repository import AgentStateRepository
 from yuxi.repositories.conversation_repository import ConversationRepository
 from yuxi.services.agent_run_service import resolve_agent_run_model_spec
 from yuxi.services.workdir_service import ensure_conversation_workdir_available
-from yuxi.identity import IdentitySnapshot as User
 from yuxi.utils.logging_config import logger
 
 
@@ -41,6 +42,7 @@ async def compress_thread_context(
     conversation = await ConversationRepository(db).lock_conversation_by_thread_id(thread_id)
     if conversation is None or conversation.uid != uid or conversation.status == "deleted":
         raise HTTPException(status_code=404, detail="对话线程不存在")
+    await require_conversation_access(db, uid, conversation)
 
     agent_slug = conversation.agent_id
     await _ensure_thread_idle(db=db, uid=uid, agent_slug=agent_slug, thread_id=thread_id)

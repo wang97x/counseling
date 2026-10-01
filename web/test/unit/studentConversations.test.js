@@ -368,7 +368,7 @@ test('前端服务边界显式选择适配器且生产模式没有演示回退',
   assert.doesNotMatch(apiAdapter, /createCounselingDemoAdapter/)
 })
 
-test('手工优先工作台隔离学生切换并移除 AI 主入口', () => {
+test('手工优先工作台隔离学生切换并提供受控 AI 协助入口', () => {
   const source = readFileSync(new URL('../../src/domains/counseling/views/StudentWorkspaceView.vue', import.meta.url), 'utf8')
   assert.match(source, /const version = \+\+requestVersion/)
   assert.match(source, /version !== requestVersion \|\| id !== studentId\.value/)
@@ -380,6 +380,9 @@ test('手工优先工作台隔离学生切换并移除 AI 主入口', () => {
   assert.match(source, /closeStudent/)
   assert.match(source, /保存草稿不会进入正式时间线/)
   assert.match(source, /原记录保持不变/)
+  assert.match(source, /AI 协助/)
+  assert.match(source, /createAIWorkItem/)
+  assert.match(source, /待整理/)
   assert.doesNotMatch(source, /RecordUploadFlow|openConversationCreator|agentStore|生成摘要|上传谈话记录/)
 
   const listSource = readFileSync(new URL('../../src/domains/counseling/views/StudentRecordListView.vue', import.meta.url), 'utf8')

@@ -10,6 +10,7 @@ from fastapi import HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from yuxi.agents.backends.paths import runtime_path_for_workdir_scope, workdir_scope_from_runtime_path
 from yuxi.config.options import system_options
+from yuxi.conversation_access import require_conversation_access
 from yuxi.knowledge.parser.capabilities import (
     IMAGE_FILE_EXTENSIONS,
     PDF_FILE_EXTENSIONS,
@@ -36,6 +37,7 @@ async def _require_user_conversation(conv_repo: ConversationRepository, thread_i
     conversation = await conv_repo.get_conversation_by_thread_id(thread_id)
     if not conversation or conversation.uid != str(uid) or conversation.status == "deleted":
         raise HTTPException(status_code=404, detail="对话线程不存在")
+    await require_conversation_access(getattr(conv_repo, "db", None), str(uid), conversation)
     return conversation
 
 

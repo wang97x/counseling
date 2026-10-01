@@ -14,6 +14,8 @@ from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from yuxi.agents.buildin import agent_manager
+from yuxi.conversation_access import require_conversation_access
+from yuxi.identity import IdentitySnapshot as User
 from yuxi.repositories.agent_repository import AgentRepository
 from yuxi.repositories.agent_run_repository import AgentRunRepository
 from yuxi.repositories.agent_run_request_repository import AgentRunRequestRepository
@@ -23,7 +25,6 @@ from yuxi.services.agent_request_queue_service import finalize_intake, intake_re
 from yuxi.services.input_message_service import AgentRunInputMessage
 from yuxi.services.project_service import create_implicit_project
 from yuxi.services.workdir_service import resolve_conversation_workdir_binding
-from yuxi.identity import IdentitySnapshot as User
 
 
 @dataclass(frozen=True)
@@ -90,8 +91,21 @@ async def submit_run_command(
     if not agent_item:
         raise HTTPException(status_code=404, detail="智能体不存在")
 
+    conversation_repo = ConversationRepository(db)
+    conversation = await conversation_repo.get_conversation_by_thread_id(command.thread_id)
+    if conversation is not None:
+        if (
+            conversation.uid != str(current_user.uid)
+            or conversation.status == "deleted"
+            or conversation.agent_id != agent_item.slug
+        ):
+            raise HTTPException(status_code=404, detail="对话线程不存在")
+        await require_conversation_access(db, str(current_user.uid), conversation)
+
     existing_request = await AgentRunRequestRepository(db).get_by_request_id(command.request_id)
     existing_run = await AgentRunRepository(db).get_run_by_request_id(command.request_id)
+    if (existing_request or existing_run) and conversation is None:
+        raise HTTPException(status_code=404, detail="对话线程不存在")
     if existing_run and not existing_request:
         if existing_run.uid != str(current_user.uid):
             raise HTTPException(status_code=409, detail="request_id 冲突")
@@ -120,9 +134,7 @@ async def submit_run_command(
     if not agent_backend:
         raise HTTPException(status_code=404, detail=f"智能体后端 {agent_item.backend_id} 不存在")
 
-    conversation_repo = ConversationRepository(db)
     project = None
-    conversation = await conversation_repo.get_conversation_by_thread_id(command.thread_id)
     if not conversation:
         if not command.create_conversation:
             raise HTTPException(status_code=404, detail="对话线程不存在")
@@ -157,6 +169,13 @@ async def submit_run_command(
             conversation = await conversation_repo.get_conversation_by_thread_id(command.thread_id)
             if not conversation:
                 raise
+            if (
+                conversation.uid != str(current_user.uid)
+                or conversation.status == "deleted"
+                or conversation.agent_id != agent_item.slug
+            ):
+                raise HTTPException(status_code=404, detail="对话线程不存在")
+            await require_conversation_access(db, str(current_user.uid), conversation)
 
     request_metadata = dict(command.request_metadata or {})
     request_metadata["channel"] = origin.channel

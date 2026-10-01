@@ -5,7 +5,10 @@ from datetime import datetime
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from yuxi.repositories.conversation_repository import INVOCATION_CONVERSATION_SOURCES
+from yuxi.repositories.conversation_repository import (
+    INVOCATION_CONVERSATION_SOURCES,
+    non_counseling_conversation_condition,
+)
 from yuxi.storage.postgres.models_business import Conversation, Project
 
 
@@ -91,6 +94,7 @@ class ProjectRepository:
                 Conversation.uid == str(uid),
                 Conversation.status == "active",
                 Project.status == "active",
+                non_counseling_conversation_condition(),
                 (
                     Conversation.extra_metadata.is_(None)
                     | Conversation.extra_metadata["source"].as_string().is_(None)
@@ -100,6 +104,20 @@ class ProjectRepository:
             .order_by(Conversation.updated_at.desc(), Conversation.id.desc())
         )
         return list(result.all())
+
+    async def is_counseling_workdir_for_user(self, uid: str, workdir_path: str) -> bool:
+        """判断目录是否已归属当前用户的档案 AI Conversation。"""
+        result = await self.db.scalar(
+            select(Conversation.id)
+            .join(Project, (Project.uid == Conversation.uid) & (Project.id == Conversation.project_id))
+            .where(
+                Conversation.uid == str(uid),
+                Project.workdir_path == workdir_path,
+                ~non_counseling_conversation_condition(),
+            )
+            .limit(1)
+        )
+        return result is not None
 
     async def soft_delete_with_conversations(self, project: Project, *, deleted_at: datetime) -> int:
         """在调用方事务内软删除 Project 及其全部 Conversation。"""

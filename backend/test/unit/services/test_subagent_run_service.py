@@ -30,6 +30,17 @@ class _FakeDB:
         self.existing_run = None
         self._message_id = 10
 
+    async def get(self, _model, key):
+        if int(key) != 10:
+            return None
+        return SimpleNamespace(
+            id=10,
+            thread_id="parent-thread",
+            uid="user-1",
+            status="active",
+            extra_metadata={},
+        )
+
     async def flush(self):
         self.flushes += 1
         for item in self.added:
@@ -288,7 +299,18 @@ def _patch_run_record_creation(
 
         async def get_conversation_by_thread_id(self, thread_id: str):
             del thread_id
-            return SimpleNamespace(id=20, uid="user-1", status="subagent", agent_id="worker")
+            return SimpleNamespace(
+                id=20,
+                uid="user-1",
+                thread_id="child-thread",
+                status="subagent",
+                agent_id="worker",
+                extra_metadata={
+                    "source": "subagent",
+                    "parent_conversation_id": 10,
+                    "parent_thread_id": "parent-thread",
+                },
+            )
 
         async def lock_conversation_by_thread_id(self, thread_id: str):
             return await self.get_conversation_by_thread_id(thread_id)
@@ -342,6 +364,11 @@ def _patch_run_record_creation(
             return self.db.created_run
 
     monkeypatch.setattr(agent_run_service.agent_manager, "get_agent", lambda backend_id: _FakeBackend())
+    class _IdentityReader:
+        async def get_by_uid(self, _db, uid):
+            return SimpleNamespace(uid=uid, role="user")
+
+    monkeypatch.setattr(agent_run_service, "get_identity_reader", lambda: _IdentityReader())
     monkeypatch.setattr(agent_run_service, "ConversationRepository", ConvRepo)
     monkeypatch.setattr(agent_run_service, "AgentRepository", AgentRepo)
     monkeypatch.setattr(agent_run_service, "AgentRunRepository", RunRepo)

@@ -1,25 +1,23 @@
 """真实 HTTP、PostgreSQL 学生档案归属和迁移测试。"""
 
+import json
 import os
 import shutil
-import json
 import uuid
 from unittest.mock import AsyncMock, patch
 
+import asyncpg
+import pytest
+from counseling.identity.auth import AuthUtils
+from counseling.storage.schema import migrate_legacy_business_schema
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from yuxi.services import agent_request_queue_service as queue_service
 from yuxi.services.input_message_service import build_chat_input_message
+from yuxi.storage.postgres.manager import pg_manager
 from yuxi.storage.postgres.models_business import AgentRun, AgentRunRequest, Message
 from yuxi.utils.datetime_utils import utc_now_naive
 from yuxi.workspace.paths import global_user_data_dir
-
-import asyncpg
-import pytest
-from counseling.storage.schema import migrate_legacy_business_schema
-
-from yuxi.storage.postgres.manager import pg_manager
-from counseling.identity.auth import AuthUtils
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 
@@ -43,6 +41,11 @@ async def test_student_owner_and_manager_access_are_isolated(test_client):
             role,
             business_roles,
             department_id,
+        )
+        await conn.execute(
+            "INSERT INTO counseling_data_use_acknowledgments (user_id, notice_version) "
+            "VALUES ($1, '2026-10-01')",
+            user_id,
         )
         users.append(user_id)
         return user_id, {"Authorization": f"Bearer {AuthUtils.create_access_token({'sub': str(user_id)})}"}
@@ -308,6 +311,15 @@ async def test_student_owner_and_manager_access_are_isolated(test_client):
         await conn.execute("DELETE FROM agents WHERE slug = $1", f"student-agent-{suffix}")
         await conn.execute("DELETE FROM counseling_audit_events WHERE department_id = ANY($1::integer[])", departments)
         await conn.execute("DELETE FROM counseling_students WHERE department_id = ANY($1::integer[])", departments)
+        await conn.execute(
+            "ALTER TABLE counseling_data_use_acknowledgments "
+            "DISABLE TRIGGER trg_counseling_notice_immutable"
+        )
+        await conn.execute("DELETE FROM counseling_data_use_acknowledgments WHERE user_id = ANY($1::integer[])", users)
+        await conn.execute(
+            "ALTER TABLE counseling_data_use_acknowledgments "
+            "ENABLE TRIGGER trg_counseling_notice_immutable"
+        )
         await conn.execute("DELETE FROM users WHERE id = ANY($1::integer[])", users)
         await conn.execute("DELETE FROM departments WHERE id = ANY($1::integer[])", departments)
         await conn.close()

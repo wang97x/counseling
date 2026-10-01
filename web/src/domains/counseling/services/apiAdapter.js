@@ -34,10 +34,11 @@ export function createCounselingApiAdapter() {
     },
 
     async getWorkspace(studentId) {
-      const [detail, timeline, drafts] = await Promise.all([
+      const [detail, timeline, drafts, materials] = await Promise.all([
         counselingApi.getStudent(studentId),
         counselingApi.getTimeline(studentId),
         counselingApi.listRecordDrafts(studentId),
+        counselingApi.listMaterials(studentId),
       ])
       const items = timeline?.timeline || timeline?.items || timeline || []
       const draftItems = drafts?.drafts || drafts?.items || drafts || []
@@ -49,6 +50,7 @@ export function createCounselingApiAdapter() {
           timeline: items.map(mapApiTimelineNode),
           drafts: draftItems.map(mapApiRecordDraft)
             .filter((item) => item.recordKind === 'manual' && item.status === 'draft'),
+          materials: materials?.materials || materials?.items || materials || [],
         },
       }
     },
@@ -156,6 +158,34 @@ export function createCounselingApiAdapter() {
           confirmation_key: confirmationKey,
         }),
       }
+    },
+
+    async createAIWorkItem(studentId, instruction, requestId) {
+      return {
+        status: 'ok',
+        data: await counselingApi.createAIWorkItem(studentId, {
+          request_id: requestId,
+          instruction,
+        }),
+      }
+    },
+
+    async confirmMaterial(studentId, materialId, confirmationKey) {
+      const data = await counselingApi.confirmMaterial(studentId, materialId, {
+        confirmation_key: confirmationKey,
+      })
+      return { status: 'ok', data }
+    },
+
+    async rejectMaterial(studentId, materialId, requestId) {
+      const data = await counselingApi.rejectMaterial(studentId, materialId, {
+        request_id: requestId,
+      })
+      return { status: 'ok', data }
+    },
+
+    async getMaterialContent(studentId, materialId, mode) {
+      return counselingApi.getMaterialContent(studentId, materialId, mode)
     },
   }
 }

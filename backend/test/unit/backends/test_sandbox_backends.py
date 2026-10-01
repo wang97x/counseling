@@ -21,11 +21,12 @@ from yuxi.agents.backends.composite import (
     create_agent_filesystem_middleware,
     sync_agent_context_skills,
 )
+from yuxi.agents.backends.paths import workdir_runtime_paths
 from yuxi.agents.backends.sandbox import ProvisionerSandboxProvider, sandbox_id_for_thread
 from yuxi.agents.backends.sandbox.backend import ProvisionerSandboxBackend
 from yuxi.agents.backends.sandbox.provider import SandboxIdentityMismatchError
 from yuxi.agents.middlewares.skills import SkillsMiddleware
-from yuxi.agents.backends.paths import workdir_runtime_paths
+from yuxi.workspace.filesystem import PrivateProjectionStore
 
 WORKDIR_RELATIVE_PATH = "projects/11111111-1111-4111-8111-111111111111"
 WORKDIR_PATH = "/home/gem/user-data/projects/11111111-1111-4111-8111-111111111111"
@@ -93,6 +94,43 @@ def _make_provider(client) -> ProvisionerSandboxProvider:
     provider._last_touch_at = {}
     provider._touch_interval_seconds = 30
     return provider
+
+
+def test_counseling_context_is_virtual_read_only_and_keeps_execute(monkeypatch, tmp_path):
+    """档案快照只经虚拟路由读取，默认 Sandbox 仍保留文件生成能力。"""
+    monkeypatch.setattr("yuxi.agents.backends.sandbox.backend.get_sandbox_provider", lambda: object())
+    monkeypatch.setattr("yuxi.workspace.filesystem.global_user_data_dir", lambda _uid: tmp_path)
+    PrivateProjectionStore("user-1", "counseling-ai-context").replace_file(
+        "thread-1", "confirmed-context.json", b'{"student":"confirmed"}'
+    )
+    context = _runtime().context
+    context.counseling_context_thread_id = "thread-1"
+
+    backend = create_agent_composite_backend(context)
+
+    assert backend.read("/.counseling/confirmed-context.json").file_data["content"] == '{"student":"confirmed"}'
+    assert backend.write("/.counseling/confirmed-context.json", "tampered").error
+    assert backend.routes.keys() == {"/.counseling/"}
+    assert isinstance(backend.default, ProvisionerSandboxBackend)
+    assert not hasattr(backend.default, "_allow_execute")
+
+
+def test_private_projection_rejects_symlink_and_traversal(monkeypatch, tmp_path):
+    """私有投影写入不跟随最终 symlink，也不接受跨 scope 组件。"""
+    monkeypatch.setattr("yuxi.workspace.filesystem.global_user_data_dir", lambda _uid: tmp_path)
+    store = PrivateProjectionStore("user-1", "counseling-ai-context")
+    target_root = tmp_path / "private-projections" / "counseling-ai-context" / "thread-1"
+    target_root.mkdir(parents=True)
+    outside = tmp_path / "outside.json"
+    outside.write_text("untouched", encoding="utf-8")
+    (target_root / "confirmed-context.json").symlink_to(outside)
+
+    with pytest.raises(PermissionError):
+        store.replace_file("thread-1", "confirmed-context.json", b"tampered")
+    with pytest.raises(ValueError):
+        store.replace_file("../thread-1", "confirmed-context.json", b"tampered")
+
+    assert outside.read_text(encoding="utf-8") == "untouched"
 
 
 def test_create_agent_composite_backend_uses_sandbox_filesystem(monkeypatch):
@@ -1689,3 +1727,22 @@ def test_workdir_paths_are_workspace_relative_and_reject_symlinks(monkeypatch, t
     (projects / file_id).write_text("file", encoding="utf-8")
     with pytest.raises(ValueError, match="符号链接或非目录组件"):
         paths.user_workdir_host_dir("user-1", f"projects/{file_id}")
+def test_private_projection_remove_scope_is_bounded(monkeypatch, tmp_path):
+    """私有投影清理仅删除目标 scope 的普通文件，并拒绝嵌套对象。"""
+    monkeypatch.setattr("yuxi.workspace.filesystem.global_user_data_dir", lambda _uid: tmp_path)
+    store = PrivateProjectionStore("user-1", "counseling-ai-context")
+    store.replace_file("thread-1", "confirmed-context.json", b"current")
+    sibling = store.directory("thread-1").parent / "thread-2"
+    sibling.mkdir()
+    (sibling / "confirmed-context.json").write_bytes(b"sibling")
+
+    store.remove_scope("thread-1")
+
+    assert not (sibling.parent / "thread-1").exists()
+    assert (sibling / "confirmed-context.json").read_bytes() == b"sibling"
+
+    nested = sibling / "nested"
+    nested.mkdir()
+    with pytest.raises(PermissionError):
+        store.remove_scope("thread-2")
+    assert nested.is_dir()

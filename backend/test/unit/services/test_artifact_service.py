@@ -82,15 +82,12 @@ def live_files(monkeypatch, tmp_path):
         return binding
 
     monkeypatch.setattr(svc, "resolve_authorized_workdir", resolve)
-    monkeypatch.setattr(
-        svc,
-        "UserRepository",
-        lambda _db: type(
-            "Repo",
-            (),
-            {"get_by_uid": lambda self, uid: _async_value(type("User", (), {"uid": uid, "is_deleted": False})())},
-        )(),
-    )
+    class _IdentityReader:
+        async def get_by_uid(self, _db, uid):
+            return type("User", (), {"uid": uid, "is_deleted": False})()
+
+    identity_reader = _IdentityReader()
+    monkeypatch.setattr(svc, "get_identity_reader", lambda: identity_reader)
     monkeypatch.setattr(
         svc,
         "list_accessible_skills",

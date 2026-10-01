@@ -12,7 +12,104 @@ from pathlib import Path, PurePosixPath
 from yuxi.utils.paths import open_directory_fd, open_regular_file_fd
 
 from .errors import FileTransferLimitError
-from .paths import user_workspace_dir
+from .paths import global_user_data_dir, user_workspace_dir
+
+
+class PrivateProjectionStore:
+    """在 Sandbox Workspace 挂载之外保存服务端只读投影。"""
+
+    def __init__(self, uid: str, namespace: str):
+        self._base = global_user_data_dir(str(uid))
+        self._namespace = self._component(namespace)
+
+    def replace_file(self, scope_id: str, filename: str, content: bytes) -> None:
+        """通过 no-follow 目录描述符原子替换一个私有投影文件。"""
+        safe_scope = self._component(scope_id)
+        safe_name = self._component(filename)
+        parent_fd = open_directory_fd(
+            self._base,
+            ("private-projections", self._namespace, safe_scope),
+            create=True,
+        )
+        target_fd = None
+        temp_name = f".yuxi-private-{uuid.uuid4().hex}"
+        try:
+            try:
+                target_stat = os.stat(safe_name, dir_fd=parent_fd, follow_symlinks=False)
+            except FileNotFoundError:
+                target_stat = None
+            if target_stat is not None and not stat.S_ISREG(target_stat.st_mode):
+                raise PermissionError("only regular projection files can be replaced")
+            target_fd = os.open(
+                temp_name,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                0o400,
+                dir_fd=parent_fd,
+            )
+            Workspace._write_all(target_fd, content)
+            os.fsync(target_fd)
+            os.close(target_fd)
+            target_fd = None
+            os.rename(temp_name, safe_name, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
+            os.fsync(parent_fd)
+        finally:
+            if target_fd is not None:
+                os.close(target_fd)
+            try:
+                os.unlink(temp_name, dir_fd=parent_fd)
+            except FileNotFoundError:
+                pass
+            os.close(parent_fd)
+
+    def remove_scope(self, scope_id: str) -> None:
+        """仅删除指定 scope 内的普通投影文件和空目录。"""
+        safe_scope = self._component(scope_id)
+        try:
+            parent_fd = open_directory_fd(
+                self._base,
+                ("private-projections", self._namespace),
+            )
+        except FileNotFoundError:
+            return
+        scope_fd = None
+        try:
+            try:
+                scope_fd = os.open(
+                    safe_scope,
+                    os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                    dir_fd=parent_fd,
+                )
+            except FileNotFoundError:
+                return
+            for name in os.listdir(scope_fd):
+                item_stat = os.stat(name, dir_fd=scope_fd, follow_symlinks=False)
+                if not stat.S_ISREG(item_stat.st_mode):
+                    raise PermissionError("only regular projection files can be removed")
+                os.unlink(name, dir_fd=scope_fd)
+            os.close(scope_fd)
+            scope_fd = None
+            os.rmdir(safe_scope, dir_fd=parent_fd)
+        finally:
+            if scope_fd is not None:
+                os.close(scope_fd)
+            os.close(parent_fd)
+
+    def directory(self, scope_id: str) -> Path:
+        """校验并返回指定投影 scope 的宿主目录。"""
+        safe_scope = self._component(scope_id)
+        directory_fd = open_directory_fd(
+            self._base,
+            ("private-projections", self._namespace, safe_scope),
+        )
+        os.close(directory_fd)
+        return self._base / "private-projections" / self._namespace / safe_scope
+
+    @staticmethod
+    def _component(value: str) -> str:
+        raw = str(value or "").strip()
+        if not raw or raw in {".", ".."} or "/" in raw or "\\" in raw:
+            raise ValueError("invalid private projection path component")
+        return raw
 
 
 class Workspace:

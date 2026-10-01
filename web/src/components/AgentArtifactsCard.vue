@@ -18,6 +18,17 @@
           <Download :size="15" />
         </button>
         <button
+          v-if="workItemId"
+          class="item-action-btn"
+          :title="isSaving(file.path) ? '回填中' : '回填档案'"
+          :disabled="isSaving(file.path) || !runId"
+          @click.stop="openImportDialog(file)"
+        >
+          <LoaderCircle v-if="isSaving(file.path)" :size="15" class="item-action-spin" />
+          <Inbox v-else :size="15" />
+        </button>
+        <button
+          v-else
           class="item-action-btn"
           :title="isSaving(file.path) ? '保存中' : '保存到个人空间'"
           :disabled="isSaving(file.path)"
@@ -49,13 +60,32 @@
       @loading-change="pickerLoading = $event"
     />
   </a-modal>
+
+  <a-modal
+    :open="importDialogOpen"
+    title="回填档案"
+    ok-text="进入待整理区"
+    cancel-text="取消"
+    :confirm-loading="pendingImportFile ? isSaving(pendingImportFile.path) : false"
+    @ok="confirmImport"
+    @cancel="closeImportDialog"
+  >
+    <a-alert type="info" show-icon message="文件将进入当前学生的待整理区，仍需人工确认后才成为档案材料。" />
+    <dl v-if="pendingImportFile" class="import-summary">
+      <dt>目标学生</dt><dd>{{ studentId }}</dd>
+      <dt>文件名</dt><dd>{{ importMetadata?.file_name || pendingImportFile.name }}</dd>
+      <dt>类型</dt><dd>{{ importMetadata?.content_type || getFileMetaLabel(pendingImportFile.path) }}</dd>
+      <dt>大小</dt><dd>{{ importMetadata ? formatBytes(importMetadata.size) : '正在校验…' }}</dd>
+    </dl>
+  </a-modal>
 </template>
 
 <script setup>
 import { computed, ref } from 'vue'
 import { message } from 'ant-design-vue'
-import { Download, LoaderCircle, Save } from '@lucide/vue'
+import { Download, Inbox, LoaderCircle, Save } from '@lucide/vue'
 import { threadApi } from '@/apis/agent_api'
+import { counselingApi } from '@/domains/counseling/api'
 import FileTypeIcon from '@/components/common/FileTypeIcon.vue'
 import WorkspacePathPicker from '@/components/WorkspacePathPicker.vue'
 import { parseDownloadFilename } from '@/utils/file_utils'
@@ -66,6 +96,18 @@ const props = defineProps({
     default: () => []
   },
   threadId: {
+    type: String,
+    default: null
+  },
+  runId: {
+    type: String,
+    default: null
+  },
+  studentId: {
+    type: [String, Number],
+    default: null
+  },
+  workItemId: {
     type: String,
     default: null
   }
@@ -88,6 +130,10 @@ const saveDialogOpen = ref(false)
 const pendingSaveFile = ref(null)
 const selectedDestination = ref('/saved_artifacts')
 const pickerLoading = ref(false)
+const importDialogOpen = ref(false)
+const pendingImportFile = ref(null)
+const importMetadata = ref(null)
+const importRequestId = ref(null)
 
 const getFileMetaLabel = (path) => {
   const filename =
@@ -98,6 +144,14 @@ const getFileMetaLabel = (path) => {
 
   const extension = filename.split('.').pop()
   return extension ? `交付文件 · ${extension.toUpperCase()}` : '交付文件'
+}
+
+const formatBytes = (size) => {
+  const value = Number(size)
+  if (!Number.isFinite(value) || value < 0) return '未知'
+  if (value < 1024) return `${value} B`
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`
+  return `${(value / 1024 / 1024).toFixed(2)} MB`
 }
 
 const openPreview = (file) => {
@@ -171,9 +225,73 @@ const confirmSave = async () => {
     setSaving(file.path, false)
   }
 }
+
+const openImportDialog = async (file) => {
+  if (!props.studentId || !props.workItemId || !props.runId || isSaving(file.path)) return
+  setSaving(file.path, true)
+  try {
+    importMetadata.value = await counselingApi.preflightMaterial(props.studentId, props.workItemId, {
+      run_id: props.runId,
+      path: file.path
+    })
+  } catch (error) {
+    message.error(error?.message || '文件校验失败')
+    return
+  } finally {
+    setSaving(file.path, false)
+  }
+  pendingImportFile.value = file
+  importRequestId.value = crypto.randomUUID()
+  importDialogOpen.value = true
+}
+
+const closeImportDialog = () => {
+  if (pendingImportFile.value && isSaving(pendingImportFile.value.path)) return
+  importDialogOpen.value = false
+  pendingImportFile.value = null
+  importMetadata.value = null
+  importRequestId.value = null
+}
+
+const confirmImport = async () => {
+  const file = pendingImportFile.value
+  if (!file || !importRequestId.value || !props.runId || !props.workItemId || !props.studentId || isSaving(file.path)) return
+  setSaving(file.path, true)
+  try {
+    await counselingApi.importMaterial(props.studentId, props.workItemId, {
+      request_id: importRequestId.value,
+      run_id: props.runId,
+      path: file.path
+    })
+    message.success('已进入待整理区')
+    importDialogOpen.value = false
+    pendingImportFile.value = null
+    importMetadata.value = null
+    importRequestId.value = null
+    emit('saved', { kind: 'counseling_material', path: file.path })
+  } catch (error) {
+    message.error(error?.message || '回填档案失败')
+  } finally {
+    setSaving(file.path, false)
+  }
+}
 </script>
 
 <style scoped lang="less">
+.import-summary {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 9px 12px;
+  margin: 18px 0 0;
+}
+
+.import-summary dt { color: var(--gray-500); }
+.import-summary dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .save-dialog-hint {
   margin-bottom: 12px;
   color: var(--color-text-secondary);

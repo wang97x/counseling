@@ -377,6 +377,7 @@ def _remove_skill_from_user_projection(uid: str, slug: str) -> None:
 async def apply_skill_projection_policy_change(db: AsyncSession, slug: str) -> None:
     """提交 Skill 授权变更，并同步所有已存在的 uid 投影。"""
     from yuxi.workspace.paths import workspace_uid_dirname
+    from yuxi.identity import get_identity_reader
 
     active_uids = await get_identity_reader().list_active_uids(db)
     projection_root = get_skill_projection_dir()

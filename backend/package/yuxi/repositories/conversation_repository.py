@@ -31,6 +31,11 @@ MAX_CONVERSATION_TITLE_LENGTH = 255
 MESSAGE_SEARCH_SNIPPET_RADIUS = 72
 MESSAGE_SEARCH_SNIPPET_MAX_LENGTH = 180
 MESSAGE_SEARCH_SNIPPETS_PER_THREAD = 2
+
+
+def non_counseling_conversation_condition():
+    """排除所有档案 Conversation，防止进入通用历史与管理内容面。"""
+    return Conversation.extra_metadata["counseling"]["student_id"].as_string().is_(None)
 MESSAGE_SEARCH_ROLES = ("user", "assistant")
 MESSAGE_SEARCH_EXCLUDED_TYPES = (
     "tool_call",
@@ -760,6 +765,7 @@ class ConversationRepository:
         return [
             Conversation.uid == str(uid),
             Conversation.status == "active",
+            non_counseling_conversation_condition(),
             *self._exclude_source_conditions(INVOCATION_CONVERSATION_SOURCES),
             ~child_thread_exists.exists(),
         ]

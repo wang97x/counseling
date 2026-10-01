@@ -20,6 +20,12 @@ from yuxi.agents.callbacks.model_request_timing import FirstModelRequestRecorder
 from yuxi.agents.mcp.service import ensure_builtin_mcp_servers_in_db
 from yuxi.agents.skills.service import init_builtin_skills
 from yuxi.config import get_int_env
+from yuxi.conversation_access import (
+    cleanup_conversation_execution,
+    prepare_conversation_execution,
+    resolve_run_access_conversation,
+)
+from yuxi.identity import get_identity_reader
 from yuxi.repositories.agent_run_repository import TERMINAL_RUN_STATUSES, AgentRunRepository
 from yuxi.services.agent_request_queue_service import (
     dispatch_next_request,
@@ -57,7 +63,6 @@ from yuxi.services.workdir_service import (
     resolve_conversation_workdir_path,
 )
 from yuxi.storage.postgres.manager import pg_manager
-from yuxi.identity import get_identity_reader
 from yuxi.storage.postgres.models_business import AgentRun, Conversation, Message
 from yuxi.storage.redis import get_arq_redis_settings
 from yuxi.utils.datetime_utils import utc_now_naive
@@ -323,6 +328,9 @@ async def _release_runtime_if_idle(run: AgentRun) -> bool:
             clear_cache_on_delete_failure=True,
             workdir_path=workdir_path,
         )
+        access_conversation = await resolve_run_access_conversation(db, current)
+        if access_conversation is not None:
+            await cleanup_conversation_execution(str(current.uid), access_conversation)
         current.runtime_cleanup_pending = False
         await db.flush()
     return True
@@ -358,6 +366,26 @@ async def _get_run(run_id: str):
     async with pg_manager.get_async_session_context() as db:
         repo = AgentRunRepository(db)
         return await repo.get_run(run_id)
+
+
+async def _has_current_run_conversation_access(run: AgentRun) -> bool:
+    """在模型执行前按当前业务事实复核 Conversation 授权。"""
+    async with pg_manager.get_async_session_context() as db:
+        conversation = await resolve_run_access_conversation(db, run)
+        if conversation is None:
+            return False
+        return await prepare_conversation_execution(db, str(run.uid), conversation)
+
+
+async def _cleanup_run_conversation_execution(run: AgentRun) -> None:
+    """主 Run 结束 execution tree 后清理可重建的业务派生资源。"""
+    if run.run_type == "subagent":
+        return
+    async with pg_manager.get_async_session_context() as db:
+        conversation = await resolve_run_access_conversation(db, run)
+        if conversation is None:
+            return
+        await cleanup_conversation_execution(str(run.uid), conversation)
 
 
 async def append_run_event(run_id: str, event_type: str, payload: dict, *, thread_id: str | None = None):
@@ -944,6 +972,17 @@ async def process_agent_run(ctx, run_id: str):
             )
             return
 
+        if not await _has_current_run_conversation_access(run):
+            await mark_run_terminal(
+                run_id,
+                "failed",
+                "conversation_access_revoked",
+                "Conversation 当前业务授权已撤销",
+                worker_id=worker_id,
+            )
+            return
+
+
         try:
             workdir_binding = await _validate_run_workdir_binding(run)
         except Exception as exc:  # noqa: BLE001
@@ -1019,6 +1058,7 @@ async def process_agent_run(ctx, run_id: str):
             "runtime_scope_id": str(getattr(run, "runtime_scope_id", None) or thread_id),
             "workdir_relative_path": workdir_binding.workdir_path,
             "workdir_path": runtime_workdir_path(workdir_binding.workdir_path),
+            "counseling_context_thread_id": runtime.get("counseling_context_thread_id"),
         }
         if run_type == "subagent":
             meta["parent_thread_id"] = runtime.get("parent_thread_id")
@@ -1456,6 +1496,12 @@ async def process_agent_run(ctx, run_id: str):
             final_run = None
         if final_run and final_run.status in TERMINAL_RUN_STATUSES:
             await _finish_execution_tree_children(final_run)
+            try:
+                await _cleanup_run_conversation_execution(final_run)
+            except Exception:
+                logger.error(
+                    f"Failed to clean Conversation execution projection: run={run_id}", exc_info=True
+                )
         if final_run and final_run.status == "cancelled":
             await clear_cancel_signal(run_id)
         # completed 后尝试派发线程的下一个排队请求

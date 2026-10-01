@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import asynccontextmanager
 import importlib
 import os
 import subprocess
 import sys
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -418,6 +418,12 @@ def _patch_common(monkeypatch: pytest.MonkeyPatch, run_obj: SimpleNamespace):
     monkeypatch.setattr(run_worker, "_release_runtime_if_idle", fake_cleanup)
     monkeypatch.setattr(run_worker, "clear_cancel_signal", fake_noop)
     monkeypatch.setattr(run_worker, "stream_agent_chat", lambda **kwargs: object())
+    monkeypatch.setattr(
+        run_worker,
+        "_has_current_run_conversation_access",
+        AsyncMock(return_value=True),
+    )
+    monkeypatch.setattr(run_worker, "_cleanup_run_conversation_execution", AsyncMock())
     monkeypatch.setattr(run_worker.RunContext, "start", fake_noop)
     monkeypatch.setattr(run_worker.RunContext, "close", fake_noop)
     monkeypatch.setattr(run_worker.RunContext, "is_cancelled", fake_not_cancelled)
@@ -1687,3 +1693,37 @@ def test_retry_requires_new_manifest_fingerprint_to_match_write_once_fact():
     run_worker._require_persisted_manifest_match(persisted, recorded=False, fingerprint="a" * 64)
     with pytest.raises(RuntimeError, match="运行资产已在重试前变化"):
         run_worker._require_persisted_manifest_match(persisted, recorded=False, fingerprint="b" * 64)
+
+
+@pytest.mark.asyncio
+async def test_process_agent_run_stops_before_model_when_conversation_access_is_revoked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """排队后撤权时 worker 写失败终态且不开始模型执行。"""
+    run_obj = _build_run()
+    _patch_common(monkeypatch, run_obj)
+    terminal_calls: list[dict] = []
+    stream_called = False
+
+    async def fake_mark_terminal(run_id: str, status: str, *args, **kwargs):
+        terminal_calls.append({"run_id": run_id, "status": status, "args": args, **kwargs})
+        return run_worker.TerminalTransition(status=status, changed=True)
+
+    def fake_stream_agent_chat(**_kwargs):
+        nonlocal stream_called
+        stream_called = True
+        return _BytesAsyncIter([])
+
+    monkeypatch.setattr(
+        run_worker,
+        "_has_current_run_conversation_access",
+        AsyncMock(return_value=False),
+    )
+    monkeypatch.setattr(run_worker, "mark_run_terminal", fake_mark_terminal)
+    monkeypatch.setattr(run_worker, "stream_agent_chat", fake_stream_agent_chat)
+
+    await run_worker.process_agent_run({"job_try": 1}, run_obj.id)
+
+    assert stream_called is False
+    assert terminal_calls[0]["status"] == "failed"
+    assert terminal_calls[0]["args"][0] == "conversation_access_revoked"

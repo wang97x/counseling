@@ -7,8 +7,10 @@ from sqlalchemy import Integer, String, any_, bindparam, case, cast, distinct, f
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from yuxi.identity import IdentitySnapshot as User, get_identity_reader
+from yuxi.identity import IdentitySnapshot as User
+from yuxi.identity import get_identity_reader
 from yuxi.repositories.agent_repository import AgentRepository
+from yuxi.repositories.conversation_repository import non_counseling_conversation_condition
 from yuxi.storage.minio.client import normalize_public_minio_url
 from yuxi.storage.postgres.models_business import (
     AUDIT_MESSAGE_TYPES,
@@ -74,7 +76,7 @@ class DashboardRepository:
     ) -> dict[str, Any]:
         """分页查询 Dashboard 对话，并装配用户与 Agent 展示名称。"""
         identity_reader = get_identity_reader()
-        filters = []
+        filters = [non_counseling_conversation_condition()]
         if uid:
             filters.append(Conversation.uid == uid)
         if agent_id:
@@ -271,7 +273,10 @@ class DashboardRepository:
     async def get_tool_call_stats(self, *, now: datetime | None = None) -> dict[str, Any]:
         """统计有效用户与非删除会话中的工具调用。"""
         query_now = (now or utc_now()).replace(tzinfo=None)
-        valid_filters = [Conversation.status.notin_(("deleted", "subagent")), await self._active_uid_filter(Conversation.uid)]
+        valid_filters = [
+            Conversation.status.notin_(("deleted", "subagent")),
+            await self._active_uid_filter(Conversation.uid),
+        ]
         total_result = await self.db_session.execute(
             select(func.count(ToolCall.id))
             .join(Message, ToolCall.message_id == Message.id)
@@ -338,7 +343,10 @@ class DashboardRepository:
     async def get_agent_analytics(self) -> dict[str, Any]:
         """汇总仍存在 Agent 在有效用户与非删除会话中的使用情况。"""
         agents = list((await self.db_session.execute(select(Agent).order_by(Agent.name.asc()))).scalars().all())
-        valid_filters = [Conversation.status.notin_(("deleted", "subagent")), await self._active_uid_filter(Conversation.uid)]
+        valid_filters = [
+            Conversation.status.notin_(("deleted", "subagent")),
+            await self._active_uid_filter(Conversation.uid),
+        ]
 
         conversation_rows = (
             await self.db_session.execute(
@@ -408,7 +416,10 @@ class DashboardRepository:
 
     async def get_basic_stats(self) -> dict[str, Any]:
         """读取有效用户与非删除会话的 Dashboard 基础计数。"""
-        valid_filters = [Conversation.status.notin_(("deleted", "subagent")), await self._active_uid_filter(Conversation.uid)]
+        valid_filters = [
+            Conversation.status.notin_(("deleted", "subagent")),
+            await self._active_uid_filter(Conversation.uid),
+        ]
         total_conversations_result = await self.db_session.execute(
             select(func.count(Conversation.id))
             .join(Agent, Conversation.agent_id == Agent.slug)
@@ -473,6 +484,7 @@ class DashboardRepository:
             .join(Agent, Conversation.agent_id == Agent.slug)
             .where(
                 Conversation.status.notin_(("deleted", "subagent")),
+                non_counseling_conversation_condition(),
                 await self._active_uid_filter(MessageFeedback.uid),
                 or_(Message.message_type.is_(None), Message.message_type.notin_(AUDIT_MESSAGE_TYPES)),
             )
@@ -668,7 +680,10 @@ class DashboardRepository:
                 .join(Message, ToolCall.message_id == Message.id)
                 .join(Conversation, Message.conversation_id == Conversation.id)
                 .join(Agent, Conversation.agent_id == Agent.slug)
-                .where(Conversation.status.notin_(("deleted", "subagent")), await self._active_uid_filter(Conversation.uid))
+                .where(
+                    Conversation.status.notin_(("deleted", "subagent")),
+                    await self._active_uid_filter(Conversation.uid),
+                )
             )
             total_count = total_result.scalar() or 0
         else:

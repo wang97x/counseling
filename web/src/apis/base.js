@@ -76,6 +76,7 @@ function publicErrorMessage(url, status, headers, requiresAuth) {
       ? `账户已锁定 ${remaining} 秒`
       : '账户已锁定，请稍后再试'
   }
+  if (status === 428) return '请先确认当前心理辅导数据用途告知'
   if (status === 429) return '请求过于频繁，请稍后重试'
   if (status >= 500) return '服务器内部错误，请使用 docker compose logs api 查看详细日志'
   return `请求失败: ${status}`

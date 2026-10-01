@@ -293,7 +293,12 @@ async def test_explicit_project_creation_locks_project_until_commit(monkeypatch)
     async def serialize_thread(*_args, **_kwargs):
         return {"id": "thread-1"}
 
+    class _IdentityReader:
+        async def get_by_uid(self, _db, uid):
+            return SimpleNamespace(uid=uid)
+
     monkeypatch.setattr(svc, "AgentRepository", _AgentRepository)
+    monkeypatch.setattr(svc, "get_identity_reader", lambda: _IdentityReader())
     monkeypatch.setattr(svc, "ProjectRepository", _ProjectRepository)
     monkeypatch.setattr(svc, "ConversationRepository", _ConversationRepository)
     monkeypatch.setattr(svc.Workdir, "open_existing", lambda *_args: None)
@@ -370,8 +375,13 @@ async def test_create_thread_replay_restores_managed_workdir(monkeypatch):
     async def serialize_thread(_conversation, **_kwargs):
         return {"id": _conversation.thread_id}
 
+    class _IdentityReader:
+        async def get_by_uid(self, _db, uid):
+            return SimpleNamespace(uid=uid)
+
     monkeypatch.setattr(svc, "AgentRepository", _AgentRepository)
     monkeypatch.setattr(svc, "ConversationRepository", _ConversationRepository)
+    monkeypatch.setattr(svc, "get_identity_reader", lambda: _IdentityReader())
     monkeypatch.setattr(svc, "ProjectRepository", _ProjectRepository)
     monkeypatch.setattr(svc, "ensure_conversation_workdir_available", ensure_available)
     monkeypatch.setattr(svc, "_serialize_thread", serialize_thread)

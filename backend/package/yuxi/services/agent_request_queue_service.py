@@ -17,6 +17,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from yuxi.conversation_access import can_access_conversation, require_conversation_access
 from yuxi.repositories.agent_run_repository import AgentRunRepository
 from yuxi.repositories.agent_run_request_repository import AgentRunRequestRepository
 from yuxi.repositories.conversation_repository import ConversationRepository
@@ -148,9 +149,6 @@ async def intake_request(
             workdir_binding=binding,
         )
 
-    if result := await existing_intake_result(workdir_binding):
-        return result
-
     conversation = await _get_thread_conversation(
         db=db,
         uid=uid_str,
@@ -158,6 +156,8 @@ async def intake_request(
         thread_id=thread_id,
         lock=True,
     )
+    if result := await existing_intake_result(workdir_binding):
+        return result
     if workdir_binding is None:
         workdir_binding = await resolve_conversation_workdir_binding(
             conversation=conversation,
@@ -227,6 +227,10 @@ async def intake_request(
 
         input_message = with_model_context(input_message, model_context)
         input_payload["model_context"] = dict(model_context)
+
+    counseling_metadata = (conversation.extra_metadata or {}).get("counseling") or {}
+    if counseling_metadata.get("student_id"):
+        input_payload["runtime"] = {"counseling_context_thread_id": thread_id}
 
     run_input_message = input_message.with_metadata(
         _build_message_metadata(request_id=request_id, source=source, input_message=input_message, meta=meta)
@@ -469,6 +473,8 @@ async def dispatch_next_request(
         conversation = await ConversationRepository(db).lock_conversation_by_thread_id(thread_id)
         if not _conversation_matches(conversation, uid=uid, agent_slug=agent_slug):
             return None
+        if not await can_access_conversation(db, str(uid), conversation):
+            return None
         workdir_binding = await resolve_conversation_workdir_binding(
             conversation=conversation,
             uid=str(uid),
@@ -599,6 +605,12 @@ async def get_request(*, db: AsyncSession, request_id: str, uid: str) -> dict | 
     request = await repo.get_by_request_id(request_id)
     if not request or request.uid != str(uid):
         return None
+    await _get_thread_conversation(
+        db=db,
+        uid=request.uid,
+        agent_slug=request.agent_slug,
+        thread_id=request.conversation_thread_id,
+    )
     return request.to_dict()
 
 
@@ -715,6 +727,12 @@ async def stream_request_events(
                 if not request or request.uid != str(uid):
                     yield format_sse({"request_id": request_id, "message": "请求不存在"}, event="error")
                     return
+                await _get_thread_conversation(
+                    db=db,
+                    uid=request.uid,
+                    agent_slug=request.agent_slug,
+                    thread_id=request.conversation_thread_id,
+                )
 
                 if request.status == REQUEST_STATUS_DISPATCHED:
                     yield format_sse(
@@ -857,6 +875,7 @@ async def _get_thread_conversation(
         else await repo.get_conversation_by_thread_id(thread_id)
     )
     if _conversation_matches(conversation, uid=uid, agent_slug=agent_slug):
+        await require_conversation_access(db, str(uid), conversation)
         return conversation
     raise HTTPException(status_code=404, detail="对话线程不存在")
 

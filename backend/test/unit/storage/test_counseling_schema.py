@@ -3,8 +3,8 @@
 from unittest.mock import AsyncMock
 
 import pytest
-
 from counseling.storage import schema
+
 from server import storage_migration
 
 
@@ -27,7 +27,7 @@ async def test_composed_migrator_orders_platform_before_counseling(monkeypatch: 
     """业务外键依赖的平台表必须先于业务表迁移。"""
     calls: list[str] = []
 
-    async def migrate_platform() -> None:
+    async def migrate_platform(**_kwargs) -> None:
         calls.append("platform")
 
     async def migrate_counseling() -> None:
@@ -55,7 +55,7 @@ def test_counseling_schema_v2_adds_minimal_workflow_guards() -> None:
     """v2 同时拥有风险历史、追加更正和数据库不可变保护。"""
     migration_sql = "\n".join(schema.COUNSELING_SCHEMA_V2_STATEMENTS)
 
-    assert schema.COUNSELING_SCHEMA_VERSION == 3
+    assert schema.COUNSELING_SCHEMA_VERSION == 5
     assert "current_risk_level" in migration_sql
     assert "counseling_risk_events" in migration_sql
     assert "counseling_record_corrections" in migration_sql
@@ -70,3 +70,25 @@ def test_counseling_schema_v3_owns_business_role_migration() -> None:
     assert "technical_admin" in migration_sql
     assert "super_admin" in migration_sql
     assert "ck_users_business_roles" in migration_sql
+
+
+def test_counseling_schema_v4_adds_ai_work_items_and_materials() -> None:
+    """v4 独立保存协作任务与人工审核材料。"""
+    migration_sql = "\n".join(schema.COUNSELING_SCHEMA_V4_STATEMENTS)
+
+    assert "counseling_ai_work_items" in migration_sql
+    assert "counseling_materials" in migration_sql
+    assert "preparing', 'ready', 'failed" in migration_sql
+    assert "importing', 'pending_review', 'active', 'rejected" in migration_sql
+    assert "DEFAULT 'importing'" in migration_sql
+    assert "uq_counseling_material_source" in migration_sql
+
+
+def test_counseling_schema_v5_adds_immutable_data_use_acknowledgments() -> None:
+    """v5 持久保存按版本确认且数据库拒绝覆盖。"""
+    migration_sql = "\n".join(schema.COUNSELING_SCHEMA_V5_STATEMENTS)
+
+    assert "counseling_data_use_acknowledgments" in migration_sql
+    assert "PRIMARY KEY (user_id, notice_version)" in migration_sql
+    assert "trg_counseling_notice_immutable" in migration_sql
+    assert "BEFORE UPDATE OR DELETE" in migration_sql

@@ -17,6 +17,7 @@ Owner：web/src/domains/counseling/views/StudentWorkspaceView.vue
 - 风险只由辅导员手工记录。页面展示服务端当前风险投影和历史事件，不根据咨询正文自动推断风险；档案阶段结束不自动解除风险，也不阻止后续补充风险记录或正式记录更正。
 - 阶段结束使用专用接口、乐观版本和必填结束说明，不通过普通档案编辑提交 `closed`。
 - 业务管理员在档案列表页读取最小聚合统计，不获得正文入口。
+- 2026-09-29 起，档案页增加受控的按需“AI 协助”入口。它创建独立任务和冻结快照，结果只能先回填待整理区再人工确认；这部分取代了“无 AI 主入口”的绝对结论，但不改变手工业务闭环的主路径。
 
 ## 替代方案
 
@@ -36,9 +37,9 @@ Owner：web/src/domains/counseling/views/StudentWorkspaceView.vue
 
 | 验收主张 | 证据 | 结果 |
 |---|---|---|
-| 工作台接入手工草稿、确认、更正、风险和阶段结束，且无 AI 主入口 | `docker compose exec -T web node --test --test-concurrency=1 test/unit/studentConversations.test.js test/unit/counselingBoundary.test.js test/unit/frontendAccess.test.js` | Passed：30 tests |
+| 工作台接入手工草稿、确认、更正、风险和阶段结束；AI 仅作为受控的按需入口 | `docker compose exec -T web node --test --test-concurrency=1 test/unit/studentConversations.test.js test/unit/counselingBoundary.test.js test/unit/frontendAccess.test.js` | 原结论已由 2026-09-29 的 AI 协作决定部分取代 |
 | 业务前端目录通过静态检查 | `docker compose exec -T web pnpm exec eslint src/domains/counseling --max-warnings=0` | Passed |
 | 生产前端可构建 | `docker compose exec -T web pnpm run build` | Passed；仅有既有 chunk size 警告 |
 | 后端 P0 契约与 PostgreSQL 终态保持有效 | `docker compose exec -T api python -m pytest test/integration/api/test_counseling_minimal_workflow_api.py -q` | Passed：1 test |
 | 完整前端单元测试 | `docker compose exec -T web pnpm run test:unit` | Not passed：运行至通用 Project/Workspace API 测试时 Vite SSR 加载超时，进程以 137 退出；此前本次业务相关测试已独立通过 |
-| 真实浏览器交互 | 辅导员与业务管理员浏览器验收 | Not run |
+| 真实浏览器交互 | Chromium 覆盖用途告知、手工闭环、刷新、重复操作、接口失败恢复和直接 URL 越权 | Passed：13 项场景；PostgreSQL 回读正式记录、更正、风险和三类账号确认事实 |

@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+
 import pytest
 import pytest_asyncio
+from counseling.identity.models import Department, User
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
-from counseling.identity.models import Department, User
 from yuxi.services.dashboard_service import DashboardService
 from yuxi.storage.postgres.models_business import (
     Agent,
@@ -284,6 +284,30 @@ async def test_dashboard_service_basic_stats(dashboard_db):
     assert len(feedbacks) == 1
 
 
+async def test_dashboard_excludes_counseling_conversation_content(dashboard_db):
+    counseling = Conversation(
+        thread_id="thread-counseling",
+        project_id="p-counseling",
+        uid="uid-alice",
+        agent_id="agent-helper",
+        title="student-7 private",
+        status="active",
+        extra_metadata={"counseling": {"student_id": 7}},
+    )
+    message = Message(conversation=counseling, role="assistant", content="private counseling result")
+    feedback = MessageFeedback(message=message, uid="uid-alice", rating="like")
+    dashboard_db.add_all([counseling, message, feedback])
+    await dashboard_db.commit()
+    service = DashboardService(dashboard_db)
+
+    listing = await service.list_conversations()
+    feedbacks = await service.get_feedbacks()
+
+    assert "thread-counseling" not in {item["thread_id"] for item in listing["items"]}
+    assert all(item["message_content"] != "private counseling result" for item in feedbacks)
+    assert await service.get_conversation_detail("thread-counseling") is None
+
+
 async def test_agent_analytics_omits_removed_top_performers_contract(dashboard_db):
     """智能体统计保留概览字段且不再生成 TOP 5 排行。"""
     analytics = await DashboardService(dashboard_db).get_agent_analytics()
@@ -395,6 +419,8 @@ async def test_thread_analytics_groups_daily_trends_by_shanghai_date(dashboard_d
 
 async def test_thread_analytics_query_count_does_not_grow_with_time_range(dashboard_db):
     service = DashboardService(dashboard_db)
+    # 预热当前读模型的身份集合缓存，避免把一次性身份查询计入首个区间。
+    await service.repo._active_uids()
     engine = dashboard_db.bind.sync_engine
     statement_counts = []
     current_count = 0

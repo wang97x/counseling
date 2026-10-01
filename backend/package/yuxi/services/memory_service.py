@@ -81,6 +81,10 @@ async def remember_memory(
         )
         if run is None:
             raise ValueError("Memory 写入对应的 AgentRun 不存在")
+        input_payload = getattr(run, "input_payload", None) or {}
+        runtime = input_payload.get("runtime") if isinstance(input_payload, dict) else None
+        if isinstance(runtime, dict) and runtime.get("counseling_context_thread_id"):
+            raise ValueError("档案 AI 协作不允许写入用户级 Memory")
 
         config = await UserConfig.load(db, normalized_uid)
         if not config.schema.enable_memory:

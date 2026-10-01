@@ -5,7 +5,6 @@ from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
 import pytest
-
 import yuxi.services.agent_run_service as agent_run_service
 from yuxi.services.input_message_service import (
     build_chat_input_message,
@@ -1814,6 +1813,11 @@ async def test_cancel_agent_run_view_cascades_children(monkeypatch: pytest.Monke
         def __init__(self, db):
             self.db = db
 
+        async def get_run_for_user(self, run_id: str, uid: str):
+            assert run_id == "parent-run"
+            assert uid == "user-1"
+            return parent_run
+
         async def request_cancel_execution_tree(self, *, run_id: str, uid: str, cascade_descendants: bool):
             assert run_id == "parent-run"
             assert uid == "user-1"
@@ -1974,6 +1978,11 @@ def _patch_agent_run_creation(
     monkeypatch.setattr(agent_run_service, "ConversationRepository", ConvRepo)
     monkeypatch.setattr(agent_run_service, "AgentRunRepository", _CreateRunRepo)
     monkeypatch.setattr(agent_run_service, "get_arq_pool", fake_get_arq_pool)
+    async def get_identity(_db, _uid):
+        return SimpleNamespace(uid="user-1", role="user", business_roles=(), is_deleted=False)
+
+    identity_reader = SimpleNamespace(get_by_uid=get_identity)
+    monkeypatch.setattr(agent_run_service, "get_identity_reader", lambda: identity_reader)
 
     async def get_system_options(_option, _db=None):
         return {"default_model": "system-default:model"}
@@ -2073,7 +2082,11 @@ async def test_create_resume_run_inherits_parent_model_spec(monkeypatch: pytest.
             id="parent-run",
             conversation_thread_id="thread-1",
             status="interrupted",
-            input_payload={"model_spec": "parent-model", "tool_approval_mode": "always_trust"},
+            input_payload={
+                "model_spec": "parent-model",
+                "tool_approval_mode": "always_trust",
+                "runtime": {"counseling_context_thread_id": "thread-1"},
+            },
         ),
     )
 
@@ -2091,6 +2104,9 @@ async def test_create_resume_run_inherits_parent_model_spec(monkeypatch: pytest.
 
     assert db.created_run_kwargs["input_payload"]["model_spec"] == "parent-model"
     assert db.created_run_kwargs["input_payload"]["tool_approval_mode"] == "always_trust"
+    assert db.created_run_kwargs["input_payload"]["runtime"] == {
+        "counseling_context_thread_id": "thread-1"
+    }
 
 
 @pytest.mark.asyncio

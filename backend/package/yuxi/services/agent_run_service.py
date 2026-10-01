@@ -30,6 +30,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from yuxi.agents.buildin import agent_manager
 from yuxi.agents.tool_approval import DEFAULT_TOOL_APPROVAL_MODE, normalize_tool_approval_mode
 from yuxi.config.options import system_options
+from yuxi.conversation_access import require_conversation_access, resolve_run_access_conversation
+from yuxi.identity import get_identity_reader
 from yuxi.models.providers.cache import model_cache
 from yuxi.repositories.agent_repository import AgentRepository
 from yuxi.repositories.agent_run_output_repository import AgentRunOutputRepository
@@ -50,8 +52,7 @@ from yuxi.services.run_queue_service import (
     publish_cancel_signals,
 )
 from yuxi.storage.postgres.manager import pg_manager
-from yuxi.identity import get_identity_reader
-from yuxi.storage.postgres.models_business import Message, build_agent_run_timing
+from yuxi.storage.postgres.models_business import AgentRun, Message, build_agent_run_timing
 from yuxi.utils.datetime_utils import utc_now_naive
 from yuxi.utils.hash_utils import hash_id
 from yuxi.utils.logging_config import logger
@@ -496,6 +497,14 @@ async def create_agent_run_view(
         "tool_approval_mode": resolved_tool_approval_mode,
     }
     if run_type == "resume" and scope.parent_run is not None:
+        parent_runtime = scope.parent_run.input_payload.get("runtime") or {}
+        if not isinstance(parent_runtime, dict):
+            raise HTTPException(status_code=409, detail="被恢复的运行任务上下文绑定无效")
+        counseling_context_thread_id = parent_runtime.get("counseling_context_thread_id")
+        if counseling_context_thread_id:
+            if counseling_context_thread_id != thread_id:
+                raise HTTPException(status_code=409, detail="被恢复的运行任务上下文绑定无效")
+            input_payload["runtime"] = {"counseling_context_thread_id": counseling_context_thread_id}
         if source is None:
             source = getattr(scope.parent_run, "source", None) or "chat"
         if channel is None:
@@ -729,6 +738,7 @@ async def prepare_agent_run_creation_scope(
     conversation = await ConversationRepository(db).lock_conversation_by_thread_id(conversation_thread_id)
     if not conversation or conversation.uid != str(current_uid) or conversation.status == "deleted":
         raise HTTPException(status_code=404, detail="对话线程不存在")
+    await require_conversation_access(db, str(current_uid), conversation)
     # Conversation.agent_id 是历史字段名，实际保存的是 Agent.slug。
     if conversation.agent_id != agent_slug:
         raise HTTPException(status_code=409, detail="已有线程已绑定智能体，不能切换")
@@ -814,11 +824,25 @@ async def enqueue_agent_run(run_id: str) -> None:
     await queue.enqueue_job("process_agent_run", run_id, _job_id=f"run:{run_id}")
 
 
+async def _require_run_conversation_access(db: AsyncSession, run: AgentRun, current_uid: str) -> None:
+    """按 Run 执行树实际携带的业务 Conversation 复核当前授权。"""
+    input_payload = getattr(run, "input_payload", None) or {}
+    runtime = input_payload.get("runtime") if isinstance(input_payload, dict) else None
+    counseling_thread_id = runtime.get("counseling_context_thread_id") if isinstance(runtime, dict) else None
+    if not counseling_thread_id:
+        return
+    conversation = await resolve_run_access_conversation(db, run)
+    if conversation is None or str(run.uid) != str(current_uid):
+        raise HTTPException(status_code=404, detail="运行任务不存在")
+    await require_conversation_access(db, str(current_uid), conversation)
+
+
 async def get_agent_run_view(*, run_id: str, current_uid: str, db: AsyncSession) -> dict:
     repo = AgentRunRepository(db)
     run = await repo.get_run_for_user(run_id, str(current_uid))
     if not run:
         raise HTTPException(status_code=404, detail="运行任务不存在")
+    await _require_run_conversation_access(db, run, current_uid)
     return {"run": run.to_dict()}
 
 
@@ -832,6 +856,7 @@ async def get_agent_run_result(*, run_id: str, current_uid: str, db: AsyncSessio
             "output": "",
             "error": {"type": "run_not_found", "message": "运行任务不存在"},
         }
+    await _require_run_conversation_access(db, run, current_uid)
 
     output_message = None
     if run.conversation_id is not None:
@@ -919,6 +944,10 @@ async def request_cancel_agent_run(
 ):
     """请求取消一个 run，并可同时向仍活跃的子 run 发布取消信号。"""
     repo = AgentRunRepository(db)
+    existing = await repo.get_run_for_user(run_id, str(current_uid))
+    if existing is None:
+        raise HTTPException(status_code=404, detail="运行任务不存在")
+    await _require_run_conversation_access(db, existing, current_uid)
     run, cancelled_ids = await repo.request_cancel_execution_tree(
         run_id=run_id,
         uid=str(current_uid),
@@ -940,13 +969,19 @@ async def cancel_agent_run_view(*, run_id: str, current_uid: str, db: AsyncSessi
 async def _load_stream_run_for_user(run_id: str, current_uid: str):
     """读取当前用户可见的 Run，供 SSE 建连鉴权。"""
     async with pg_manager.get_async_session_context() as db:
-        return await AgentRunRepository(db).get_run_for_user(run_id, str(current_uid))
+        run = await AgentRunRepository(db).get_run_for_user(run_id, str(current_uid))
+        if run is not None:
+            await _require_run_conversation_access(db, run, current_uid)
+        return run
 
 
 async def _load_stream_run(run_id: str):
-    """按 ID 读取 Run 的权威状态，供已鉴权 SSE 低频终态补偿。"""
+    """读取 Run 权威状态并按其已认证 Owner 复核当前 Conversation 授权。"""
     async with pg_manager.get_async_session_context() as db:
-        return await AgentRunRepository(db).get_run(run_id)
+        run = await AgentRunRepository(db).get_run(run_id)
+        if run is not None:
+            await _require_run_conversation_access(db, run, str(run.uid))
+        return run
 
 
 def _next_run_sse_poll_interval(current_interval: float, idle_seconds: float) -> float:
@@ -1122,6 +1157,8 @@ async def get_active_run_by_thread(*, thread_id: str, current_uid: str, db: Asyn
         .limit(1)
     )
     run = result.scalar_one_or_none()
+    if run is not None:
+        await _require_run_conversation_access(db, run, current_uid)
     if run and run.status in ("pending", "running", "cancel_requested", "interrupted"):
         return {"run": run.to_dict()}
     return {"run": None}

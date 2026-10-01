@@ -25,8 +25,14 @@ from yuxi.agents.backends.paths import runtime_workdir_path
 from yuxi.agents.base import _json_safe
 from yuxi.agents.buildin import agent_manager
 from yuxi.agents.callbacks.model_request_timing import FirstModelRequestRecorder
-from yuxi.agents.context import build_agent_input_context, normalize_agent_context_config
+from yuxi.agents.context import (
+    COUNSELING_RUNTIME_TOOLS,
+    build_agent_input_context,
+    normalize_agent_context_config,
+)
 from yuxi.agents.state import AgentStatePayload
+from yuxi.conversation_access import require_conversation_access
+from yuxi.identity import IdentitySnapshot as User
 from yuxi.models.utils import parse_assistant_message_body
 from yuxi.repositories.agent_repository import AgentRepository
 from yuxi.repositories.agent_run_repository import AgentRunRepository
@@ -49,7 +55,6 @@ from yuxi.services.subagent_run_service import serialize_subagent_run_state
 from yuxi.services.tool_message_audit_service import ToolMessageAuditCollector
 from yuxi.services.workdir_service import resolve_conversation_workdir_path
 from yuxi.storage.postgres.manager import pg_manager
-from yuxi.identity import IdentitySnapshot as User
 from yuxi.storage.postgres.models_business import MODEL_AUDIT_MESSAGE_TYPE, Agent
 from yuxi.utils.datetime_utils import utc_now_naive
 from yuxi.utils.logging_config import logger
@@ -273,6 +278,25 @@ def _apply_input_context_field(input_context: dict, meta: dict | None, key: str)
     value = (meta or {}).get(key)
     if value:
         input_context[key] = value
+
+
+def _apply_counseling_resource_scope(
+    input_context: dict, meta: dict | None, agent_config: dict | None = None
+) -> None:
+    """档案 AI Run 只开放显式生成工具，其他用户资源默认关闭。"""
+    if not str((meta or {}).get("counseling_context_thread_id") or "").strip():
+        return
+    input_context.update(
+        {
+            "tools": list(COUNSELING_RUNTIME_TOOLS),
+            "knowledges": [],
+            "mcps": [],
+            "skills": [],
+            "preload_skills": [],
+            "subagents": [],
+            "system_prompt": str((agent_config or {}).get("system_prompt") or ""),
+        }
+    )
 
 
 def _apply_subagent_runtime_context(input_context: dict, meta: dict | None) -> None:
@@ -672,6 +696,30 @@ async def _reconcile_model_audit_message(
     return message
 
 
+def _terminal_state_follows_completed_tool(
+    tool_call_id: str | None,
+    tool_audits_by_operation: dict[str, Any],
+    state_model_messages: dict[str, dict[str, Any]],
+) -> bool:
+    """仅接受紧邻当前 Run 已完成 ToolMessage 的终态 State 输出。"""
+    if not tool_call_id:
+        return False
+    tool_audit = tool_audits_by_operation.get(tool_call_id)
+    if tool_audit is None or tool_audit.execution_status != "completed":
+        return False
+    metadata = tool_audit.extra_metadata if isinstance(tool_audit.extra_metadata, dict) else {}
+    source_model_id = str(metadata.get("source_model_operation_id") or "").strip()
+    source_message = state_model_messages.get(source_model_id)
+    if source_message is None:
+        return False
+    _content, source_tool_calls = _ai_message_content_and_tool_calls(source_message)
+    return tool_call_id in {
+        str(item.get("id") or "").strip()
+        for item in source_tool_calls
+        if isinstance(item, dict)
+    }
+
+
 async def _reconcile_tool_error_from_state(
     conv_repo: ConversationRepository,
     *,
@@ -765,6 +813,8 @@ async def save_messages_from_langgraph_state(
         state_model_messages: dict[str, dict[str, Any]] = {}
         state_tool_messages: dict[str, dict[str, Any]] = {}
         last_state_ai_id: str | None = None
+        last_unmatched_ai_message: tuple[str | None, dict[str, Any], str | None] | None = None
+        preceding_current_tool_call_id: str | None = None
         last_ai_message = None
         for msg in messages or []:
             if hasattr(msg, "model_dump"):
@@ -786,15 +836,25 @@ async def save_messages_from_langgraph_state(
 
             msg_id = getattr(msg, "id", None) or msg_dict.get("id")
             if msg_type == "human":
+                preceding_current_tool_call_id = None
                 continue
 
             if msg_type == "ai":
+                preceding_tool_call_id = preceding_current_tool_call_id
+                preceding_current_tool_call_id = None
                 last_state_ai_id = str(msg_id) if msg_id else None
                 if run_id and msg_id and str(msg_id) in current_audit_operation_ids:
                     # Checkpoint 包含线程完整历史；同一来源键只对账最后一次 AIMessage。
                     state_model_messages[str(msg_id)] = msg_dict
                     continue
-                if current_model_audits or msg_id in existing_ids:
+                if current_model_audits:
+                    last_unmatched_ai_message = (
+                        last_state_ai_id,
+                        msg_dict,
+                        preceding_tool_call_id,
+                    )
+                    continue
+                if msg_id in existing_ids:
                     continue
                 last_ai_message = await _save_ai_message(
                     conv_repo,
@@ -811,7 +871,10 @@ async def save_messages_from_langgraph_state(
                 if run_id and tool_call_id in current_tool_operation_ids:
                     # Checkpoint 包含线程完整历史；同一来源键只对账最后一次 ToolMessage。
                     state_tool_messages[tool_call_id] = msg_dict
-                elif not run_id and msg_id not in existing_ids:
+                    preceding_current_tool_call_id = tool_call_id
+                else:
+                    preceding_current_tool_call_id = None
+                if not run_id and msg_id not in existing_ids:
                     await _save_tool_message(conv_repo, msg_dict, commit=True)
 
         if run_id:
@@ -825,6 +888,42 @@ async def save_messages_from_langgraph_state(
                 )
                 if reconciled is not None:
                     reconciled_audits[operation_id] = reconciled
+            if (
+                last_state_ai_id
+                and last_state_ai_id not in reconciled_audits
+                and last_unmatched_ai_message is not None
+                and last_unmatched_ai_message[0] == last_state_ai_id
+            ):
+                unmatched_message = last_unmatched_ai_message[1]
+                causal_tool_call_id = last_unmatched_ai_message[2]
+                _content, terminal_tool_calls = _ai_message_content_and_tool_calls(
+                    unmatched_message
+                )
+                if (
+                    not terminal_tool_calls
+                    and _terminal_state_follows_completed_tool(
+                        causal_tool_call_id,
+                        current_tool_audits_by_operation,
+                        state_model_messages,
+                    )
+                ):
+                    terminal_message = {
+                        **unmatched_message,
+                        "state_source_id": last_state_ai_id,
+                        "state_causal_tool_call_id": causal_tool_call_id,
+                    }
+                    persisted = await _save_ai_message(
+                        conv_repo,
+                        thread_id,
+                        terminal_message,
+                        trace_info=trace_info,
+                        run_id=run_id,
+                        request_id=request_id,
+                        commit=False,
+                        project_tool_calls=False,
+                    )
+                    if persisted is not None:
+                        reconciled_audits[last_state_ai_id] = persisted
             last_ai_message = reconciled_audits.get(last_state_ai_id or "") or last_ai_message
             for tool_call_id, msg_dict in state_tool_messages.items():
                 audit = current_tool_audits_by_operation[tool_call_id]
@@ -842,7 +941,26 @@ async def save_messages_from_langgraph_state(
             if current_model_audits and (complete_run or interrupt_run):
                 terminal_ai_message = reconciled_audits.get(last_state_ai_id or "")
                 if complete_run and terminal_ai_message is None:
-                    raise ValueError("最终 State AIMessage 无法与当前 Run 的 Model lifecycle 事实关联")
+                    terminal_tool_ids: list[str] = []
+                    if last_unmatched_ai_message is not None:
+                        _content, terminal_tool_calls = _ai_message_content_and_tool_calls(
+                            last_unmatched_ai_message[1]
+                        )
+                        terminal_tool_ids = sorted(
+                            str(item.get("id") or "")
+                            for item in terminal_tool_calls
+                            if isinstance(item, dict)
+                        )
+                    tool_sources = {
+                        operation_id: dict(audit.extra_metadata or {}).get("source_model_operation_id")
+                        for operation_id, audit in current_tool_audits_by_operation.items()
+                    }
+                    raise ValueError(
+                        "最终 State AIMessage 无法与当前 Run 的 Model lifecycle 事实关联: "
+                        f"state={last_state_ai_id!r}, "
+                        f"lifecycle={sorted(current_audit_operation_ids)!r}, "
+                        f"state_tools={terminal_tool_ids!r}, tool_sources={tool_sources!r}"
+                    )
                 last_ai_message = terminal_ai_message
             if last_ai_message is not None:
                 has_tool_calls = bool((last_ai_message.extra_metadata or {}).get("tool_calls"))
@@ -1179,6 +1297,8 @@ async def stream_agent_chat(
         runtime_scope_id = str(meta.get("runtime_scope_id") or thread_id)
         workdir_path = await resolve_conversation_workdir_path(conversation=conversation, uid=uid, db=db)
         input_context["runtime_scope_id"] = runtime_scope_id
+        input_context["counseling_context_thread_id"] = meta.get("counseling_context_thread_id")
+        _apply_counseling_resource_scope(input_context, meta, agent_config)
         input_context["workdir_relative_path"] = workdir_path
         input_context["workdir_path"] = runtime_workdir_path(workdir_path)
         meta["runtime_scope_id"] = runtime_scope_id
@@ -1489,6 +1609,8 @@ async def stream_agent_resume(
     _apply_model_override(input_context, meta)
     _apply_input_context_field(input_context, meta, "tool_approval_mode")
     input_context["runtime_scope_id"] = runtime_scope_id
+    input_context["counseling_context_thread_id"] = meta.get("counseling_context_thread_id")
+    _apply_counseling_resource_scope(input_context, meta, agent_config)
     input_context["workdir_relative_path"] = workdir_path
     input_context["workdir_path"] = meta["workdir_path"]
     langfuse_run = _build_langfuse_run_context(
@@ -1714,6 +1836,7 @@ async def get_agent_state_view(
     if conversation:
         if conversation.uid != str(current_uid) or conversation.status == "deleted":
             raise HTTPException(status_code=404, detail="对话线程不存在")
+        await require_conversation_access(db, current_uid, conversation)
 
         agent_item = await agent_repo.get_by_slug(conversation.agent_id)
         if not agent_item:

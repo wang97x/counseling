@@ -1,10 +1,9 @@
 """心理辅导领域的 PostgreSQL Schema 版本与迁移。"""
 
 from sqlalchemy import text
-
 from yuxi.storage.postgres.manager import PostgresManager, pg_manager
 
-COUNSELING_SCHEMA_VERSION = 3
+COUNSELING_SCHEMA_VERSION = 5
 COUNSELING_SCHEMA_V1_STATEMENTS = (
     """
     CREATE TABLE IF NOT EXISTS counseling_students (
@@ -289,8 +288,103 @@ COUNSELING_SCHEMA_V3_STATEMENTS = (
     """,
 )
 
+COUNSELING_SCHEMA_V4_STATEMENTS = (
+    """
+    CREATE TABLE IF NOT EXISTS counseling_ai_work_items (
+        id VARCHAR(64) PRIMARY KEY,
+        student_id INTEGER NOT NULL REFERENCES counseling_students(id),
+        department_id INTEGER NOT NULL REFERENCES departments(id),
+        counselor_id INTEGER NOT NULL REFERENCES users(id),
+        request_id VARCHAR(64) NOT NULL,
+        instruction TEXT NOT NULL,
+        agent_slug VARCHAR(64) NOT NULL,
+        conversation_thread_id VARCHAR(64),
+        context_snapshot JSONB NOT NULL,
+        context_sha256 VARCHAR(64) NOT NULL,
+        context_path VARCHAR(1024),
+        status VARCHAR(16) NOT NULL DEFAULT 'preparing',
+        error_message TEXT,
+        created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+        CONSTRAINT uq_counseling_ai_work_owner_request UNIQUE (counselor_id, request_id),
+        CONSTRAINT uq_counseling_ai_work_thread UNIQUE (conversation_thread_id),
+        CONSTRAINT ck_counseling_ai_work_status CHECK (status IN ('preparing', 'ready', 'failed'))
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS ix_counseling_ai_work_student ON counseling_ai_work_items(student_id, created_at)",
+    """
+    CREATE TABLE IF NOT EXISTS counseling_materials (
+        id VARCHAR(64) PRIMARY KEY,
+        student_id INTEGER NOT NULL REFERENCES counseling_students(id),
+        department_id INTEGER NOT NULL REFERENCES departments(id),
+        counselor_id INTEGER NOT NULL REFERENCES users(id),
+        work_item_id VARCHAR(64) NOT NULL REFERENCES counseling_ai_work_items(id),
+        source_thread_id VARCHAR(64) NOT NULL,
+        source_run_id VARCHAR(64) NOT NULL,
+        source_artifact_path VARCHAR(1024) NOT NULL,
+        import_request_id VARCHAR(64) NOT NULL,
+        file_name VARCHAR(512) NOT NULL,
+        content_type VARCHAR(128) NOT NULL,
+        size INTEGER NOT NULL,
+        sha256 VARCHAR(64) NOT NULL,
+        bucket VARCHAR(64) NOT NULL,
+        object_name VARCHAR(1024) NOT NULL,
+        status VARCHAR(16) NOT NULL DEFAULT 'importing',
+        confirmed_by INTEGER REFERENCES users(id),
+        confirmation_key VARCHAR(64),
+        confirmed_at TIMESTAMP WITHOUT TIME ZONE,
+        rejected_by INTEGER REFERENCES users(id),
+        rejection_request_id VARCHAR(64),
+        rejected_at TIMESTAMP WITHOUT TIME ZONE,
+        created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+        CONSTRAINT uq_counseling_material_import_request UNIQUE (counselor_id, import_request_id),
+        CONSTRAINT uq_counseling_material_confirmation UNIQUE (counselor_id, confirmation_key),
+        CONSTRAINT uq_counseling_material_rejection UNIQUE (counselor_id, rejection_request_id),
+        CONSTRAINT uq_counseling_material_source UNIQUE (work_item_id, source_run_id, source_artifact_path),
+        CONSTRAINT ck_counseling_material_status CHECK (status IN ('importing', 'pending_review', 'active', 'rejected'))
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS ix_counseling_material_student
+    ON counseling_materials(student_id, status, created_at)
+    """,
+)
+
+COUNSELING_SCHEMA_V5_STATEMENTS = (
+    """
+    CREATE TABLE IF NOT EXISTS counseling_data_use_acknowledgments (
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        notice_version VARCHAR(32) NOT NULL,
+        acknowledged_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (user_id, notice_version)
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS ix_counseling_notice_user_time
+    ON counseling_data_use_acknowledgments(user_id, acknowledged_at)
+    """,
+    """
+    CREATE OR REPLACE FUNCTION reject_counseling_notice_mutation() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+    BEGIN
+        RAISE EXCEPTION 'counseling_data_use_acknowledgments are immutable';
+    END;
+    $$
+    """,
+    "DROP TRIGGER IF EXISTS trg_counseling_notice_immutable ON counseling_data_use_acknowledgments",
+    """
+    CREATE TRIGGER trg_counseling_notice_immutable
+    BEFORE UPDATE OR DELETE ON counseling_data_use_acknowledgments
+    FOR EACH ROW EXECUTE FUNCTION reject_counseling_notice_mutation()
+    """,
+)
+
 COUNSELING_SCHEMA_STATEMENTS = (
-    COUNSELING_SCHEMA_V1_STATEMENTS + COUNSELING_SCHEMA_V2_STATEMENTS + COUNSELING_SCHEMA_V3_STATEMENTS
+    COUNSELING_SCHEMA_V1_STATEMENTS
+    + COUNSELING_SCHEMA_V2_STATEMENTS
+    + COUNSELING_SCHEMA_V3_STATEMENTS
+    + COUNSELING_SCHEMA_V4_STATEMENTS
+    + COUNSELING_SCHEMA_V5_STATEMENTS
 )
 
 
@@ -319,17 +413,31 @@ async def migrate_schema() -> None:
             await pg_manager.create_schema_version_table()
             versions = await pg_manager.get_schema_versions()
             actual = versions.get("counseling")
-            if actual not in {None, 1, 2, COUNSELING_SCHEMA_VERSION}:
+            if actual not in {None, 1, 2, 3, 4, COUNSELING_SCHEMA_VERSION}:
                 raise RuntimeError(
-                    f"Unsupported counseling schema version: {actual}; supported upgrade sources are empty, v1 or v2"
+                    "Unsupported counseling schema version: "
+                    f"{actual}; supported upgrade sources are empty, v1, v2, v3 or v4"
                 )
             if actual != COUNSELING_SCHEMA_VERSION:
                 if actual is None:
                     statements = COUNSELING_SCHEMA_STATEMENTS
                 elif actual == 1:
-                    statements = COUNSELING_SCHEMA_V2_STATEMENTS + COUNSELING_SCHEMA_V3_STATEMENTS
+                    statements = (
+                        COUNSELING_SCHEMA_V2_STATEMENTS
+                        + COUNSELING_SCHEMA_V3_STATEMENTS
+                        + COUNSELING_SCHEMA_V4_STATEMENTS
+                        + COUNSELING_SCHEMA_V5_STATEMENTS
+                    )
+                elif actual == 2:
+                    statements = (
+                        COUNSELING_SCHEMA_V3_STATEMENTS
+                        + COUNSELING_SCHEMA_V4_STATEMENTS
+                        + COUNSELING_SCHEMA_V5_STATEMENTS
+                    )
+                elif actual == 3:
+                    statements = COUNSELING_SCHEMA_V4_STATEMENTS + COUNSELING_SCHEMA_V5_STATEMENTS
                 else:
-                    statements = COUNSELING_SCHEMA_V3_STATEMENTS
+                    statements = COUNSELING_SCHEMA_V5_STATEMENTS
                 async with pg_manager.async_engine.begin() as connection:
                     for statement in statements:
                         await connection.execute(text(statement))

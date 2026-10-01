@@ -7,7 +7,6 @@ import uuid
 
 import asyncpg
 import pytest
-
 from counseling.identity.auth import AuthUtils
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
@@ -43,6 +42,11 @@ async def test_manual_consultation_risk_correction_and_admin_summary(test_client
             role,
             business_roles,
             department_id,
+        )
+        await connection.execute(
+            "INSERT INTO counseling_data_use_acknowledgments (user_id, notice_version) "
+            "VALUES ($1, '2026-10-01')",
+            user_id,
         )
         user_ids.append(user_id)
         return {"Authorization": f"Bearer {AuthUtils.create_access_token({'sub': str(user_id)})}"}
@@ -332,6 +336,18 @@ async def test_manual_consultation_risk_correction_and_admin_summary(test_client
                     "DELETE FROM counseling_students WHERE department_id = $1", department_id
                 )
                 if user_ids:
+                    await connection.execute(
+                        "ALTER TABLE counseling_data_use_acknowledgments "
+                        "DISABLE TRIGGER trg_counseling_notice_immutable"
+                    )
+                    await connection.execute(
+                        "DELETE FROM counseling_data_use_acknowledgments "
+                        "WHERE user_id = ANY($1::integer[])", user_ids
+                    )
+                    await connection.execute(
+                        "ALTER TABLE counseling_data_use_acknowledgments "
+                        "ENABLE TRIGGER trg_counseling_notice_immutable"
+                    )
                     await connection.execute("DELETE FROM users WHERE id = ANY($1::integer[])", user_ids)
                 await connection.execute("DELETE FROM departments WHERE id = $1", department_id)
                 await cleanup.commit()

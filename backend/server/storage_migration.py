@@ -2,8 +2,11 @@
 
 import asyncio
 
+from counseling.identity import models as _identity_models  # noqa: F401
 from counseling.storage.schema import (
     migrate_legacy_business_schema,
+)
+from counseling.storage.schema import (
     migrate_schema as migrate_counseling_schema,
 )
 from yuxi.storage_migration import main as migrate_yuxi_schema

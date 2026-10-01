@@ -140,6 +140,6 @@ PRD 第 8、10 章的数字是目标值，验收前需固定测试数据、环�
 - [工作台服务](https://github.com/wang97x/counseling/blob/main/web/src/domains/counseling/workspaceService.js)只装配真实 API 适配器。[真实 API 适配器](https://github.com/wang97x/counseling/blob/main/web/src/domains/counseling/services/apiAdapter.js)已接入手工咨询草稿、确认归档、追加更正、人工风险、阶段结束和业务管理员聚合统计。文件记录与 AI 摘要接口继续保留，但不在当前 P0 工作台主路径展示。
 - 当前 `StudentWorkspaceView` 使用学生信息、待确认草稿和统一时间线组成单页档案；主操作为手工咨询记录、人工风险和阶段结束，不再从业务工作台发起关联 Agent 会话。
 - 前端通过统一能力映射隔离业务入口和 Yuxi 技术入口，只根据显式 `super_admin`、`business_admin`、`counselor` 派生入口；缺失业务角色时不从平台角色回退授权。Schema v3 把历史 `technical_admin` 转换为 `super_admin`。
-- P0 手工链路已经通过真实 HTTP 与 PostgreSQL integration；真实浏览器验收仍须完成。保留的文件生成代码和演示交互不能证明 P1 文件/模型联调、量表计分或自动危机识别已经交付，真实接口失败不得回退演示数据。
+- P0 手工链路已经通过真实 HTTP、PostgreSQL integration 与 Chromium 浏览器验收，覆盖刷新回读、重复建档、接口失败恢复和直接 URL 越权。保留的文件生成代码和演示交互不能证明量表计分或自动危机识别已经交付，真实接口失败不得回退演示数据。
 
 具体功能实现时，更新其源码、测试和机制说明；产品约束保持目标边界，验证方法见[心理辅导业务验证](./testing-guidelines.md#心理辅导业务验证)。

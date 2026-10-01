@@ -1,13 +1,18 @@
 """心理辅导业务管理员最小统计入口。"""
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from counseling.administration.service import get_department_summary
 from counseling.identity.http.dependencies import get_db, get_required_user
 from counseling.identity.models import User
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
 
-counseling_admin = APIRouter(prefix="/counseling/admin", tags=["counseling-admin"])
+from server.routers.counseling_governance_router import require_acknowledged_counseling_user
+
+counseling_admin = APIRouter(
+    prefix="/counseling/admin",
+    tags=["counseling-admin"],
+    dependencies=[Depends(require_acknowledged_counseling_user)],
+)
 
 
 @counseling_admin.get("/summary")

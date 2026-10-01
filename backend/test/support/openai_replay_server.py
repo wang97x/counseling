@@ -14,6 +14,8 @@ EXPECTED_OUTPUT = "DETERMINISTIC_AGENT_E2E_OK"
 EXPECTED_AUTHORIZATION = "Bearer ci-replay-key"
 EXPECTED_MODEL = "deterministic-chat"
 EXPECTED_PRELOADED_SKILL_MARKER = "# 图片生成技能"
+STRICT_RESOURCE_SCOPE_MARKER = "DETERMINISTIC_STRICT_RESOURCE_SCOPE"
+STRICT_RESOURCE_SCOPE_TOOLS = {"read_file", "write_file", "edit_file", "present_artifacts"}
 EXPECTED_PRELOADED_TOOL = "present_artifacts"
 EXPECTED_TOOL_CALL_ID = "call-preloaded-tool"
 EXPECTED_TOOL_RESULT_MARKER = "已将交付物展示给用户"
@@ -40,14 +42,23 @@ def _validate_request(authorization: str | None, request: dict) -> str | None:
     serialized_messages = json.dumps(messages, ensure_ascii=False)
     if EXPECTED_OUTPUT not in serialized_messages:
         return "expected_input_missing"
-    if EXPECTED_PRELOADED_SKILL_MARKER not in serialized_messages:
-        return "preloaded_skill_missing"
+    dynamic_call = re.search(r"DETERMINISTIC_TOOL_CALL_ID:([0-9A-Za-z_-]+)", serialized_messages)
+    expected_tool_call_id = (
+        dynamic_call.group(1) if dynamic_call else EXPECTED_TOOL_CALL_ID
+    )
     tools = request.get("tools")
     tool_names = {
         item.get("function", {}).get("name")
         for item in tools or []
         if isinstance(item, dict) and isinstance(item.get("function"), dict)
     }
+    if STRICT_RESOURCE_SCOPE_MARKER in serialized_messages:
+        if EXPECTED_PRELOADED_SKILL_MARKER in serialized_messages:
+            return "unexpected_preloaded_skill"
+        if tool_names != STRICT_RESOURCE_SCOPE_TOOLS:
+            return "strict_resource_scope_mismatch"
+    elif EXPECTED_PRELOADED_SKILL_MARKER not in serialized_messages:
+        return "preloaded_skill_missing"
     subagent_child = "DETERMINISTIC_SUBAGENT_CHILD" in serialized_messages
     subagent_parent = "DETERMINISTIC_SUBAGENT_PARENT:" in serialized_messages
     if subagent_child:
@@ -68,7 +79,7 @@ def _validate_request(authorization: str | None, request: dict) -> str | None:
         return None
     if tool_messages and not any(
         (
-            message.get("tool_call_id") == EXPECTED_TOOL_CALL_ID
+            message.get("tool_call_id") == expected_tool_call_id
             and (
                 EXPECTED_TOOL_RESULT_MARKER in str(message.get("content", ""))
                 or TOOL_ERROR_MARKER in serialized_messages
@@ -87,13 +98,29 @@ def _validate_request(authorization: str | None, request: dict) -> str | None:
 
 def _stream_payloads(model: str, messages: list[dict]) -> list[dict]:
     serialized_messages = json.dumps(messages, ensure_ascii=False)
+    has_tool_message = any(
+        message.get("role") == "tool" for message in messages if isinstance(message, dict)
+    )
     common = {
-        "id": "chatcmpl-yuxi-deterministic",
+        "id": (
+            "chatcmpl-yuxi-deterministic-final"
+            if has_tool_message
+            else "chatcmpl-yuxi-deterministic-tool"
+        ),
         "object": "chat.completion.chunk",
         "created": int(time.time()),
         "model": model,
     }
-    if any(message.get("role") == "tool" for message in messages if isinstance(message, dict)):
+    dynamic_call = re.search(r"DETERMINISTIC_TOOL_CALL_ID:([0-9A-Za-z_-]+)", serialized_messages)
+    expected_tool_call_id = (
+        dynamic_call.group(1) if dynamic_call else EXPECTED_TOOL_CALL_ID
+    )
+    if any(
+        message.get("role") == "tool"
+        and message.get("tool_call_id") == expected_tool_call_id
+        for message in messages
+        if isinstance(message, dict)
+    ):
         return [
             {
                 **common,
@@ -113,7 +140,7 @@ def _stream_payloads(model: str, messages: list[dict]) -> list[dict]:
         ]
 
     large_result = LARGE_TOOL_RESULT_MARKER in serialized_messages
-    tool_call_id = LARGE_TOOL_CALL_ID if large_result else EXPECTED_TOOL_CALL_ID
+    tool_call_id = LARGE_TOOL_CALL_ID if large_result else expected_tool_call_id
     tool_name = "execute" if large_result else EXPECTED_PRELOADED_TOOL
     if "DETERMINISTIC_SUBAGENT_CHILD" in serialized_messages:
         tool_call_id, tool_name = "call-subagent-write", "write_file"
@@ -129,7 +156,9 @@ def _stream_payloads(model: str, messages: list[dict]) -> list[dict]:
     elif TOOL_ERROR_MARKER in serialized_messages:
         tool_arguments = "{}"
     else:
-        tool_arguments = '{"filepaths": []}'
+        artifact_match = re.search(r'DETERMINISTIC_ARTIFACT_PATH:(/[^"]+)', serialized_messages)
+        artifact_paths = [artifact_match.group(1)] if artifact_match else []
+        tool_arguments = json.dumps({"filepaths": artifact_paths})
 
     return [
         {
@@ -195,6 +224,13 @@ class ReplayHandler(BaseHTTPRequestHandler):
 
         request_error = _validate_request(self.headers.get("authorization"), request)
         if request_error:
+            tool_names = sorted(
+                item.get("function", {}).get("name")
+                for item in request.get("tools") or []
+                if isinstance(item, dict)
+                and isinstance(item.get("function"), dict)
+            )
+            print(json.dumps({"error": request_error, "tools": tool_names}), flush=True)
             self._write_json(422, {"error": request_error})
             return
 

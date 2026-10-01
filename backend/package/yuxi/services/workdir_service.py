@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from fastapi import HTTPException
+from yuxi.conversation_access import require_conversation_access
 from yuxi.repositories.conversation_repository import ConversationRepository
 from yuxi.repositories.project_repository import ProjectRepository
 from yuxi.storage.postgres.models_business import Conversation, Project
@@ -99,6 +100,7 @@ async def resolve_authorized_conversation_workdir(
     """复用已查询的 Conversation，重新校验归属后打开 Workdir。"""
     if conversation is None or conversation.uid != str(uid) or conversation.status == "deleted":
         raise HTTPException(status_code=404, detail="对话线程不存在")
+    await require_conversation_access(db, str(uid), conversation)
     binding = await resolve_conversation_workdir_binding(
         conversation=conversation,
         uid=str(uid),

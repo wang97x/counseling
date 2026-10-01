@@ -2,9 +2,9 @@ import uuid
 from typing import Any
 
 from fastapi import HTTPException
-from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from yuxi.conversation_access import can_access_conversation, require_conversation_access
 from yuxi.identity import get_identity_reader
 from yuxi.models.utils import parse_assistant_message_body
 from yuxi.repositories.agent_repository import AgentRepository
@@ -39,6 +39,7 @@ async def require_user_conversation(conv_repo: ConversationRepository, thread_id
     conversation = await conv_repo.get_conversation_by_thread_id(thread_id)
     if not conversation or conversation.uid != str(uid) or conversation.status == "deleted":
         raise HTTPException(status_code=404, detail="对话线程不存在")
+    await require_conversation_access(getattr(conv_repo, "db", None), str(uid), conversation)
     return conversation
 
 
@@ -230,10 +231,22 @@ async def list_threads_view(
         uid=str(current_uid),
         agent_id=agent_slug,
         status="active",
-        limit=limit,
-        offset=offset,
+        limit=None,
+        offset=0,
         exclude_sources=INVOCATION_CONVERSATION_SOURCES,
     )
+    conversations = [
+        conversation
+        for conversation in conversations
+        if await can_access_conversation(db, str(current_uid), conversation)
+    ]
+    pinned = [conversation for conversation in conversations if conversation.is_pinned]
+    non_pinned = [conversation for conversation in conversations if not conversation.is_pinned]
+    if limit is not None:
+        non_pinned = non_pinned[offset : offset + limit]
+    elif offset:
+        non_pinned = non_pinned[offset:]
+    conversations = pinned + non_pinned
 
     run_repo = AgentRunRepository(db)
     thread_ids = [conv.thread_id for conv in conversations]
@@ -267,14 +280,27 @@ async def search_threads_view(
         return {"items": [], "has_more": False, "limit": limit, "offset": offset}
 
     conv_repo = ConversationRepository(db)
-    search_items, has_more = await conv_repo.search_conversations_by_message_content(
-        uid=str(current_uid),
-        agent_id=agent_id,
-        query=normalized_query,
-        limit=limit,
-        offset=offset,
-        exclude_sources=INVOCATION_CONVERSATION_SOURCES,
-    )
+    authorized_items: list[dict] = []
+    raw_offset = 0
+    batch_limit = max(50, offset + limit + 1)
+    while len(authorized_items) < offset + limit + 1:
+        search_items, raw_has_more = await conv_repo.search_conversations_by_message_content(
+            uid=str(current_uid),
+            agent_id=agent_id,
+            query=normalized_query,
+            limit=batch_limit,
+            offset=raw_offset,
+            exclude_sources=INVOCATION_CONVERSATION_SOURCES,
+        )
+        for item in search_items:
+            if await can_access_conversation(db, str(current_uid), item["conversation"]):
+                authorized_items.append(item)
+        raw_offset += len(search_items)
+        if not raw_has_more or not search_items:
+            break
+
+    has_more = len(authorized_items) > offset + limit
+    search_items = authorized_items[offset : offset + limit]
 
     items = []
     for item in search_items:
@@ -387,9 +413,7 @@ async def get_thread_history_view(
 ) -> dict:
     """读取线程、Run 与历史消息，保留独立的已读写操作。"""
     conv_repo = ConversationRepository(db)
-    conversation = await conv_repo.get_conversation_by_thread_id(thread_id)
-    if not conversation or conversation.uid != str(current_uid) or conversation.status == "deleted":
-        raise HTTPException(status_code=404, detail="对话线程不存在")
+    conversation = await require_user_conversation(conv_repo, thread_id, str(current_uid))
 
     messages = await conv_repo.get_messages(conversation.id)
     messages = [

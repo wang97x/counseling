@@ -962,7 +962,6 @@ def test_sync_user_accessible_skills_updates_executable_mode(
 @pytest.mark.asyncio
 async def test_refresh_user_skill_projection_serializes_authorization_snapshots(monkeypatch: pytest.MonkeyPatch):
     """旧 Run 不得在较新的撤权同步完成后复活已撤销 Skill。"""
-    from counseling.identity.repositories import user as user_repository
     from yuxi.storage.postgres import manager as postgres_manager
 
     advisory_lock = asyncio.Lock()
@@ -987,6 +986,10 @@ async def test_refresh_user_skill_projection_serializes_authorization_snapshots(
         assert uid == "user-1"
         return SimpleNamespace(is_deleted=0)
 
+    class _IdentityReader:
+        async def get_by_uid(self, db, uid):
+            return await get_user(self, db, uid)
+
     async def list_shared(_db, _user, *, require_enabled=True):
         del require_enabled
         return list(current_items)
@@ -1002,7 +1005,7 @@ async def test_refresh_user_skill_projection_serializes_authorization_snapshots(
         "get_async_session_context",
         lambda: FakeSessionContext(),
     )
-    monkeypatch.setattr(user_repository.UserRepository, "get_by_uid_with_db", get_user)
+    monkeypatch.setattr("yuxi.identity._reader", _IdentityReader())
     monkeypatch.setattr(svc, "_list_accessible_shared_skills", list_shared)
     monkeypatch.setattr(svc, "_resolve_skill_dir", lambda item: item.source_dir)
     monkeypatch.setattr(svc.asyncio, "to_thread", to_thread)
@@ -1021,7 +1024,6 @@ async def test_refresh_user_skill_projection_serializes_authorization_snapshots(
 @pytest.mark.asyncio
 async def test_refresh_user_skill_projection_excludes_personal_skills(monkeypatch: pytest.MonkeyPatch):
     """共享只读投影不得复制 UserWorkspace 中的个人 Skill。"""
-    from counseling.identity.repositories import user as user_repository
     from yuxi.storage.postgres import manager as postgres_manager
 
     synchronized_sources: list[dict[str, str]] = []
@@ -1041,6 +1043,10 @@ async def test_refresh_user_skill_projection_excludes_personal_skills(monkeypatc
     async def get_user(_self, _db, _uid):
         return SimpleNamespace(is_deleted=0)
 
+    class _IdentityReader:
+        async def get_by_uid(self, db, uid):
+            return await get_user(self, db, uid)
+
     async def list_shared(_db, _user, *, require_enabled=True):
         del require_enabled
         return [shared]
@@ -1052,7 +1058,7 @@ async def test_refresh_user_skill_projection_excludes_personal_skills(monkeypatc
         synchronized_sources.append(dict(sources))
 
     monkeypatch.setattr(postgres_manager.pg_manager, "get_async_session_context", lambda: FakeSessionContext())
-    monkeypatch.setattr(user_repository.UserRepository, "get_by_uid_with_db", get_user)
+    monkeypatch.setattr("yuxi.identity._reader", _IdentityReader())
     monkeypatch.setattr(svc, "_list_accessible_shared_skills", list_shared)
     monkeypatch.setattr(svc, "list_accessible_skills", fail_combined_list)
     monkeypatch.setattr(svc, "_resolve_skill_dir", lambda item: Path(f"/tmp/{item.slug}"))

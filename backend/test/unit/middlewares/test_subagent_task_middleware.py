@@ -195,8 +195,8 @@ def _patch_task_start_and_await(
 
 @pytest.mark.asyncio
 async def test_create_task_middleware_loads_all_visible_subagents_when_empty(monkeypatch) -> None:
-    class _UserRepository:
-        async def get_by_uid_with_db(self, _db, uid):
+    class _IdentityReader:
+        async def get_by_uid(self, _db, uid):
             assert uid == "user-1"
             return SimpleNamespace(uid="user-1", role="user")
 
@@ -223,7 +223,7 @@ async def test_create_task_middleware_loads_all_visible_subagents_when_empty(mon
             raise AssertionError("empty subagents should load all visible subagents")
 
     _patch_session(monkeypatch)
-    monkeypatch.setattr(subagent_task_middleware, "UserRepository", _UserRepository)
+    monkeypatch.setattr(subagent_task_middleware, "get_identity_reader", lambda: _IdentityReader())
     monkeypatch.setattr(subagent_task_middleware, "AgentRepository", _AgentRepository)
 
     middleware = await subagent_task_middleware.create_subagent_task_middleware(

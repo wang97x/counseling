@@ -36,6 +36,8 @@ MEMORY_SYSTEM_PROMPT = """## 用户级 Memory
 
 async def create_memory_middleware(context) -> YuxiMemoryMiddleware | None:
     """仅在用户开启 Memory 时创建主 Agent middleware。"""
+    if getattr(context, "counseling_context_thread_id", None):
+        return None
     memory_content = await load_memory_prompt(str(getattr(context, "uid", "") or ""))
     if memory_content is None:
         return None

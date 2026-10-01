@@ -1,15 +1,16 @@
+from counseling.identity.http.auth import auth
+from counseling.identity.http.departments import department
+from counseling.identity.http.user_settings import user_router
 from fastapi import APIRouter
 
 from server.routers.agent_invocation_call_router import agent_invocation_call_router
 from server.routers.agent_invocation_channel_router import agent_invocation_channel_router
 from server.routers.agent_invocation_eval_router import agent_invocation_eval_router
 from server.routers.agent_router import agent_router
-from counseling.identity.http.auth import auth
-from counseling.identity.http.departments import department
-from counseling.identity.http.user_settings import user_router
 from server.routers.chat_router import chat
-from server.routers.counseling_router import counseling
 from server.routers.counseling_admin_router import counseling_admin
+from server.routers.counseling_governance_router import counseling_governance
+from server.routers.counseling_router import counseling
 from server.routers.dashboard_router import dashboard
 from server.routers.external_kb_router import external_kb
 from server.routers.filesystem_router import filesystem_router
@@ -38,6 +39,7 @@ router.include_router(agent_invocation_call_router)  # /api/agent-invocation/age
 router.include_router(agent_invocation_channel_router)  # /api/agent-invocation/channel/*
 router.include_router(agent_invocation_eval_router)  # /api/agent-invocation/eval/*
 router.include_router(chat)  # /api/chat/* 对话线程、消息历史与附件
+router.include_router(counseling_governance)  # /api/counseling/data-use-notice 与审计
 router.include_router(counseling)  # /api/counseling/students* 学生档案
 router.include_router(counseling_admin)  # /api/counseling/admin* 业务管理聚合
 router.include_router(projects)  # /api/projects* 项目创建与选择

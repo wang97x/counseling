@@ -38,13 +38,21 @@ export async function resolveLinkedConversationRedirect(to, access, loadConversa
   if (!access.canAccessStudentRecords) return access.defaultHome
 
   const studentId = String(to.query?.student_id || '')
+  const workItemId = String(to.query?.work_item_id || '')
   const threadId = String(to.params?.thread_id || '')
   if (!/^[1-9]\d*$/.test(studentId) || !threadId) return access.defaultHome
 
   try {
     const response = await loadConversations(studentId)
     const conversations = response?.conversations || response?.items || response || []
-    return Array.isArray(conversations) && conversations.some((item) => String(item.id) === threadId)
+    const matched = Array.isArray(conversations)
+      ? conversations.find((item) => String(item.id) === threadId)
+      : null
+    if (!matched) return access.defaultHome
+    const linkedWorkItemId = String(matched.work_item_id || '')
+    if (linkedWorkItemId && linkedWorkItemId !== workItemId) return access.defaultHome
+    if (workItemId && linkedWorkItemId !== workItemId) return access.defaultHome
+    return matched
       ? null
       : access.defaultHome
   } catch {

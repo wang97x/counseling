@@ -6,16 +6,16 @@ import uuid
 
 import asyncpg
 import pytest
-from sqlalchemy import text
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import create_async_engine
-
 from counseling.storage import schema as counseling_schema
 from counseling.storage.schema import (
     COUNSELING_SCHEMA_V1_STATEMENTS,
     COUNSELING_SCHEMA_V2_STATEMENTS,
     COUNSELING_SCHEMA_V3_STATEMENTS,
+    COUNSELING_SCHEMA_V4_STATEMENTS,
 )
+from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import create_async_engine
 from yuxi.storage.postgres.manager import PostgresManager
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
@@ -31,8 +31,8 @@ def _scoped_manager(engine) -> PostgresManager:
     return manager
 
 
-async def test_counseling_v1_rows_upgrade_to_v3_without_overwriting_model_context() -> None:
-    """带旧会话行的 v1 可重复升级到 v3，且不覆盖已有通用模型上下文。"""
+async def test_counseling_v1_rows_upgrade_to_v4_without_overwriting_model_context() -> None:
+    """带旧会话行的 v1 可重复升级到 v4，且不覆盖已有通用模型上下文。"""
     schema_name = f"test_counseling_migration_{uuid.uuid4().hex}"
     connection = await asyncpg.connect(os.environ["POSTGRES_URL"].replace("+asyncpg", ""))
     try:
@@ -48,8 +48,7 @@ async def test_counseling_v1_rows_upgrade_to_v3_without_overwriting_model_contex
             "INSERT INTO users (id, role, business_roles) VALUES (1, 'superadmin', '[\"technical_admin\"]')"
         )
         await connection.execute(
-            "INSERT INTO conversations (id, extra_metadata) VALUES "
-            "(1, $1::json), (2, $2::json)",
+            "INSERT INTO conversations (id, extra_metadata) VALUES (1, $1::json), (2, $2::json)",
             '{"counseling":{"student_id":11,"background_snapshot":"旧快照"}}',
             '{"counseling":{"student_id":12},"model_context":{"label":"保留原值","payload":{"fixed":true}}}',
         )
@@ -64,8 +63,12 @@ async def test_counseling_v1_rows_upgrade_to_v3_without_overwriting_model_contex
 
         for statement in COUNSELING_SCHEMA_V1_STATEMENTS:
             await connection.execute(statement)
-        assert json.loads(await connection.fetchval("SELECT extra_metadata FROM conversations WHERE id = 1")) == migrated
-        assert json.loads(await connection.fetchval("SELECT extra_metadata FROM conversations WHERE id = 2")) == preserved
+        assert (
+            json.loads(await connection.fetchval("SELECT extra_metadata FROM conversations WHERE id = 1")) == migrated
+        )
+        assert (
+            json.loads(await connection.fetchval("SELECT extra_metadata FROM conversations WHERE id = 2")) == preserved
+        )
 
         for _ in range(2):
             for statement in COUNSELING_SCHEMA_V2_STATEMENTS:
@@ -74,8 +77,16 @@ async def test_counseling_v1_rows_upgrade_to_v3_without_overwriting_model_contex
         for statement in COUNSELING_SCHEMA_V3_STATEMENTS:
             await connection.execute(statement)
 
-        assert json.loads(await connection.fetchval("SELECT extra_metadata FROM conversations WHERE id = 1")) == migrated
-        assert json.loads(await connection.fetchval("SELECT extra_metadata FROM conversations WHERE id = 2")) == preserved
+        for _ in range(2):
+            for statement in COUNSELING_SCHEMA_V4_STATEMENTS:
+                await connection.execute(statement)
+
+        assert (
+            json.loads(await connection.fetchval("SELECT extra_metadata FROM conversations WHERE id = 1")) == migrated
+        )
+        assert (
+            json.loads(await connection.fetchval("SELECT extra_metadata FROM conversations WHERE id = 2")) == preserved
+        )
 
         columns = {
             row["column_name"]
@@ -88,6 +99,8 @@ async def test_counseling_v1_rows_upgrade_to_v3_without_overwriting_model_contex
         assert {"display_name", "class_name", "current_risk_level", "version", "closed_at"} <= columns
         assert await connection.fetchval("SELECT to_regclass('counseling_record_corrections') IS NOT NULL")
         assert await connection.fetchval("SELECT to_regclass('counseling_risk_events') IS NOT NULL")
+        assert await connection.fetchval("SELECT to_regclass('counseling_ai_work_items') IS NOT NULL")
+        assert await connection.fetchval("SELECT to_regclass('counseling_materials') IS NOT NULL")
         assert await connection.fetchval("SELECT business_roles FROM users WHERE id = 1") == '["super_admin"]'
     finally:
         await connection.execute("SET search_path TO public")
@@ -95,10 +108,10 @@ async def test_counseling_v1_rows_upgrade_to_v3_without_overwriting_model_contex
         await connection.close()
 
 
-async def test_counseling_v2_migrator_publishes_v3_after_converting_roles(
+async def test_counseling_v2_migrator_publishes_v4_after_converting_roles(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """真实迁移入口先转换旧角色并收紧约束，再发布 v3。"""
+    """真实迁移入口先转换旧角色并创建协作表，再发布 v4。"""
 
     schema_name = f"test_counseling_v2_migration_{uuid.uuid4().hex}"
     admin_engine = create_async_engine(os.environ["POSTGRES_URL"], pool_pre_ping=True)
@@ -113,20 +126,22 @@ async def test_counseling_v2_migrator_publishes_v3_after_converting_roles(
             await connection.execute(text(f'CREATE SCHEMA "{schema_name}"'))
         await manager.create_schema_version_table()
         async with scoped_engine.begin() as connection:
+            await connection.execute(text("CREATE TABLE departments (id INTEGER PRIMARY KEY)"))
+            await connection.execute(text("CREATE TABLE counseling_students (id INTEGER PRIMARY KEY)"))
             await connection.execute(
                 text(
                     "CREATE TABLE users ("
                     "id INTEGER PRIMARY KEY, business_roles JSONB NOT NULL, "
                     "CONSTRAINT ck_users_business_roles CHECK ("
                     "jsonb_typeof(business_roles) = 'array' AND "
-                    "business_roles <@ '[\"counselor\", \"business_admin\", \"technical_admin\"]'::jsonb))"
+                    'business_roles <@ \'["counselor", "business_admin", "technical_admin"]\'::jsonb))'
                 )
             )
             await connection.execute(
                 text(
                     "INSERT INTO users (id, business_roles) VALUES "
                     "(1, '[\"technical_admin\"]'::jsonb), "
-                    "(2, '[\"counselor\", \"business_admin\"]'::jsonb)"
+                    '(2, \'["counselor", "business_admin"]\'::jsonb)'
                 )
             )
         await manager.record_schema_version("counseling", 2)
@@ -138,10 +153,15 @@ async def test_counseling_v2_migrator_publishes_v3_after_converting_roles(
             published_version = await connection.scalar(
                 text("SELECT version FROM yuxi_schema_migrations WHERE domain = 'counseling'")
             )
-            rows = (
-                await connection.execute(text("SELECT id, business_roles FROM users ORDER BY id"))
-            ).all()
-        assert published_version == 3
+            rows = (await connection.execute(text("SELECT id, business_roles FROM users ORDER BY id"))).all()
+            ai_work_exists = await connection.scalar(text("SELECT to_regclass('counseling_ai_work_items') IS NOT NULL"))
+            materials_exist = await connection.scalar(text("SELECT to_regclass('counseling_materials') IS NOT NULL"))
+            notice_exists = await connection.scalar(
+                text("SELECT to_regclass('counseling_data_use_acknowledgments') IS NOT NULL")
+            )
+        assert published_version == 5
+        assert notice_exists
+        assert ai_work_exists and materials_exist
         assert {row.id: row.business_roles for row in rows} == {
             1: ["super_admin"],
             2: ["counselor", "business_admin"],

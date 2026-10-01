@@ -6,10 +6,9 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 from langchain.messages import AIMessage, HumanMessage, ToolMessage
-
 from yuxi.agents import context as agent_context
-from yuxi.workspace import paths as workspace_paths
 from yuxi.services import chat_service as svc
+from yuxi.workspace import paths as workspace_paths
 
 
 def _empty_agent_context(_uid: str) -> str:
@@ -25,6 +24,18 @@ async def _resolve_test_workdir(**_kwargs):
 
     return "projects/11111111-1111-4111-8111-111111111111"
 
+
+class _SubagentAccessDB:
+    async def get(self, _model, key):
+        if int(key) != 11:
+            return None
+        return SimpleNamespace(
+            id=11,
+            thread_id="parent-thread",
+            uid="user-1",
+            status="active",
+            extra_metadata={},
+        )
 
 def test_build_agent_context_applies_runtime_input_to_declared_fields() -> None:
     agent = SimpleNamespace(context_schema=agent_context.BaseContext)
@@ -612,6 +623,144 @@ async def test_model_state_reconcile_uses_latest_message_when_operation_id_is_re
 
 
 @pytest.mark.asyncio
+async def test_terminal_state_requires_completed_tool_with_matching_source_message() -> None:
+    """终态输出只接受已完成且确由当前 State 模型调用产生的相邻工具。"""
+    source_message = AIMessage(
+        content="",
+        id="model-operation",
+        tool_calls=[{"id": "call-1", "name": "search", "args": {}}],
+    ).model_dump()
+    foreign = SimpleNamespace(
+        execution_status="completed",
+        extra_metadata={"source_model_operation_id": "other-model"},
+    )
+    incomplete = SimpleNamespace(
+        execution_status="running",
+        extra_metadata={"source_model_operation_id": "model-operation"},
+    )
+    completed = SimpleNamespace(
+        execution_status="completed",
+        extra_metadata={"source_model_operation_id": "model-operation"},
+    )
+
+    assert not svc._terminal_state_follows_completed_tool(
+        "call-1", {"call-1": foreign}, {"model-operation": source_message}
+    )
+    assert not svc._terminal_state_follows_completed_tool(
+        "call-1", {"call-1": incomplete}, {"model-operation": source_message}
+    )
+    assert svc._terminal_state_follows_completed_tool(
+        "call-1", {"call-1": completed}, {"model-operation": source_message}
+    )
+
+
+@pytest.mark.asyncio
+async def test_completed_run_binds_final_state_via_completed_tool_causality(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """终态消息 ID 漂移时，只按当前 Run 的完整 Tool 因果链绑定。"""
+    audit_message = SimpleNamespace(
+        id=9,
+        operation_id="model-operation",
+        content="",
+        extra_metadata={},
+        execution_status="completed",
+        message_type="model_audit",
+        conversation_id=1,
+    )
+    tool_audit = SimpleNamespace(
+        operation_id="call-1",
+        execution_status="completed",
+        extra_metadata={"source_model_operation_id": "model-operation"},
+    )
+
+    class FakeDB:
+        async def commit(self):
+            pass
+
+        async def rollback(self):
+            pass
+
+        async def flush(self):
+            pass
+
+    class FakeGraph:
+        async def aget_state(self, _config):
+            return SimpleNamespace(
+                values={
+                    "messages": [
+                        AIMessage(
+                            content="",
+                            id="model-operation",
+                            tool_calls=[{"id": "call-1", "name": "search", "args": {}}],
+                        ),
+                        ToolMessage(content="done", tool_call_id="call-1"),
+                        AIMessage(content="final answer", id="langchain-final-id"),
+                    ]
+                }
+            )
+
+    class FakeAuditRepo:
+        def __init__(self, _db):
+            pass
+
+        async def list_for_run(self, _run_id):
+            return [audit_message]
+
+        async def get(self, *, run_id, operation_id):
+            assert run_id == "run-1"
+            return audit_message if operation_id == "model-operation" else None
+
+    class FakeToolAuditRepo:
+        def __init__(self, _db):
+            pass
+
+        async def list_for_run(self, _run_id):
+            return [tool_audit]
+
+    output_ids: list[int] = []
+
+    class FakeRunRepo:
+        def __init__(self, _db):
+            pass
+
+        async def lock_output_persistence(self, *_args, **_kwargs):
+            return object()
+
+        async def set_output_message(self, _run_id, message_id, *, worker_id):
+            output_ids.append(message_id)
+
+        async def set_terminal_status(self, *_args, **_kwargs):
+            return SimpleNamespace(status="completed"), True
+
+        async def cancel_active_execution_tree_descendants(self, _run):
+            return []
+
+    conv_repo = _FakeConvRepo(FakeDB())
+    monkeypatch.setattr(svc, "AgentRunRepository", FakeRunRepo)
+    monkeypatch.setattr(svc, "ModelMessageAuditRepository", FakeAuditRepo)
+    monkeypatch.setattr(svc, "ToolMessageAuditRepository", FakeToolAuditRepo)
+
+    committed = await svc.save_messages_from_langgraph_state(
+        state=await FakeGraph().aget_state({}),
+        thread_id="thread-1",
+        conv_repo=conv_repo,
+        run_id="run-1",
+        request_id="request-1",
+        worker_id="worker-1",
+        complete_run=True,
+    )
+
+    assert committed is True
+    assert audit_message.content == ""
+    assert "state_source_id" not in audit_message.extra_metadata
+    assert conv_repo.saved_messages[0]["content"] == "final answer"
+    assert conv_repo.saved_messages[0]["extra_metadata"]["state_source_id"] == "langchain-final-id"
+    assert conv_repo.saved_messages[0]["extra_metadata"]["state_causal_tool_call_id"] == "call-1"
+    assert output_ids == [1]
+    assert conv_repo.published_message_ids == [1]
+
+
 async def test_completed_run_rejects_unmatched_final_state_message(monkeypatch: pytest.MonkeyPatch) -> None:
     audit_message = SimpleNamespace(
         id=9,
@@ -1222,6 +1371,11 @@ async def test_get_agent_state_view_includes_subagent_thread_relation(monkeypatc
                     agent_id="worker",
                     status="subagent",
                     project_id="11111111-1111-4111-8111-111111111111",
+                    extra_metadata={
+                        "source": "subagent",
+                        "parent_conversation_id": 11,
+                        "parent_thread_id": "parent-thread",
+                    },
                 )
             return None
 
@@ -1342,7 +1496,7 @@ async def test_get_agent_state_view_includes_subagent_thread_relation(monkeypatc
     result = await svc.get_agent_state_view(
         thread_id=child_thread_id,
         current_user=SimpleNamespace(uid="user-1"),
-        db=object(),
+        db=_SubagentAccessDB(),
         include_messages=True,
     )
 
@@ -1371,6 +1525,11 @@ async def test_get_agent_state_view_reports_malformed_subagent_run_as_server_err
                 agent_id="worker",
                 status="subagent",
                 project_id="11111111-1111-4111-8111-111111111111",
+                extra_metadata={
+                    "source": "subagent",
+                    "parent_conversation_id": 11,
+                    "parent_thread_id": "parent-thread",
+                },
             )
 
         async def get_conversation_by_id(self, conversation_id: int):
@@ -1451,7 +1610,7 @@ async def test_get_agent_state_view_reports_malformed_subagent_run_as_server_err
         await svc.get_agent_state_view(
             thread_id=child_thread_id,
             current_user=SimpleNamespace(uid="user-1"),
-            db=object(),
+            db=_SubagentAccessDB(),
         )
 
     assert exc.value.status_code == 500

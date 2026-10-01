@@ -86,6 +86,12 @@ const router = createRouter({
           meta: { keepAlive: false, requiresAuth: true, requiresStudentRecords: true }
         },
         {
+          path: 'data-use-notice',
+          name: 'CounselingDataUseNotice',
+          component: () => import('../domains/counseling/views/DataUseNoticeView.vue'),
+          meta: { keepAlive: false, requiresAuth: true, requiresStudentRecords: true, isCounselingNotice: true }
+        },
+        {
           path: ':studentId',
           name: 'StudentRecordDetail',
           component: () => import('../domains/counseling/views/StudentWorkspaceView.vue'),
@@ -218,6 +224,26 @@ router.beforeEach(async (to) => {
     counselingApi.listConversations
   )
   if (accessRedirect && accessRedirect !== to.path) return accessRedirect
+
+  const needsCounselingNotice = to.matched.some((record) => (
+    record.meta.requiresStudentRecords === true || record.meta.requiresStudentDetail === true
+  ))
+  const isCounselingNotice = to.matched.some(
+    (record) => record.meta.isCounselingNotice === true
+  )
+  if (needsCounselingNotice && !isCounselingNotice) {
+    try {
+      const notice = await counselingApi.getDataUseNotice()
+      if (!notice.acknowledged) {
+        return { name: 'CounselingDataUseNotice', query: { redirect: to.fullPath } }
+      }
+    } catch {
+      return {
+        name: 'CounselingDataUseNotice',
+        query: { redirect: to.fullPath, unavailable: '1' }
+      }
+    }
+  }
 
   // 如果用户已登录但访问登录页，按 redirect 参数跳转
   if (to.path === '/login' && isLoggedIn) {

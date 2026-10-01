@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
-
 from yuxi.agents.middlewares import memory as memory_middleware
 
 pytestmark = pytest.mark.unit
@@ -18,6 +18,18 @@ async def test_create_memory_middleware_hides_all_tools_when_disabled(monkeypatc
     middleware = await memory_middleware.create_memory_middleware(SimpleNamespace(uid="user-1"))
 
     assert middleware is None
+
+
+async def test_create_memory_middleware_is_disabled_for_counseling_context(monkeypatch: pytest.MonkeyPatch):
+    load = AsyncMock(return_value="不应读取")
+    monkeypatch.setattr(memory_middleware, "load_memory_prompt", load)
+
+    middleware = await memory_middleware.create_memory_middleware(
+        SimpleNamespace(uid="user-1", counseling_context_thread_id="thread-1")
+    )
+
+    assert middleware is None
+    load.assert_not_awaited()
 
 
 async def test_create_memory_middleware_registers_fixed_tool_schema(monkeypatch: pytest.MonkeyPatch):

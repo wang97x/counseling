@@ -1,6 +1,6 @@
 from deepagents.middleware.patch_tool_calls import PatchToolCallsMiddleware
 from langchain.agents import create_agent
-from langchain.agents.middleware import ModelRetryMiddleware, TodoListMiddleware
+from langchain.agents.middleware import AgentMiddleware, ModelRetryMiddleware, TodoListMiddleware
 
 from yuxi.agents import BaseAgent
 from yuxi.agents.backends import (
@@ -11,6 +11,7 @@ from yuxi.agents.backends import (
 from yuxi.agents.backends.paths import runtime_workdir_path
 from yuxi.agents.context import (
     DEFAULT_TOOL_RESULT_EVICTION_K_TOKENS,
+    COUNSELING_RUNTIME_TOOLS,
     prepare_agent_runtime_context,
 )
 from yuxi.agents.middlewares import (
@@ -31,8 +32,23 @@ from .prompt import TODO_MID_PROMPT, build_prompt_with_context
 from .state import ChatBotState
 
 
+class CounselingToolScopeMiddleware(AgentMiddleware):
+    """在最终模型请求边界强制档案 Run 工具白名单。"""
+
+    async def awrap_model_call(self, request, handler):
+        context = request.runtime.context
+        if not str(getattr(context, "counseling_context_thread_id", "") or "").strip():
+            return await handler(request)
+        allowed = set(COUNSELING_RUNTIME_TOOLS)
+        scoped_tools = [tool for tool in request.tools or [] if tool.name in allowed]
+        return await handler(request.override(tools=scoped_tools))
+
+
 async def _build_middlewares(context, backend):
-    """构建中间件列表"""
+    """构建中间件列表。"""
+    is_counseling = bool(
+        str(getattr(context, "counseling_context_thread_id", "") or "").strip()
+    )
     middlewares = [
         SteerMiddleware(),
         create_agent_filesystem_middleware(
@@ -41,16 +57,18 @@ async def _build_middlewares(context, backend):
         ),
         SkillsMiddleware(),
     ]
-    memory_middleware = await create_memory_middleware(context)
-    if memory_middleware:
-        middlewares.append(memory_middleware)
-    subagent_middleware = await create_subagent_task_middleware(context)
-    if subagent_middleware:
-        middlewares.append(subagent_middleware)
+    if not is_counseling:
+        memory_middleware = await create_memory_middleware(context)
+        if memory_middleware:
+            middlewares.append(memory_middleware)
+        subagent_middleware = await create_subagent_task_middleware(context)
+        if subagent_middleware:
+            middlewares.append(subagent_middleware)
+    middlewares.append(create_summary_middleware_from_context(context, backend=backend))
+    if not is_counseling:
+        middlewares.append(TodoListMiddleware(system_prompt=TODO_MID_PROMPT))
     middlewares.extend(
         [
-            create_summary_middleware_from_context(context, backend=backend),
-            TodoListMiddleware(system_prompt=TODO_MID_PROMPT),
             PatchToolCallsMiddleware(),
             ModelRetryMiddleware(max_retries=getattr(context, "model_retry_times", 2)),
             ImageInputCompatibilityMiddleware(),
@@ -63,6 +81,7 @@ async def _build_middlewares(context, backend):
     )
     if approval_middleware:
         middlewares.append(approval_middleware)
+    middlewares.append(CounselingToolScopeMiddleware())
     return middlewares
 
 

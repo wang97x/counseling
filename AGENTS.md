@@ -26,6 +26,8 @@
 4. 非平凡变更在实现前创建 tracked proposed decision，收敛后移入 implemented。局部文案、机械重命名和不改变行为的等价清理可免除；不能只按 diff 大小判断。
 5. 主张在真实语义 Owner 处闭合。Decision 保存非显然取舍，不复制运行时事实或推理流水账；`docs/vibe/` 只用于被忽略的临时计划。
 
+- 源码仅取 WSL `/home/wang/counseling`，命令经 `wsl.exe`。`helper_unknown_error` 重试一次；再失败则申请沙盒外授权，仍经 `wsl.exe` 执行任务命令，禁用 Windows 文件工具；授权失败才请求重开。
+
 ## 系统与产品边界
 
 - HTTP 路由保持薄；用例流程属于 `yuxi.services`，持久化查询属于 `yuxi.repositories`。跨 repository 用例只有一个事务 Owner。

@@ -190,6 +190,11 @@ class BaseContext:
         metadata={"name": "Worker Attempt Owner", "configurable": False, "hide": True},
     )
 
+    counseling_context_thread_id: str | None = field(
+        default=None,
+        metadata={"name": "辅导档案只读上下文线程", "configurable": False, "hide": True},
+    )
+
     runtime_scope_id: str | None = field(
         default=None,
         metadata={"name": "Sandbox Runtime Scope", "configurable": False, "hide": True},
@@ -417,6 +422,7 @@ class BaseContext:
 _DEFAULT_ALL_CONTEXT_FIELDS = frozenset({"tools", "knowledges", "mcps", "skills"})
 _EMPTY_ALL_CONTEXT_FIELDS = frozenset({"subagents"})
 AGENT_RUNTIME_RESOURCE_FIELDS = _DEFAULT_ALL_CONTEXT_FIELDS | _EMPTY_ALL_CONTEXT_FIELDS
+COUNSELING_RUNTIME_TOOLS = ("read_file", "write_file", "edit_file", "present_artifacts")
 
 
 def _normalize_selected_resource_keys(value: Any, available: list[str]) -> list[str]:
@@ -616,5 +622,16 @@ async def prepare_agent_runtime_context(
         setattr(context, "_runtime_skills", skill_scope["runtime_skills"])
         setattr(context, "_preloaded_skills", skill_scope["preloaded_skills"])
         setattr(context, "_preloaded_skill_contents", skill_scope["preloaded_skill_contents"])
-
+        if str(getattr(context, "counseling_context_thread_id", "") or "").strip():
+            context.tools = list(COUNSELING_RUNTIME_TOOLS)
+            context.knowledges = []
+            context.mcps = []
+            context.skills = []
+            context.preload_skills = []
+            context.subagents = []
+            setattr(context, "_visible_knowledge_bases", [])
+            setattr(context, "_effective_skill_slugs", [])
+            setattr(context, "_runtime_skills", {})
+            setattr(context, "_preloaded_skills", [])
+            setattr(context, "_preloaded_skill_contents", {})
     return context

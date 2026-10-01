@@ -4,12 +4,12 @@ from typing import Protocol
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from counseling.students.repository import StudentRepository
-from counseling.storage.models import CounselingAuditEvent
-from counseling.identity.permissions import BusinessCapability, resolve_business_capabilities
-from counseling.identity.models import User
 from yuxi.utils.datetime_utils import format_utc_datetime
+
+from counseling.identity.models import User
+from counseling.identity.permissions import BusinessCapability, resolve_business_capabilities
+from counseling.storage.models import CounselingAuditEvent
+from counseling.students.repository import StudentRepository
 
 
 class ConversationPort(Protocol):
@@ -241,6 +241,7 @@ async def list_student_conversations(db: AsyncSession, actor: User, student_id: 
             "title": item.title,
             "agent_id": item.agent_id,
             "created_at": format_utc_datetime(item.created_at),
+            "work_item_id": (item.extra_metadata or {}).get("counseling", {}).get("work_item_id"),
         }
         for item in conversations
     ]

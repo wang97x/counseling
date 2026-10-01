@@ -121,8 +121,8 @@ class FakeKnowledgeFileRepository:
         return {"folder_1": 1}
 
 
-class FakeUserRepository:
-    async def list_by_uids(self, uids):
+class FakeIdentityReader:
+    async def list_by_uids(self, _db, uids):
         if "user_1" not in uids:
             return []
         return [
@@ -147,10 +147,7 @@ def patch_repositories(monkeypatch):
         "yuxi.repositories.knowledge_file_repository.KnowledgeFileRepository",
         FakeKnowledgeFileRepository,
     )
-    monkeypatch.setattr(
-        "counseling.identity.repositories.user.UserRepository",
-        FakeUserRepository,
-    )
+    monkeypatch.setattr("yuxi.identity._reader", FakeIdentityReader())
     monkeypatch.setattr(
         "yuxi.knowledge.manager.KnowledgeBaseFactory.is_type_supported",
         staticmethod(lambda _kb_type: True),

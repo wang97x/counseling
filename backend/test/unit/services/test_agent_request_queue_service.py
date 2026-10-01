@@ -13,9 +13,9 @@ from sqlalchemy import func as sa_func
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from yuxi.services.agent_request_queue_service import (
+    NOT_IMPLEMENTED_QUEUE_POLICIES,
     DispatchResult,
     IntakeResult,
-    NOT_IMPLEMENTED_QUEUE_POLICIES,
     cancel_queued_request,
     finalize_dispatch,
     finalize_intake,
@@ -870,7 +870,6 @@ async def test_intake_idempotent_returns_existing(session):
 @pytest.mark.asyncio
 async def test_intake_idempotent_rejects_cross_user(session):
     from fastapi import HTTPException
-
     from yuxi.services.input_message_service import build_chat_input_message
 
     await _seed_thread(session)
@@ -887,13 +886,12 @@ async def test_intake_idempotent_rejects_cross_user(session):
             agent_item=MagicMock(),
             agent_backend=MagicMock(),
         )
-    assert exc_info.value.status_code == 409
+    assert exc_info.value.status_code == 404
 
 
 @pytest.mark.asyncio
 async def test_intake_idempotent_rejects_scope_mismatch(session):
     from fastapi import HTTPException
-
     from yuxi.services.input_message_service import build_chat_input_message
     from yuxi.storage.postgres.models_business import Conversation
 

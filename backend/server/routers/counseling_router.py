@@ -2,25 +2,24 @@
 
 from datetime import datetime
 from typing import Literal
-
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
-from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from counseling.identity.http.dependencies import get_db, get_required_user
-from counseling.integrations.yuxi import (
-    YuxiConversationAdapter,
-    YuxiDocumentParserAdapter,
-    YuxiGenerationAdapter,
-    YuxiObjectStorageAdapter,
+from counseling.ai_work.service import (
+    AIWorkConflictError,
+    confirm_material,
+    create_work_item,
+    get_material_content,
+    import_material,
+    list_materials,
+    preflight_material,
+    reject_material,
 )
 from counseling.documents.service import (
+    ConsultationContent,
     CounselingConflictError,
     CounselingGenerationError,
-    ConsultationContent,
     SummaryDocument,
+    add_record_correction,
     build_archive_preview,
     confirm_archive,
     confirm_manual_record,
@@ -30,12 +29,20 @@ from counseling.documents.service import (
     get_record_draft,
     list_record_drafts,
     list_timeline,
-    add_record_correction,
+    update_manual_record_draft,
     update_parsed_text,
     update_summary,
-    update_manual_record_draft,
     upload_record_draft,
 )
+from counseling.identity.http.dependencies import get_db, get_required_user
+from counseling.identity.models import User
+from counseling.integrations.yuxi import (
+    YuxiConversationAdapter,
+    YuxiDocumentParserAdapter,
+    YuxiGenerationAdapter,
+    YuxiObjectStorageAdapter,
+)
+from counseling.risks.service import RiskConflictError, create_risk_event, list_risk_events
 from counseling.students.service import (
     StudentConflictError,
     close_student,
@@ -46,10 +53,17 @@ from counseling.students.service import (
     list_students,
     update_student,
 )
-from counseling.risks.service import RiskConflictError, create_risk_event, list_risk_events
-from counseling.identity.models import User
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
-counseling = APIRouter(prefix="/counseling/students", tags=["counseling"])
+from server.routers.counseling_governance_router import require_acknowledged_counseling_user
+
+counseling = APIRouter(
+    prefix="/counseling/students",
+    tags=["counseling"],
+    dependencies=[Depends(require_acknowledged_counseling_user)],
+)
 
 
 class StudentCreate(BaseModel):
@@ -81,6 +95,45 @@ class StudentConversationCreate(BaseModel):
     title: str | None = Field(None, max_length=200)
     agent_id: str
     background_snapshot: str = Field(max_length=10_000)
+
+
+class AIWorkItemCreate(BaseModel):
+    """从当前档案创建一次独立 AI 协作任务。"""
+
+    model_config = ConfigDict(extra="forbid")
+    request_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    instruction: str = Field(min_length=1, max_length=10000)
+
+
+class MaterialImportRequest(BaseModel):
+    """从指定 Run 回填已展示的 Artifact。"""
+
+    model_config = ConfigDict(extra="forbid")
+    request_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    run_id: str = Field(min_length=1, max_length=64)
+    path: str = Field(min_length=1, max_length=1024)
+
+
+class MaterialPreflightRequest(BaseModel):
+    """预检指定 Run 的已展示 Artifact。"""
+
+    model_config = ConfigDict(extra="forbid")
+    run_id: str = Field(min_length=1, max_length=64)
+    path: str = Field(min_length=1, max_length=1024)
+
+
+class MaterialConfirmRequest(BaseModel):
+    """人工确认材料。"""
+
+    model_config = ConfigDict(extra="forbid")
+    confirmation_key: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+
+
+class MaterialRejectRequest(BaseModel):
+    """人工拒绝材料。"""
+
+    model_config = ConfigDict(extra="forbid")
+    request_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
 
 
 class StudentClose(BaseModel):
@@ -175,7 +228,9 @@ def _raise_counseling_error(exc: Exception) -> None:
         code = 403
     elif isinstance(exc, LookupError):
         code = 404
-    elif isinstance(exc, (FileExistsError, CounselingConflictError, RiskConflictError, StudentConflictError)):
+    elif isinstance(
+        exc, (FileExistsError, AIWorkConflictError, CounselingConflictError, RiskConflictError, StudentConflictError)
+    ):
         code = 409
     elif isinstance(exc, CounselingGenerationError):
         code = 502
@@ -602,4 +657,143 @@ async def list_timeline_route(
     try:
         return await list_timeline(db, actor, student_id)
     except (PermissionError, LookupError) as exc:
+        _raise_counseling_error(exc)
+
+
+@counseling.post("/{student_id}/ai-work-items", status_code=status.HTTP_201_CREATED)
+async def create_ai_work_item_route(
+    student_id: int,
+    payload: AIWorkItemCreate,
+    actor: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """冻结已确认事实并创建独立协作会话。"""
+    try:
+        return await create_work_item(
+            db,
+            actor,
+            student_id,
+            request_id=payload.request_id,
+            instruction=payload.instruction,
+            port=YuxiConversationAdapter(),
+        )
+    except (PermissionError, LookupError, ValueError, AIWorkConflictError) as exc:
+        _raise_counseling_error(exc)
+
+
+@counseling.post("/{student_id}/ai-work-items/{work_item_id}/materials/preflight")
+async def preflight_ai_material_route(
+    student_id: int,
+    work_item_id: str,
+    payload: MaterialPreflightRequest,
+    actor: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """回填前验证来源并返回真实文件元数据。"""
+    try:
+        return await preflight_material(
+            db,
+            actor,
+            student_id,
+            work_item_id,
+            run_id=payload.run_id,
+            path=payload.path,
+            port=YuxiConversationAdapter(),
+        )
+    except (PermissionError, LookupError, ValueError, AIWorkConflictError) as exc:
+        _raise_counseling_error(exc)
+
+
+@counseling.post("/{student_id}/ai-work-items/{work_item_id}/materials/import", status_code=status.HTTP_201_CREATED)
+async def import_ai_material_route(
+    student_id: int,
+    work_item_id: str,
+    payload: MaterialImportRequest,
+    actor: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """把指定 Run 成功展示的文件导入待整理区。"""
+    try:
+        return await import_material(
+            db,
+            actor,
+            student_id,
+            work_item_id,
+            request_id=payload.request_id,
+            run_id=payload.run_id,
+            path=payload.path,
+            port=YuxiConversationAdapter(),
+            storage=YuxiObjectStorageAdapter(),
+        )
+    except (PermissionError, LookupError, ValueError, AIWorkConflictError) as exc:
+        _raise_counseling_error(exc)
+
+
+@counseling.get("/{student_id}/materials")
+async def list_materials_route(
+    student_id: int, actor: User = Depends(get_required_user), db: AsyncSession = Depends(get_db)
+):
+    """返回待整理和已确认材料。"""
+    try:
+        return await list_materials(db, actor, student_id)
+    except (PermissionError, LookupError) as exc:
+        _raise_counseling_error(exc)
+
+
+@counseling.get("/{student_id}/materials/{material_id}/content")
+async def material_content_route(
+    student_id: int,
+    material_id: str,
+    mode: Literal["preview", "download"] = "preview",
+    actor: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """鉴权后预览或下载档案材料。"""
+    try:
+        item, data = await get_material_content(db, actor, student_id, material_id, YuxiObjectStorageAdapter())
+    except (PermissionError, LookupError) as exc:
+        _raise_counseling_error(exc)
+    disposition = "inline" if mode == "preview" else "attachment"
+    encoded = quote(item.file_name)
+    return Response(
+        content=data,
+        media_type=item.content_type,
+        headers={"Content-Disposition": f"{disposition}; filename*=UTF-8''{encoded}"},
+    )
+
+
+@counseling.post("/{student_id}/materials/{material_id}/confirm")
+async def confirm_material_route(
+    student_id: int,
+    material_id: str,
+    payload: MaterialConfirmRequest,
+    actor: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """人工确认材料进入档案材料列表。"""
+    try:
+        return await confirm_material(
+            db,
+            actor,
+            student_id,
+            material_id,
+            payload.confirmation_key,
+            YuxiObjectStorageAdapter(),
+        )
+    except (PermissionError, LookupError, ValueError, AIWorkConflictError) as exc:
+        _raise_counseling_error(exc)
+
+
+@counseling.post("/{student_id}/materials/{material_id}/reject")
+async def reject_material_route(
+    student_id: int,
+    material_id: str,
+    payload: MaterialRejectRequest,
+    actor: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """拒绝待整理材料并保留审计对象。"""
+    try:
+        return await reject_material(db, actor, student_id, material_id, payload.request_id)
+    except (PermissionError, LookupError, ValueError, AIWorkConflictError) as exc:
         _raise_counseling_error(exc)

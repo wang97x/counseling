@@ -103,7 +103,8 @@ class DashboardService:
     async def get_conversation_detail(self, thread_id: str) -> dict[str, Any] | None:
         """获取指定会话完整消息流水与统计。"""
         conversation = await self.conv_repo.get_conversation_by_thread_id(thread_id)
-        if not conversation:
+        counseling = ((conversation.extra_metadata or {}).get("counseling") or {}) if conversation else {}
+        if not conversation or counseling.get("student_id"):
             return None
 
         messages = await self.conv_repo.get_messages(conversation.id)

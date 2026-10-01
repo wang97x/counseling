@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from deepagents.backends import CompositeBackend
+from deepagents.backends.filesystem import FilesystemBackend
+from deepagents.backends.protocol import DeleteResult, EditResult, FileUploadResponse, WriteResult
 from deepagents.middleware.filesystem import (
     TOOLS_EXCLUDED_FROM_EVICTION,
     FilesystemMiddleware,
@@ -11,6 +13,7 @@ from deepagents.middleware.filesystem import (
 
 from yuxi.agents.backends.paths import runtime_workdir_path
 from yuxi.agents.skills.service import refresh_user_skill_projection_async
+from yuxi.workspace.filesystem import PrivateProjectionStore
 
 from .sandbox import ProvisionerSandboxBackend
 
@@ -60,6 +63,7 @@ class _BackendScope:
     runtime_scope_id: str
     workdir_relative_path: str
     uid: str
+    counseling_context_thread_id: str | None = None
 
     @property
     def workdir_path(self) -> str:
@@ -88,6 +92,7 @@ class _BackendScope:
             runtime_scope_id=runtime_scope_id,
             workdir_relative_path=relative_path,
             uid=uid,
+            counseling_context_thread_id=string_value("counseling_context_thread_id"),
         )
 
     def create_backend(self) -> CompositeBackend:
@@ -95,6 +100,12 @@ class _BackendScope:
             raise ValueError("workdir path is required in runtime context")
         # artifacts_root 指向 outputs 目录：Filesystem/Summarization middleware 由此
         # 派生 large_tool_results 与 conversation_history 前缀，与 Yuxi 契约一致。
+        routes = {}
+        if self.counseling_context_thread_id:
+            context_root = PrivateProjectionStore(self.uid, "counseling-ai-context").directory(
+                self.counseling_context_thread_id
+            )
+            routes["/.counseling/"] = _ReadOnlyFilesystemBackend(root_dir=context_root)
         return CompositeBackend(
             default=ProvisionerSandboxBackend(
                 thread_id=self.runtime_scope_id,
@@ -102,9 +113,27 @@ class _BackendScope:
                 workdir_path=self.workdir_relative_path,
                 create_if_missing=True,
             ),
-            routes={},
+            routes=routes,
             artifacts_root=f"{self.workdir_path.rstrip('/')}/outputs",
         )
+
+
+class _ReadOnlyFilesystemBackend(FilesystemBackend):
+    """把服务端投影目录暴露为只读虚拟文件树。"""
+
+    _ERROR = "Error: counseling context is read-only"
+
+    def write(self, file_path: str, content: str) -> WriteResult:
+        return WriteResult(error=self._ERROR)
+
+    def edit(self, file_path: str, old_string: str, new_string: str, replace_all: bool = False) -> EditResult:
+        return EditResult(error=self._ERROR)
+
+    def delete(self, file_path: str) -> DeleteResult:
+        return DeleteResult(error=self._ERROR)
+
+    def upload_files(self, files: list[tuple[str, bytes]]) -> list[FileUploadResponse]:
+        return [FileUploadResponse(path=path, error="permission_denied") for path, _content in files]
 
 
 async def sync_agent_context_skills(context) -> None:

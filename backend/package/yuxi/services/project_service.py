@@ -70,6 +70,8 @@ async def create_project_record(
         try:
             normalized_path = normalize_workdir_path(workdir_path)
             await _lock_project_workdir_changes(db=db, uid=str(uid))
+            if await ProjectRepository(db).is_counseling_workdir_for_user(str(uid), normalized_path):
+                raise HTTPException(status_code=403, detail="档案 AI 协作目录不能链接为通用 Project")
             Workdir.open_existing(str(uid), normalized_path)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail="目录不存在") from exc

@@ -5,8 +5,10 @@ from uuid import UUID
 
 import pytest
 from fastapi import HTTPException
-
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from yuxi.repositories.project_repository import ProjectRepository
 from yuxi.services import project_service as svc
+from yuxi.storage.postgres.models_business import Base, Conversation, Project
 from yuxi.workspace.paths import ensure_user_workspace, user_workspace_dir
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.unit]
@@ -198,6 +200,39 @@ async def test_linked_project_rejects_file_and_symlink(monkeypatch, tmp_path: Pa
         assert exc.value.status_code == 400
 
 
+async def test_linked_project_rejects_counseling_owned_workdir(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr("yuxi.workspace.paths.get_user_data_dir", lambda: tmp_path)
+    ensure_user_workspace("user-1")
+    target = user_workspace_dir("user-1") / "projects" / "counseling"
+    target.mkdir(parents=True)
+
+    class Repository:
+        def __init__(self, _db):
+            pass
+
+        async def get_by_idempotency_key(self, _request_id, _uid):
+            return None
+
+        async def is_counseling_workdir_for_user(self, uid, workdir_path):
+            assert uid == "user-1"
+            assert workdir_path == "projects/counseling"
+            return True
+
+    monkeypatch.setattr(svc, "ProjectRepository", Repository)
+
+    with pytest.raises(HTTPException) as exc:
+        await svc.create_project_view(
+            uid="user-1",
+            request_id="request-counseling-alias",
+            name="Forbidden",
+            directory_mode="linked",
+            workdir_path="projects/counseling",
+            db=_Db(),
+        )
+
+    assert exc.value.status_code == 403
+
+
 async def test_history_candidates_only_expose_resolved_directory_shortcuts(monkeypatch):
     updated_at = datetime(2026, 8, 22, 12, 0, 0)
     first = SimpleNamespace(
@@ -256,6 +291,62 @@ async def test_history_candidates_only_expose_resolved_directory_shortcuts(monke
         ],
         "has_more": False,
     }
+
+
+async def test_history_candidates_exclude_counseling_conversations():
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with factory() as db:
+        ordinary_project = Project(
+            id="p-ordinary",
+            uid="user-1",
+            selection_status="implicit",
+            directory_mode="managed",
+            workdir_path="projects/ordinary",
+        )
+        counseling_project = Project(
+            id="p-counseling",
+            uid="user-1",
+            selection_status="implicit",
+            directory_mode="managed",
+            workdir_path="projects/counseling",
+            status="deleted",
+        )
+        db.add_all(
+            [
+                ordinary_project,
+                counseling_project,
+                Conversation(
+                    thread_id="ordinary",
+                    project_id=ordinary_project.id,
+                    uid="user-1",
+                    agent_id="assistant",
+                    status="active",
+                ),
+                Conversation(
+                    thread_id="counseling",
+                    project_id=counseling_project.id,
+                    uid="user-1",
+                    agent_id="assistant",
+                    status="deleted",
+                    extra_metadata={"counseling": {"student_id": 7}},
+                ),
+            ]
+        )
+        await db.commit()
+
+        candidates = await ProjectRepository(db).list_history_candidates("user-1")
+        counseling_owned = await ProjectRepository(db).is_counseling_workdir_for_user(
+            "user-1", "projects/counseling"
+        )
+
+    await engine.dispose()
+    assert [(conversation.thread_id, path) for conversation, path in candidates] == [
+        ("ordinary", "projects/ordinary")
+    ]
+    assert counseling_owned is True
 
 
 async def test_rename_project_updates_only_active_selectable_project(monkeypatch):

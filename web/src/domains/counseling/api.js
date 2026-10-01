@@ -12,7 +12,32 @@ const consultationDraftUrl = (studentId, draftId) => (
 export const counselingApi = {
   listStudents: () => apiGet(root),
   listConversations: (id) => apiGet(`${studentRoot(id)}/conversations`),
+  getDataUseNotice: () => apiGet('/api/counseling/data-use-notice'),
+  acknowledgeDataUseNotice: (version) => apiPost(
+    '/api/counseling/data-use-notice/acknowledgments', { version }),
   createConversation: (studentId, payload) => apiPost(`${studentRoot(studentId)}/conversations`, payload),
+  createAIWorkItem: (studentId, payload) => apiPost(`${studentRoot(studentId)}/ai-work-items`, payload),
+  preflightMaterial: (studentId, workItemId, payload) => apiPost(
+    `${studentRoot(studentId)}/ai-work-items/${encodeURIComponent(workItemId)}/materials/preflight`,
+    payload,
+  ),
+  importMaterial: (studentId, workItemId, payload) => apiPost(
+    `${studentRoot(studentId)}/ai-work-items/${encodeURIComponent(workItemId)}/materials/import`,
+    payload,
+  ),
+  listMaterials: (studentId) => apiGet(`${studentRoot(studentId)}/materials`),
+  materialContentUrl: (studentId, materialId, mode = 'preview') => (
+    `${studentRoot(studentId)}/materials/${encodeURIComponent(materialId)}/content?mode=${encodeURIComponent(mode)}`
+  ),
+  getMaterialContent: (studentId, materialId, mode = 'preview') => apiGet(
+    `${studentRoot(studentId)}/materials/${encodeURIComponent(materialId)}/content?mode=${encodeURIComponent(mode)}`,
+    {}, true, 'blob'),
+  confirmMaterial: (studentId, materialId, payload) => apiPost(
+    `${studentRoot(studentId)}/materials/${encodeURIComponent(materialId)}/confirm`, payload,
+  ),
+  rejectMaterial: (studentId, materialId, payload) => apiPost(
+    `${studentRoot(studentId)}/materials/${encodeURIComponent(materialId)}/reject`, payload,
+  ),
   getStudent: (id) => apiGet(studentRoot(id)),
   createStudent: (payload) => apiPost(root, payload),
   updateStudent: (id, payload) => apiPut(studentRoot(id), payload),

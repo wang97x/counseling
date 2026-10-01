@@ -233,6 +233,9 @@ class SubagentRunService:
             "tool_call_id": tool_call_id,
             "subagent_name": scope.agent_item.name,
             "parent_thread_id": creator_run.conversation_thread_id,
+            "counseling_context_thread_id": (creator_run.input_payload.get("runtime") or {}).get(
+                "counseling_context_thread_id"
+            ),
         }
         input_payload = {
             "model_spec": resolved_model_spec,
