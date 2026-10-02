@@ -34,14 +34,16 @@ export function createCounselingApiAdapter() {
     },
 
     async getWorkspace(studentId) {
-      const [detail, timeline, drafts, materials, scales, assessments, appointments] = await Promise.all([
-        counselingApi.getStudent(studentId),
-        counselingApi.getTimeline(studentId),
-        counselingApi.listRecordDrafts(studentId),
-        counselingApi.listMaterials(studentId),
-        counselingApi.listScales(),
-        counselingApi.listAssessments(studentId),
-        counselingApi.listAppointments(studentId),
+      const [
+        detail, timeline, drafts, materials, scales, assessments, appointments,
+        plans, crisisCases, referrals, riskHints,
+      ] = await Promise.all([
+        counselingApi.getStudent(studentId), counselingApi.getTimeline(studentId),
+        counselingApi.listRecordDrafts(studentId), counselingApi.listMaterials(studentId),
+        counselingApi.listScales(), counselingApi.listAssessments(studentId),
+        counselingApi.listAppointments(studentId), counselingApi.listPlans(studentId),
+        counselingApi.listCrisisCases(studentId), counselingApi.listReferrals(studentId),
+        counselingApi.listRiskHints(studentId),
       ])
       const items = timeline?.timeline || timeline?.items || timeline || []
       const draftItems = drafts?.drafts || drafts?.items || drafts || []
@@ -54,9 +56,11 @@ export function createCounselingApiAdapter() {
           drafts: draftItems.map(mapApiRecordDraft)
             .filter((item) => item.recordKind === 'manual' && item.status === 'draft'),
           materials: materials?.materials || materials?.items || materials || [],
-          scales: scales?.items || scales || [],
-          assessments: assessments?.items || assessments || [],
-          appointments: appointments?.items || appointments || [],
+          scales: scales?.items || scales || [], assessments: assessments?.items || assessments || [],
+          appointments: appointments?.items || appointments || [], plans: plans?.items || plans || [],
+          crisisCases: crisisCases?.items || crisisCases || [],
+          referrals: referrals?.items || referrals || [],
+          riskHints: riskHints?.items || riskHints || [],
         },
       }
     },
@@ -131,6 +135,70 @@ export function createCounselingApiAdapter() {
 
     async getDepartmentSummary() {
       return { status: 'ok', data: await counselingApi.getDepartmentSummary() }
+    },
+
+    async createPlan(studentId, payload) {
+      return { status: 'ok', data: await counselingApi.createPlan(studentId, payload) }
+    },
+
+    async createCrisisCase(studentId, payload) {
+      return { status: 'ok', data: await counselingApi.createCrisisCase(studentId, payload) }
+    },
+
+    async appendCrisisCaseEvent(studentId, caseId, payload) {
+      return {
+        status: 'ok',
+        data: await counselingApi.appendCrisisCaseEvent(studentId, caseId, payload),
+      }
+    },
+
+    async createReferral(studentId, payload) {
+      return { status: 'ok', data: await counselingApi.createReferral(studentId, payload) }
+    },
+
+    async completeReferralFollowUp(studentId, referralId, payload) {
+      return {
+        status: 'ok',
+        data: await counselingApi.completeReferralFollowUp(studentId, referralId, payload),
+      }
+    },
+
+    async listCrisisProtocols() {
+      return { status: 'ok', data: await counselingApi.listCrisisProtocols() }
+    },
+
+    async publishCrisisProtocol(payload) {
+      return { status: 'ok', data: await counselingApi.publishCrisisProtocol(payload) }
+    },
+
+    async listDepartmentReferrals() {
+      return { status: 'ok', data: await counselingApi.listDepartmentReferrals() }
+    },
+
+    async decideReferral(referralId, payload) {
+      return { status: 'ok', data: await counselingApi.decideReferral(referralId, payload) }
+    },
+
+    async createRiskHint(studentId, payload) {
+      return { status: 'ok', data: await counselingApi.createRiskHint(studentId, payload) }
+    },
+
+    async reviewRiskHint(studentId, hintId, payload) {
+      return {
+        status: 'ok',
+        data: await counselingApi.reviewRiskHint(studentId, hintId, payload),
+      }
+    },
+
+    async listRiskHintEvaluations() {
+      return { status: 'ok', data: await counselingApi.listRiskHintEvaluations() }
+    },
+
+    async publishRiskHintEvaluation(payload) {
+      return {
+        status: 'ok',
+        data: await counselingApi.publishRiskHintEvaluation(payload),
+      }
     },
 
     async createRecordDraft(studentId, file, requestId) {

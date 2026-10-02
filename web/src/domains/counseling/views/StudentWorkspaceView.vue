@@ -23,6 +23,7 @@ const recordOpen = ref(false)
 const assessmentOpen = ref(false)
 const appointmentOpen = ref(false)
 const riskOpen = ref(false)
+const riskHintReviewOpen = ref(false)
 const correctionOpen = ref(false)
 const closeOpen = ref(false)
 const aiOpen = ref(false)
@@ -30,6 +31,13 @@ const busy = ref(false)
 const editForm = reactive({ displayName: '', className: '', chiefConcern: '' })
 const recordForm = reactive(emptyRecordForm())
 const riskForm = reactive({ level: 'watch', basis: '', actionTaken: '', status: 'monitoring' })
+const riskHintReviewForm = reactive({
+  id: '',
+  version: 0,
+  requestId: '',
+  decision: 'accepted',
+  note: '',
+})
 const assessmentForm = reactive({
   administeredAt: localDateTimeValue(),
   requestId: '',
@@ -218,6 +226,32 @@ async function saveRisk() {
     await loadWorkspace()
     message.success('人工风险记录已保存')
   }, '保存风险记录失败')
+}
+
+function openRiskHintReview(item) {
+  Object.assign(riskHintReviewForm, {
+    id: item.id,
+    version: item.version,
+    requestId: crypto.randomUUID(),
+    decision: 'accepted',
+    note: '',
+  })
+  riskHintReviewOpen.value = true
+}
+
+async function saveRiskHintReview() {
+  if (!riskHintReviewForm.note.trim()) return message.error('请填写人工核实说明')
+  await runAction(async () => {
+    await service.reviewRiskHint(studentId.value, riskHintReviewForm.id, {
+      request_id: riskHintReviewForm.requestId,
+      expected_version: riskHintReviewForm.version,
+      decision: riskHintReviewForm.decision,
+      note: riskHintReviewForm.note.trim(),
+    })
+    riskHintReviewOpen.value = false
+    await loadWorkspace()
+    message.success('风险提示核实结果已保存')
+  }, '保存风险提示核实结果失败')
 }
 
 function openAssessment() {
@@ -418,6 +452,7 @@ function timelineLabel(item) {
     conversation: '历史会话',
     assessment: '固定量表',
     appointment: '内部预约',
+    risk_hint: 'AI 风险提示核实',
   }[item.type] || '档案记录'
 }
 
@@ -425,7 +460,10 @@ watch(studentId, (id) => {
   operations.invalidate()
   materialConfirmationKeys.clear()
   materialRejectionKeys.clear()
-  for (const modal of [editOpen, recordOpen, riskOpen, correctionOpen, closeOpen, aiOpen, assessmentOpen, appointmentOpen]) modal.value = false
+  for (const modal of [
+    editOpen, recordOpen, riskOpen, riskHintReviewOpen, correctionOpen, closeOpen,
+    aiOpen, assessmentOpen, appointmentOpen,
+  ]) modal.value = false
   busy.value = false
   workspace.value = null
   if (id) void loadWorkspace(id)
@@ -484,6 +522,32 @@ watch(studentId, (id) => {
             message="当前辅导阶段已结束"
             :description="workspace.student.closureNote || '未填写结束说明'"
           />
+        </section>
+
+        <section class="panel" aria-label="AI 风险提示">
+          <div class="section-heading">
+            <div><span>必须由辅导员核实</span><h3>AI 风险提示</h3></div>
+            <ShieldAlert :size="21" />
+          </div>
+          <a-alert
+            type="warning"
+            show-icon
+            message="提示不会自动改变风险等级、成立危机工单或执行干预。"
+          />
+          <a-empty v-if="!workspace.riskHints.length" description="暂无风险提示" />
+          <div v-else class="record-list">
+            <article v-for="item in workspace.riskHints" :key="item.id">
+              <div>
+                <strong>评分 {{ Number(item.score).toFixed(2) }}</strong>
+                <span>{{ item.status === 'pending_review' ? '待人工核实' : item.status === 'accepted' ? '已采纳' : '已拒绝' }}</span>
+              </div>
+              <p>{{ item.evidence_summary }}</p>
+              <p v-if="item.decision_note">核实说明：{{ item.decision_note }}</p>
+              <a-button v-if="item.status === 'pending_review'" type="primary" size="small" @click="openRiskHintReview(item)">
+                人工核实
+              </a-button>
+            </article>
+          </div>
         </section>
 
         <section v-if="activeDrafts.length" class="panel">
@@ -714,6 +778,21 @@ watch(studentId, (id) => {
         </div>
         <a-form-item label="人工判断依据" required><a-textarea v-model:value="riskForm.basis" :rows="4" maxlength="10000" /></a-form-item>
         <a-form-item label="已采取行动"><a-textarea v-model:value="riskForm.actionTaken" :rows="3" maxlength="10000" /></a-form-item>
+      </a-form>
+    </a-modal>
+
+    <a-modal v-model:open="riskHintReviewOpen" title="人工核实 AI 风险提示" :confirm-loading="busy" @ok="saveRiskHintReview">
+      <a-alert type="warning" show-icon message="采纳提示只记录核实结果；人工风险事件和危机工单仍需另行创建。" />
+      <a-form layout="vertical" class="modal-form">
+        <a-form-item label="核实决定" required>
+          <a-radio-group v-model:value="riskHintReviewForm.decision">
+            <a-radio value="accepted">采纳提示</a-radio>
+            <a-radio value="rejected">拒绝提示</a-radio>
+          </a-radio-group>
+        </a-form-item>
+        <a-form-item label="核实说明" required>
+          <a-textarea v-model:value="riskHintReviewForm.note" :rows="4" maxlength="10000" />
+        </a-form-item>
       </a-form>
     </a-modal>
 

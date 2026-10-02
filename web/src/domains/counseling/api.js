@@ -23,6 +23,39 @@ export const counselingApi = {
   updateAppointment: (studentId, appointmentId, payload) => apiPut(
     `${studentRoot(studentId)}/appointments/${encodeURIComponent(appointmentId)}`, payload,
   ),
+  listPlans: (studentId) => apiGet(`${studentRoot(studentId)}/plans`),
+  createPlan: (studentId, payload) => apiPost(`${studentRoot(studentId)}/plans`, payload),
+  listCrisisCases: (studentId) => apiGet(`${studentRoot(studentId)}/crisis-cases`),
+  createCrisisCase: (studentId, payload) => apiPost(
+    `${studentRoot(studentId)}/crisis-cases`, payload,
+  ),
+  appendCrisisCaseEvent: (studentId, caseId, payload) => apiPost(
+    `${studentRoot(studentId)}/crisis-cases/${encodeURIComponent(caseId)}/events`, payload,
+  ),
+  listReferrals: (studentId) => apiGet(`${studentRoot(studentId)}/referrals`),
+  createReferral: (studentId, payload) => apiPost(
+    `${studentRoot(studentId)}/referrals`, payload,
+  ),
+  completeReferralFollowUp: (studentId, referralId, payload) => apiPost(
+    `${studentRoot(studentId)}/referrals/${encodeURIComponent(referralId)}/follow-up`, payload,
+  ),
+  listRiskHints: (studentId) => apiGet(`${studentRoot(studentId)}/risk-hints`),
+  createRiskHint: (studentId, payload) => apiPost(`${studentRoot(studentId)}/risk-hints`, payload),
+  reviewRiskHint: (studentId, hintId, payload) => apiPost(
+    `${studentRoot(studentId)}/risk-hints/${encodeURIComponent(hintId)}/review`, payload,
+  ),
+  listRiskHintEvaluations: () => apiGet('/api/counseling/admin/risk-hint-evaluations'),
+  publishRiskHintEvaluation: (payload) => apiPost(
+    '/api/counseling/admin/risk-hint-evaluations', payload,
+  ),
+  listCrisisProtocols: () => apiGet('/api/counseling/admin/crisis-protocols'),
+  publishCrisisProtocol: (payload) => apiPost(
+    '/api/counseling/admin/crisis-protocols', payload,
+  ),
+  listDepartmentReferrals: () => apiGet('/api/counseling/admin/referrals'),
+  decideReferral: (referralId, payload) => apiPost(
+    `/api/counseling/admin/referrals/${encodeURIComponent(referralId)}/decision`, payload,
+  ),
   updateAppointmentStatus: (studentId, appointmentId, payload) => apiPost(
     `${studentRoot(studentId)}/appointments/${encodeURIComponent(appointmentId)}/status`, payload,
   ),

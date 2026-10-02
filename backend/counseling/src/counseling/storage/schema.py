@@ -1,9 +1,9 @@
 """心理辅导领域的 PostgreSQL Schema 版本与迁移。"""
 
 from sqlalchemy import text
-from yuxi.storage.postgres.manager import PostgresManager, pg_manager
+from yuxi.storage.postgres.manager import SCHEMA_VERSION_TABLE, PostgresManager, pg_manager
 
-COUNSELING_SCHEMA_VERSION = 8
+COUNSELING_SCHEMA_VERSION = 14
 COUNSELING_SCHEMA_V1_STATEMENTS = (
     """
     CREATE TABLE IF NOT EXISTS counseling_students (
@@ -446,16 +446,11 @@ COUNSELING_SCHEMA_V6_STATEMENTS = (
 )
 
 COUNSELING_SCHEMA_V7_STATEMENTS = (
-    "ALTER TABLE counseling_appointments ADD COLUMN IF NOT EXISTS "
-    "created_scheduled_start TIMESTAMP WITHOUT TIME ZONE",
-    "ALTER TABLE counseling_appointments ADD COLUMN IF NOT EXISTS "
-    "created_scheduled_end TIMESTAMP WITHOUT TIME ZONE",
-    "ALTER TABLE counseling_appointments ADD COLUMN IF NOT EXISTS "
-    "created_appointment_type VARCHAR(32)",
-    "ALTER TABLE counseling_appointments ADD COLUMN IF NOT EXISTS "
-    "created_location TEXT",
-    "ALTER TABLE counseling_appointments ADD COLUMN IF NOT EXISTS "
-    "created_note TEXT",
+    "ALTER TABLE counseling_appointments ADD COLUMN IF NOT EXISTS created_scheduled_start TIMESTAMP WITHOUT TIME ZONE",
+    "ALTER TABLE counseling_appointments ADD COLUMN IF NOT EXISTS created_scheduled_end TIMESTAMP WITHOUT TIME ZONE",
+    "ALTER TABLE counseling_appointments ADD COLUMN IF NOT EXISTS created_appointment_type VARCHAR(32)",
+    "ALTER TABLE counseling_appointments ADD COLUMN IF NOT EXISTS created_location TEXT",
+    "ALTER TABLE counseling_appointments ADD COLUMN IF NOT EXISTS created_note TEXT",
     """
     UPDATE counseling_appointments
     SET created_scheduled_start = COALESCE(created_scheduled_start, scheduled_start),
@@ -493,12 +488,562 @@ COUNSELING_SCHEMA_V8_STATEMENTS = (
     END;
     $$
     """,
-    "DROP TRIGGER IF EXISTS trg_counseling_appointment_creation_intent_immutable "
-    "ON counseling_appointments",
+    "DROP TRIGGER IF EXISTS trg_counseling_appointment_creation_intent_immutable ON counseling_appointments",
     """
     CREATE TRIGGER trg_counseling_appointment_creation_intent_immutable
     BEFORE UPDATE ON counseling_appointments
     FOR EACH ROW EXECUTE FUNCTION reject_counseling_appointment_creation_intent_mutation()
+    """,
+)
+
+COUNSELING_SCHEMA_V9_STATEMENTS = (
+    """
+    CREATE TABLE IF NOT EXISTS counseling_plan_versions (
+        id VARCHAR(64) PRIMARY KEY,
+        student_id INTEGER NOT NULL REFERENCES counseling_students(id),
+        department_id INTEGER NOT NULL REFERENCES departments(id),
+        counselor_id INTEGER NOT NULL REFERENCES users(id),
+        version_no INTEGER NOT NULL,
+        stage_goals JSONB NOT NULL,
+        action_plan JSONB NOT NULL,
+        review_basis TEXT NOT NULL,
+        source_record_id VARCHAR(64) REFERENCES counseling_records(id),
+        source_assessment_id VARCHAR(64) REFERENCES counseling_assessment_results(id),
+        created_by INTEGER NOT NULL REFERENCES users(id),
+        request_id VARCHAR(64) NOT NULL,
+        created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+        CONSTRAINT uq_counseling_plan_student_version UNIQUE (student_id, version_no),
+        CONSTRAINT uq_counseling_plan_request UNIQUE (counselor_id, request_id)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS ix_counseling_plan_student ON counseling_plan_versions(student_id, version_no)",
+    """
+    CREATE TABLE IF NOT EXISTS counseling_crisis_protocols (
+        id VARCHAR(64) PRIMARY KEY,
+        department_id INTEGER NOT NULL REFERENCES departments(id),
+        version_no INTEGER NOT NULL,
+        title VARCHAR(200) NOT NULL,
+        content TEXT NOT NULL,
+        effective_from TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        expires_at TIMESTAMP WITHOUT TIME ZONE,
+        published_by INTEGER NOT NULL REFERENCES users(id),
+        request_id VARCHAR(64) NOT NULL,
+        created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+        CONSTRAINT uq_counseling_protocol_department_version UNIQUE (department_id, version_no),
+        CONSTRAINT uq_counseling_protocol_request UNIQUE (department_id, request_id),
+        CONSTRAINT ck_counseling_protocol_window CHECK (expires_at IS NULL OR expires_at > effective_from)
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS ix_counseling_protocol_active
+    ON counseling_crisis_protocols(department_id, effective_from)
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS counseling_crisis_cases (
+        id VARCHAR(64) PRIMARY KEY,
+        student_id INTEGER NOT NULL REFERENCES counseling_students(id),
+        department_id INTEGER NOT NULL REFERENCES departments(id),
+        counselor_id INTEGER NOT NULL REFERENCES users(id),
+        risk_event_id VARCHAR(64) NOT NULL REFERENCES counseling_risk_events(id),
+        protocol_id VARCHAR(64) NOT NULL REFERENCES counseling_crisis_protocols(id),
+        owner_id INTEGER NOT NULL REFERENCES users(id),
+        deadline_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        status VARCHAR(16) NOT NULL DEFAULT 'open',
+        version INTEGER NOT NULL DEFAULT 1,
+        request_id VARCHAR(64) NOT NULL,
+        created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+        CONSTRAINT uq_counseling_crisis_case_request UNIQUE (counselor_id, request_id),
+        CONSTRAINT uq_counseling_crisis_case_risk UNIQUE (risk_event_id),
+        CONSTRAINT ck_counseling_crisis_case_status CHECK (status IN ('open', 'reviewed', 'closed'))
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS ix_counseling_crisis_case_student ON counseling_crisis_cases(student_id, created_at)",
+    """
+    CREATE TABLE IF NOT EXISTS counseling_crisis_case_events (
+        id VARCHAR(64) PRIMARY KEY,
+        case_id VARCHAR(64) NOT NULL REFERENCES counseling_crisis_cases(id),
+        event_type VARCHAR(16) NOT NULL,
+        note TEXT NOT NULL,
+        actor_id INTEGER NOT NULL REFERENCES users(id),
+        request_id VARCHAR(64) NOT NULL,
+        created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+        CONSTRAINT uq_counseling_crisis_event_request UNIQUE (actor_id, request_id),
+        CONSTRAINT ck_counseling_crisis_event_type CHECK (event_type IN ('measure', 'review', 'close'))
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS ix_counseling_crisis_event_case ON counseling_crisis_case_events(case_id, created_at)",
+    """
+    CREATE TABLE IF NOT EXISTS counseling_referrals (
+        id VARCHAR(64) PRIMARY KEY,
+        student_id INTEGER NOT NULL REFERENCES counseling_students(id),
+        department_id INTEGER NOT NULL REFERENCES departments(id),
+        counselor_id INTEGER NOT NULL REFERENCES users(id),
+        reason TEXT NOT NULL,
+        authorization_status VARCHAR(16) NOT NULL,
+        material_scope JSONB NOT NULL,
+        status VARCHAR(16) NOT NULL DEFAULT 'pending',
+        decision_note TEXT,
+        decided_by INTEGER REFERENCES users(id),
+        decided_at TIMESTAMP WITHOUT TIME ZONE,
+        follow_up_at TIMESTAMP WITHOUT TIME ZONE,
+        follow_up_result TEXT,
+        completed_at TIMESTAMP WITHOUT TIME ZONE,
+        version INTEGER NOT NULL DEFAULT 1,
+        request_id VARCHAR(64) NOT NULL,
+        created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+        CONSTRAINT uq_counseling_referral_request UNIQUE (counselor_id, request_id),
+        CONSTRAINT ck_counseling_referral_authorization CHECK (authorization_status IN ('granted', 'denied')),
+        CONSTRAINT ck_counseling_referral_status CHECK (status IN ('pending', 'accepted', 'rejected', 'completed'))
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS ix_counseling_referral_student ON counseling_referrals(student_id, created_at)",
+    "CREATE INDEX IF NOT EXISTS ix_counseling_referral_department ON counseling_referrals(department_id, status)",
+    """
+    CREATE OR REPLACE FUNCTION reject_counseling_p2_history_mutation() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+    BEGIN
+        RAISE EXCEPTION 'counseling P2 history is immutable';
+    END;
+    $$
+    """,
+    "DROP TRIGGER IF EXISTS trg_counseling_plan_immutable ON counseling_plan_versions",
+    """
+    CREATE TRIGGER trg_counseling_plan_immutable BEFORE UPDATE OR DELETE ON counseling_plan_versions
+    FOR EACH ROW EXECUTE FUNCTION reject_counseling_p2_history_mutation()
+    """,
+    "DROP TRIGGER IF EXISTS trg_counseling_protocol_immutable ON counseling_crisis_protocols",
+    """
+    CREATE TRIGGER trg_counseling_protocol_immutable BEFORE UPDATE OR DELETE ON counseling_crisis_protocols
+    FOR EACH ROW EXECUTE FUNCTION reject_counseling_p2_history_mutation()
+    """,
+    "DROP TRIGGER IF EXISTS trg_counseling_crisis_event_immutable ON counseling_crisis_case_events",
+    """
+    CREATE TRIGGER trg_counseling_crisis_event_immutable BEFORE UPDATE OR DELETE ON counseling_crisis_case_events
+    FOR EACH ROW EXECUTE FUNCTION reject_counseling_p2_history_mutation()
+    """,
+    """
+    CREATE OR REPLACE FUNCTION reject_counseling_crisis_case_intent_mutation() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+    BEGIN
+        IF NEW.student_id IS DISTINCT FROM OLD.student_id
+           OR NEW.department_id IS DISTINCT FROM OLD.department_id
+           OR NEW.counselor_id IS DISTINCT FROM OLD.counselor_id
+           OR NEW.risk_event_id IS DISTINCT FROM OLD.risk_event_id
+           OR NEW.protocol_id IS DISTINCT FROM OLD.protocol_id
+           OR NEW.owner_id IS DISTINCT FROM OLD.owner_id
+           OR NEW.deadline_at IS DISTINCT FROM OLD.deadline_at
+           OR NEW.request_id IS DISTINCT FROM OLD.request_id THEN
+            RAISE EXCEPTION 'counseling crisis case intent is immutable';
+        END IF;
+        RETURN NEW;
+    END;
+    $$
+    """,
+    """
+    CREATE OR REPLACE FUNCTION reject_counseling_referral_intent_mutation() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+    BEGIN
+        IF NEW.student_id IS DISTINCT FROM OLD.student_id
+           OR NEW.department_id IS DISTINCT FROM OLD.department_id
+           OR NEW.counselor_id IS DISTINCT FROM OLD.counselor_id
+           OR NEW.reason IS DISTINCT FROM OLD.reason
+           OR NEW.authorization_status IS DISTINCT FROM OLD.authorization_status
+           OR NEW.material_scope IS DISTINCT FROM OLD.material_scope
+           OR NEW.follow_up_at IS DISTINCT FROM OLD.follow_up_at
+           OR NEW.request_id IS DISTINCT FROM OLD.request_id THEN
+            RAISE EXCEPTION 'counseling referral intent is immutable';
+        END IF;
+        RETURN NEW;
+    END;
+    $$
+    """,
+    "DROP TRIGGER IF EXISTS trg_counseling_crisis_case_intent_immutable ON counseling_crisis_cases",
+    """
+    CREATE TRIGGER trg_counseling_crisis_case_intent_immutable BEFORE UPDATE ON counseling_crisis_cases
+    FOR EACH ROW EXECUTE FUNCTION reject_counseling_crisis_case_intent_mutation()
+    """,
+    "DROP TRIGGER IF EXISTS trg_counseling_referral_intent_immutable ON counseling_referrals",
+    """
+    CREATE TRIGGER trg_counseling_referral_intent_immutable BEFORE UPDATE ON counseling_referrals
+    FOR EACH ROW EXECUTE FUNCTION reject_counseling_referral_intent_mutation()
+    """,
+)
+
+COUNSELING_SCHEMA_V10_STATEMENTS = (
+    """
+    CREATE TABLE IF NOT EXISTS counseling_risk_hint_evaluations (
+        id VARCHAR(64) PRIMARY KEY,
+        department_id INTEGER NOT NULL REFERENCES departments(id),
+        dataset_reference VARCHAR(256) NOT NULL,
+        dataset_fingerprint VARCHAR(64) NOT NULL,
+        model_reference VARCHAR(256) NOT NULL,
+        threshold DOUBLE PRECISION NOT NULL,
+        true_positive INTEGER NOT NULL,
+        false_negative INTEGER NOT NULL,
+        false_positive INTEGER NOT NULL,
+        true_negative INTEGER NOT NULL,
+        recall DOUBLE PRECISION NOT NULL,
+        false_positive_rate DOUBLE PRECISION NOT NULL,
+        passed BOOLEAN NOT NULL,
+        created_by INTEGER NOT NULL REFERENCES users(id),
+        request_id VARCHAR(64) NOT NULL,
+        created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+        CONSTRAINT uq_counseling_risk_hint_eval_request UNIQUE (department_id, request_id),
+        CONSTRAINT ck_counseling_risk_hint_eval_threshold CHECK (threshold >= 0 AND threshold <= 1),
+        CONSTRAINT ck_counseling_risk_hint_eval_recall CHECK (recall >= 0 AND recall <= 1),
+        CONSTRAINT ck_counseling_risk_hint_eval_fpr CHECK (false_positive_rate >= 0 AND false_positive_rate <= 1),
+        CONSTRAINT ck_counseling_risk_hint_eval_classes CHECK (
+            true_positive + false_negative > 0 AND false_positive + true_negative > 0
+        )
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS ix_counseling_risk_hint_eval_department
+    ON counseling_risk_hint_evaluations(department_id, created_at)
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS counseling_risk_hints (
+        id VARCHAR(64) PRIMARY KEY,
+        student_id INTEGER NOT NULL REFERENCES counseling_students(id),
+        department_id INTEGER NOT NULL REFERENCES departments(id),
+        counselor_id INTEGER NOT NULL REFERENCES users(id),
+        evaluation_id VARCHAR(64) NOT NULL REFERENCES counseling_risk_hint_evaluations(id),
+        protocol_id VARCHAR(64) NOT NULL REFERENCES counseling_crisis_protocols(id),
+        score DOUBLE PRECISION NOT NULL,
+        evidence_summary TEXT NOT NULL,
+        status VARCHAR(16) NOT NULL DEFAULT 'pending_review',
+        decision_note TEXT,
+        reviewed_by INTEGER REFERENCES users(id),
+        reviewed_at TIMESTAMP WITHOUT TIME ZONE,
+        decision_request_id VARCHAR(64),
+        version INTEGER NOT NULL DEFAULT 1,
+        request_id VARCHAR(64) NOT NULL,
+        created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+        CONSTRAINT uq_counseling_risk_hint_request UNIQUE (counselor_id, request_id),
+        CONSTRAINT uq_counseling_risk_hint_decision_request UNIQUE (reviewed_by, decision_request_id),
+        CONSTRAINT ck_counseling_risk_hint_score CHECK (score >= 0 AND score <= 1),
+        CONSTRAINT ck_counseling_risk_hint_status CHECK (status IN ('pending_review', 'accepted', 'rejected'))
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS ix_counseling_risk_hint_student
+    ON counseling_risk_hints(student_id, status, created_at)
+    """,
+    "DROP TRIGGER IF EXISTS trg_counseling_risk_hint_eval_immutable ON counseling_risk_hint_evaluations",
+    """
+    CREATE TRIGGER trg_counseling_risk_hint_eval_immutable
+    BEFORE UPDATE OR DELETE ON counseling_risk_hint_evaluations
+    FOR EACH ROW EXECUTE FUNCTION reject_counseling_p2_history_mutation()
+    """,
+    "DROP TRIGGER IF EXISTS trg_counseling_risk_hint_no_delete ON counseling_risk_hints",
+    """
+    CREATE TRIGGER trg_counseling_risk_hint_no_delete
+    BEFORE DELETE ON counseling_risk_hints
+    FOR EACH ROW EXECUTE FUNCTION reject_counseling_p2_history_mutation()
+    """,
+    """
+    CREATE OR REPLACE FUNCTION reject_counseling_risk_hint_mutation() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+    BEGIN
+        IF NEW.student_id IS DISTINCT FROM OLD.student_id
+           OR NEW.department_id IS DISTINCT FROM OLD.department_id
+           OR NEW.counselor_id IS DISTINCT FROM OLD.counselor_id
+           OR NEW.evaluation_id IS DISTINCT FROM OLD.evaluation_id
+           OR NEW.protocol_id IS DISTINCT FROM OLD.protocol_id
+           OR NEW.score IS DISTINCT FROM OLD.score
+           OR NEW.evidence_summary IS DISTINCT FROM OLD.evidence_summary
+           OR NEW.request_id IS DISTINCT FROM OLD.request_id
+           OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+            RAISE EXCEPTION 'counseling risk hint origin is immutable';
+        END IF;
+        IF OLD.status <> 'pending_review'
+           OR NEW.status NOT IN ('accepted', 'rejected')
+           OR NEW.version <> OLD.version + 1
+           OR NEW.reviewed_by IS NULL
+           OR NEW.reviewed_at IS NULL
+           OR NEW.decision_request_id IS NULL
+           OR NEW.decision_note IS NULL THEN
+            RAISE EXCEPTION 'counseling risk hint transition is invalid';
+        END IF;
+        RETURN NEW;
+    END;
+    $$
+    """,
+    "DROP TRIGGER IF EXISTS trg_counseling_risk_hint_mutation ON counseling_risk_hints",
+    """
+    CREATE TRIGGER trg_counseling_risk_hint_mutation
+    BEFORE UPDATE ON counseling_risk_hints
+    FOR EACH ROW EXECUTE FUNCTION reject_counseling_risk_hint_mutation()
+    """,
+)
+
+COUNSELING_SCHEMA_V11_STATEMENTS = (
+    "ALTER TABLE counseling_crisis_cases ADD COLUMN IF NOT EXISTS last_event_id VARCHAR(64)",
+    """
+    UPDATE counseling_crisis_cases AS cases SET last_event_id = (
+        SELECT id FROM counseling_crisis_case_events
+        WHERE case_id = cases.id ORDER BY created_at DESC, id DESC LIMIT 1
+    ) WHERE last_event_id IS NULL
+    """,
+    "ALTER TABLE counseling_risk_hint_evaluations DROP CONSTRAINT IF EXISTS ck_counseling_risk_hint_eval_consistent",
+    """
+    ALTER TABLE counseling_risk_hint_evaluations
+    ADD CONSTRAINT ck_counseling_risk_hint_eval_consistent CHECK (
+        true_positive >= 0 AND false_negative >= 0 AND false_positive >= 0 AND true_negative >= 0
+        AND abs(recall - true_positive::double precision / (true_positive + false_negative)) < 1e-12
+        AND abs(false_positive_rate - false_positive::double precision / (false_positive + true_negative)) < 1e-12
+        AND passed = (recall >= 0.95 AND false_positive_rate <= 0.05)
+    )
+    """,
+    """
+    CREATE OR REPLACE FUNCTION enforce_counseling_crisis_case_transition() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+    DECLARE event_row counseling_crisis_case_events%ROWTYPE;
+    BEGIN
+        IF NEW.version <> OLD.version + 1 OR NEW.last_event_id IS NULL
+           OR NEW.last_event_id IS NOT DISTINCT FROM OLD.last_event_id THEN
+            RAISE EXCEPTION 'counseling crisis case transition requires one new event and version';
+        END IF;
+        SELECT * INTO event_row FROM counseling_crisis_case_events
+        WHERE id = NEW.last_event_id AND case_id = NEW.id;
+        IF NOT FOUND OR NOT (
+            OLD.status = 'open' AND NEW.status = 'open' AND event_row.event_type = 'measure'
+            OR OLD.status = 'open' AND NEW.status = 'reviewed' AND event_row.event_type = 'review'
+            OR OLD.status = 'reviewed' AND NEW.status = 'reviewed' AND event_row.event_type = 'measure'
+            OR OLD.status = 'reviewed' AND NEW.status = 'closed' AND event_row.event_type = 'close'
+        ) THEN
+            RAISE EXCEPTION 'counseling crisis case transition is invalid';
+        END IF;
+        INSERT INTO counseling_audit_events
+            (student_id, actor_id, department_id, action, outcome, event_metadata)
+        VALUES (NEW.student_id, event_row.actor_id, NEW.department_id,
+                'crisis_case.' || event_row.event_type, 'success', jsonb_build_object('case_id', NEW.id));
+        RETURN NEW;
+    END;
+    $$
+    """,
+    "DROP TRIGGER IF EXISTS trg_counseling_crisis_case_transition ON counseling_crisis_cases",
+    """
+    CREATE TRIGGER trg_counseling_crisis_case_transition BEFORE UPDATE ON counseling_crisis_cases
+    FOR EACH ROW EXECUTE FUNCTION enforce_counseling_crisis_case_transition()
+    """,
+    """
+    CREATE OR REPLACE FUNCTION enforce_counseling_referral_transition() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+    BEGIN
+        IF NEW.version <> OLD.version + 1 THEN
+            RAISE EXCEPTION 'counseling referral transition requires one version increment';
+        END IF;
+        IF OLD.status = 'pending' AND NEW.status IN ('accepted', 'rejected') THEN
+            IF NEW.decision_note IS NULL OR NEW.decided_by IS NULL OR NEW.decided_at IS NULL
+               OR NEW.follow_up_result IS NOT NULL OR NEW.completed_at IS NOT NULL THEN
+                RAISE EXCEPTION 'counseling referral decision metadata is incomplete';
+            END IF;
+            INSERT INTO counseling_audit_events
+                (student_id, actor_id, department_id, action, outcome, event_metadata)
+            VALUES (NEW.student_id, NEW.decided_by, NEW.department_id, 'referral.' || NEW.status,
+                    'success', jsonb_build_object('referral_id', NEW.id));
+        ELSIF OLD.status = 'accepted' AND NEW.status = 'completed' THEN
+            IF NEW.follow_up_result IS NULL OR NEW.completed_at IS NULL THEN
+                RAISE EXCEPTION 'counseling referral follow-up metadata is incomplete';
+            END IF;
+            INSERT INTO counseling_audit_events
+                (student_id, actor_id, department_id, action, outcome, event_metadata)
+            VALUES (NEW.student_id, NEW.counselor_id, NEW.department_id, 'referral.follow_up',
+                    'success', jsonb_build_object('referral_id', NEW.id));
+        ELSE
+            RAISE EXCEPTION 'counseling referral transition is invalid';
+        END IF;
+        RETURN NEW;
+    END;
+    $$
+    """,
+    "DROP TRIGGER IF EXISTS trg_counseling_referral_transition ON counseling_referrals",
+    """
+    CREATE TRIGGER trg_counseling_referral_transition BEFORE UPDATE ON counseling_referrals
+    FOR EACH ROW EXECUTE FUNCTION enforce_counseling_referral_transition()
+    """,
+)
+
+COUNSELING_SCHEMA_V12_STATEMENTS = (
+    """
+    DO $$
+    BEGIN
+        IF EXISTS (SELECT 1 FROM counseling_risk_hints) THEN
+            RAISE EXCEPTION
+                'counseling v12 cannot bind legacy risk hints to verified run outputs';
+        END IF;
+    END;
+    $$
+    """,
+    "ALTER TABLE counseling_risk_hints ADD COLUMN IF NOT EXISTS source_work_item_id VARCHAR(64)",
+    "ALTER TABLE counseling_risk_hints ADD COLUMN IF NOT EXISTS source_run_id VARCHAR(64)",
+    "ALTER TABLE counseling_risk_hints ADD COLUMN IF NOT EXISTS source_message_id INTEGER",
+    "ALTER TABLE counseling_risk_hints DROP CONSTRAINT IF EXISTS fk_counseling_risk_hint_work_item",
+    """
+    ALTER TABLE counseling_risk_hints
+    ADD CONSTRAINT fk_counseling_risk_hint_work_item
+    FOREIGN KEY (source_work_item_id) REFERENCES counseling_ai_work_items(id)
+    """,
+    "ALTER TABLE counseling_risk_hints DROP CONSTRAINT IF EXISTS fk_counseling_risk_hint_run",
+    """
+    ALTER TABLE counseling_risk_hints
+    ADD CONSTRAINT fk_counseling_risk_hint_run FOREIGN KEY (source_run_id) REFERENCES agent_runs(id)
+    """,
+    "ALTER TABLE counseling_risk_hints DROP CONSTRAINT IF EXISTS fk_counseling_risk_hint_message",
+    """
+    ALTER TABLE counseling_risk_hints
+    ADD CONSTRAINT fk_counseling_risk_hint_message FOREIGN KEY (source_message_id) REFERENCES messages(id)
+    """,
+    "ALTER TABLE counseling_risk_hints DROP CONSTRAINT IF EXISTS uq_counseling_risk_hint_source_message",
+    """
+    ALTER TABLE counseling_risk_hints
+    ADD CONSTRAINT uq_counseling_risk_hint_source_message UNIQUE (source_message_id)
+    """,
+    "ALTER TABLE counseling_risk_hints ALTER COLUMN source_work_item_id SET NOT NULL",
+    "ALTER TABLE counseling_risk_hints ALTER COLUMN source_run_id SET NOT NULL",
+    "ALTER TABLE counseling_risk_hints ALTER COLUMN source_message_id SET NOT NULL",
+    """
+    CREATE OR REPLACE FUNCTION reject_counseling_risk_hint_mutation() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+    BEGIN
+        IF NEW.student_id IS DISTINCT FROM OLD.student_id
+           OR NEW.department_id IS DISTINCT FROM OLD.department_id
+           OR NEW.counselor_id IS DISTINCT FROM OLD.counselor_id
+           OR NEW.evaluation_id IS DISTINCT FROM OLD.evaluation_id
+           OR NEW.protocol_id IS DISTINCT FROM OLD.protocol_id
+           OR NEW.source_work_item_id IS DISTINCT FROM OLD.source_work_item_id
+           OR NEW.source_run_id IS DISTINCT FROM OLD.source_run_id
+           OR NEW.source_message_id IS DISTINCT FROM OLD.source_message_id
+           OR NEW.score IS DISTINCT FROM OLD.score
+           OR NEW.evidence_summary IS DISTINCT FROM OLD.evidence_summary
+           OR NEW.request_id IS DISTINCT FROM OLD.request_id
+           OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+            RAISE EXCEPTION 'counseling risk hint origin is immutable';
+        END IF;
+        IF OLD.status <> 'pending_review' OR NEW.status NOT IN ('accepted', 'rejected')
+           OR NEW.version <> OLD.version + 1 OR NEW.reviewed_by IS NULL OR NEW.reviewed_at IS NULL
+           OR NEW.decision_request_id IS NULL OR NEW.decision_note IS NULL THEN
+            RAISE EXCEPTION 'counseling risk hint transition is invalid';
+        END IF;
+        RETURN NEW;
+    END;
+    $$
+    """,
+)
+
+COUNSELING_SCHEMA_V13_STATEMENTS = (
+    """
+    DO $$
+    BEGIN
+        IF EXISTS (SELECT 1 FROM counseling_crisis_case_events) THEN
+            RAISE EXCEPTION
+                'counseling v13 cannot reconstruct legacy crisis event application order';
+        END IF;
+    END;
+    $$
+    """,
+    "ALTER TABLE counseling_crisis_case_events ADD COLUMN IF NOT EXISTS applied_case_version INTEGER",
+    "ALTER TABLE counseling_crisis_case_events ALTER COLUMN applied_case_version SET NOT NULL",
+    "ALTER TABLE counseling_crisis_case_events DROP CONSTRAINT IF EXISTS uq_counseling_crisis_event_version",
+    """
+    ALTER TABLE counseling_crisis_case_events
+    ADD CONSTRAINT uq_counseling_crisis_event_version UNIQUE (case_id, applied_case_version)
+    """,
+    """
+    CREATE OR REPLACE FUNCTION enforce_counseling_crisis_case_transition() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+    DECLARE event_row counseling_crisis_case_events%ROWTYPE;
+    BEGIN
+        IF NEW.version <> OLD.version + 1 OR NEW.last_event_id IS NULL
+           OR NEW.last_event_id IS NOT DISTINCT FROM OLD.last_event_id THEN
+            RAISE EXCEPTION 'counseling crisis case transition requires one new event and version';
+        END IF;
+        SELECT * INTO event_row FROM counseling_crisis_case_events
+        WHERE id = NEW.last_event_id AND case_id = NEW.id;
+        IF NOT FOUND OR event_row.applied_case_version <> NEW.version OR NOT (
+            OLD.status = 'open' AND NEW.status = 'open' AND event_row.event_type = 'measure'
+            OR OLD.status = 'open' AND NEW.status = 'reviewed' AND event_row.event_type = 'review'
+            OR OLD.status = 'reviewed' AND NEW.status = 'reviewed' AND event_row.event_type = 'measure'
+            OR OLD.status = 'reviewed' AND NEW.status = 'closed' AND event_row.event_type = 'close'
+        ) THEN
+            RAISE EXCEPTION 'counseling crisis case transition is invalid';
+        END IF;
+        INSERT INTO counseling_audit_events
+            (student_id, actor_id, department_id, action, outcome, event_metadata)
+        VALUES (NEW.student_id, event_row.actor_id, NEW.department_id,
+                'crisis_case.' || event_row.event_type, 'success', jsonb_build_object('case_id', NEW.id));
+        RETURN NEW;
+    END;
+    $$
+    """,
+    """
+    CREATE OR REPLACE FUNCTION enforce_counseling_referral_transition() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+    BEGIN
+        IF NEW.version <> OLD.version + 1 THEN
+            RAISE EXCEPTION 'counseling referral transition requires one version increment';
+        END IF;
+        IF OLD.status = 'pending' AND NEW.status IN ('accepted', 'rejected') THEN
+            IF NEW.decision_note IS NULL OR NEW.decided_by IS NULL OR NEW.decided_at IS NULL
+               OR NEW.follow_up_result IS NOT NULL OR NEW.completed_at IS NOT NULL THEN
+                RAISE EXCEPTION 'counseling referral decision metadata is incomplete';
+            END IF;
+            INSERT INTO counseling_audit_events
+                (student_id, actor_id, department_id, action, outcome, event_metadata)
+            VALUES (NEW.student_id, NEW.decided_by, NEW.department_id, 'referral.' || NEW.status,
+                    'success', jsonb_build_object('referral_id', NEW.id));
+        ELSIF OLD.status = 'accepted' AND NEW.status = 'completed' THEN
+            IF NEW.decision_note IS DISTINCT FROM OLD.decision_note
+               OR NEW.decided_by IS DISTINCT FROM OLD.decided_by
+               OR NEW.decided_at IS DISTINCT FROM OLD.decided_at THEN
+                RAISE EXCEPTION 'counseling referral decision metadata is immutable';
+            END IF;
+            IF NEW.follow_up_result IS NULL OR NEW.completed_at IS NULL THEN
+                RAISE EXCEPTION 'counseling referral follow-up metadata is incomplete';
+            END IF;
+            INSERT INTO counseling_audit_events
+                (student_id, actor_id, department_id, action, outcome, event_metadata)
+            VALUES (NEW.student_id, NEW.counselor_id, NEW.department_id, 'referral.follow_up',
+                    'success', jsonb_build_object('referral_id', NEW.id));
+        ELSE
+            RAISE EXCEPTION 'counseling referral transition is invalid';
+        END IF;
+        RETURN NEW;
+    END;
+    $$
+    """,
+)
+
+COUNSELING_SCHEMA_V14_STATEMENTS = (
+    """
+    DO $$
+    BEGIN
+        IF EXISTS (
+            SELECT 1
+            FROM counseling_crisis_cases AS cases
+            LEFT JOIN LATERAL (
+                SELECT count(*) AS event_count,
+                       min(applied_case_version) AS min_version,
+                       max(applied_case_version) AS max_version
+                FROM counseling_crisis_case_events
+                WHERE case_id = cases.id
+            ) AS event_stats ON TRUE
+            LEFT JOIN counseling_crisis_case_events AS last_event
+                ON last_event.id = cases.last_event_id AND last_event.case_id = cases.id
+            WHERE cases.version < 1
+               OR event_stats.event_count <> cases.version
+               OR event_stats.min_version <> 1
+               OR event_stats.max_version <> cases.version
+               OR last_event.applied_case_version IS DISTINCT FROM cases.version
+        ) THEN
+            RAISE EXCEPTION 'counseling crisis event version history is inconsistent';
+        END IF;
+    END;
+    $$
     """,
 )
 
@@ -511,6 +1056,12 @@ COUNSELING_SCHEMA_STATEMENTS = (
     + COUNSELING_SCHEMA_V6_STATEMENTS
     + COUNSELING_SCHEMA_V7_STATEMENTS
     + COUNSELING_SCHEMA_V8_STATEMENTS
+    + COUNSELING_SCHEMA_V9_STATEMENTS
+    + COUNSELING_SCHEMA_V10_STATEMENTS
+    + COUNSELING_SCHEMA_V11_STATEMENTS
+    + COUNSELING_SCHEMA_V12_STATEMENTS
+    + COUNSELING_SCHEMA_V13_STATEMENTS
+    + COUNSELING_SCHEMA_V14_STATEMENTS
 )
 
 
@@ -539,62 +1090,47 @@ async def migrate_schema() -> None:
             await pg_manager.create_schema_version_table()
             versions = await pg_manager.get_schema_versions()
             actual = versions.get("counseling")
-            if actual not in {None, 1, 2, 3, 4, 5, 6, 7, COUNSELING_SCHEMA_VERSION}:
+            supported_versions = set(range(1, COUNSELING_SCHEMA_VERSION + 1))
+            if actual is not None and actual not in supported_versions:
                 raise RuntimeError(
                     "Unsupported counseling schema version: "
-                    f"{actual}; supported upgrade sources are empty or v1 through v7"
+                    f"{actual}; supported upgrade sources are empty or v1 through v13"
                 )
             if actual != COUNSELING_SCHEMA_VERSION:
                 if actual is None:
                     statements = COUNSELING_SCHEMA_STATEMENTS
-                elif actual == 1:
-                    statements = (
-                        COUNSELING_SCHEMA_V2_STATEMENTS
-                        + COUNSELING_SCHEMA_V3_STATEMENTS
-                        + COUNSELING_SCHEMA_V4_STATEMENTS
-                        + COUNSELING_SCHEMA_V5_STATEMENTS
-                        + COUNSELING_SCHEMA_V6_STATEMENTS
-                        + COUNSELING_SCHEMA_V7_STATEMENTS
-                        + COUNSELING_SCHEMA_V8_STATEMENTS
-                    )
-                elif actual == 2:
-                    statements = (
-                        COUNSELING_SCHEMA_V3_STATEMENTS
-                        + COUNSELING_SCHEMA_V4_STATEMENTS
-                        + COUNSELING_SCHEMA_V5_STATEMENTS
-                        + COUNSELING_SCHEMA_V6_STATEMENTS
-                        + COUNSELING_SCHEMA_V7_STATEMENTS
-                        + COUNSELING_SCHEMA_V8_STATEMENTS
-                    )
-                elif actual == 3:
-                    statements = (
-                        COUNSELING_SCHEMA_V4_STATEMENTS
-                        + COUNSELING_SCHEMA_V5_STATEMENTS
-                        + COUNSELING_SCHEMA_V6_STATEMENTS
-                        + COUNSELING_SCHEMA_V7_STATEMENTS
-                        + COUNSELING_SCHEMA_V8_STATEMENTS
-                    )
-                elif actual == 4:
-                    statements = (
-                        COUNSELING_SCHEMA_V5_STATEMENTS
-                        + COUNSELING_SCHEMA_V6_STATEMENTS
-                        + COUNSELING_SCHEMA_V7_STATEMENTS
-                        + COUNSELING_SCHEMA_V8_STATEMENTS
-                    )
-                elif actual == 5:
-                    statements = (
-                        COUNSELING_SCHEMA_V6_STATEMENTS
-                        + COUNSELING_SCHEMA_V7_STATEMENTS
-                        + COUNSELING_SCHEMA_V8_STATEMENTS
-                    )
-                elif actual == 6:
-                    statements = COUNSELING_SCHEMA_V7_STATEMENTS + COUNSELING_SCHEMA_V8_STATEMENTS
                 else:
-                    statements = COUNSELING_SCHEMA_V8_STATEMENTS
+                    migrations = (
+                        COUNSELING_SCHEMA_V1_STATEMENTS,
+                        COUNSELING_SCHEMA_V2_STATEMENTS,
+                        COUNSELING_SCHEMA_V3_STATEMENTS,
+                        COUNSELING_SCHEMA_V4_STATEMENTS,
+                        COUNSELING_SCHEMA_V5_STATEMENTS,
+                        COUNSELING_SCHEMA_V6_STATEMENTS,
+                        COUNSELING_SCHEMA_V7_STATEMENTS,
+                        COUNSELING_SCHEMA_V8_STATEMENTS,
+                        COUNSELING_SCHEMA_V9_STATEMENTS,
+                        COUNSELING_SCHEMA_V10_STATEMENTS,
+                        COUNSELING_SCHEMA_V11_STATEMENTS,
+                        COUNSELING_SCHEMA_V12_STATEMENTS,
+                        COUNSELING_SCHEMA_V13_STATEMENTS,
+                        COUNSELING_SCHEMA_V14_STATEMENTS,
+                    )
+                    statements = tuple(statement for migration in migrations[actual:] for statement in migration)
                 async with pg_manager.async_engine.begin() as connection:
                     for statement in statements:
                         await connection.execute(text(statement))
-                await pg_manager.record_schema_version("counseling", COUNSELING_SCHEMA_VERSION)
+                    await connection.execute(
+                        text(
+                            f"""
+                            INSERT INTO {SCHEMA_VERSION_TABLE} (domain, version, applied_at)
+                            VALUES (:domain, :version, CURRENT_TIMESTAMP)
+                            ON CONFLICT (domain) DO UPDATE
+                            SET version = EXCLUDED.version, applied_at = EXCLUDED.applied_at
+                            """
+                        ),
+                        {"domain": "counseling", "version": COUNSELING_SCHEMA_VERSION},
+                    )
     finally:
         await pg_manager.close()
 

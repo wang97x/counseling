@@ -7,13 +7,14 @@ import re
 import tempfile
 import uuid
 import zipfile
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 from pathlib import Path
 from typing import Protocol
 
 from fastapi import UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.exc import IntegrityError
+from counseling.continuity.repository import ContinuityRepository
 from counseling.appointments.repository import AppointmentRepository
 from counseling.assessments.repository import AssessmentRepository
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from counseling.documents.ports import CounselingDocumentParser, CounselingObjectStorage
 from counseling.documents.repository import CounselingRecordRepository
 from counseling.risks.repository import CounselingRiskRepository
+from counseling.risk_hints.repository import RiskHintRepository
 from counseling.storage.models import (
     CounselingRecord,
     CounselingRecordCorrection,
@@ -201,9 +203,7 @@ async def _owned_draft(
     """校验档案归属并读取草稿及当前修订。"""
     await _require_owner(db, actor, student_id)
     repository = CounselingRecordRepository(db)
-    draft = await repository.get_draft(
-        draft_id, student_id, actor.department_id, actor.id, for_update=for_update
-    )
+    draft = await repository.get_draft(draft_id, student_id, actor.department_id, actor.id, for_update=for_update)
     if draft is None:
         raise LookupError("辅导记录草稿不存在")
     return repository, draft, await repository.latest_revision(draft)
@@ -221,7 +221,7 @@ async def upload_record_draft(
 ) -> dict:
     """解析有效记录文件，稳定存储来源并创建首个修订。"""
     request_id = _validate_key(request_id, "request_id")
-    student = await _require_owner(db, actor, student_id)
+    await _require_owner(db, actor, student_id)
     repository = CounselingRecordRepository(db)
     existing = await repository.get_draft_by_request(actor.id, request_id)
     if existing is not None:
@@ -407,15 +407,11 @@ async def generate_summary(
     await db.commit()
 
     try:
-        summary, model_spec = await port.generate(
-            db, background=background, parsed_text=parsed_text
-        )
+        summary, model_spec = await port.generate(db, background=background, parsed_text=parsed_text)
     except Exception as exc:
         await db.rollback()
         repository = CounselingRecordRepository(db)
-        current = await repository.get_draft(
-            draft_id, student_id, actor.department_id, actor.id, for_update=True
-        )
+        current = await repository.get_draft(draft_id, student_id, actor.department_id, actor.id, for_update=True)
         if current and current.status == "generating" and current.generation_request_id == request_id:
             current.status = "generation_failed"
             current.generation_error = str(exc)[:1000]
@@ -622,7 +618,7 @@ def _normalize_consulted_at(value: datetime) -> datetime:
     """把带时区时间统一为 UTC naive 后入库。"""
     if value.tzinfo is None:
         raise ValueError("咨询时间必须包含时区")
-    return value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value.astimezone(UTC).replace(tzinfo=None)
 
 
 async def create_manual_record_draft(
@@ -888,12 +884,13 @@ async def list_timeline(db: AsyncSession, actor: User, student_id: int) -> list[
     corrections = await repository.list_corrections(student_id, actor.department_id, actor.id)
     risk_events = await CounselingRiskRepository(db).list_for_owner(student_id, actor.department_id, actor.id)
     conversations = await StudentRepository(db).list_conversations(student_id, actor.uid)
-    assessments = await AssessmentRepository(db).list_for_owner(
-        student_id, actor.department_id, actor.id
-    )
-    appointments = await AppointmentRepository(db).list_for_owner(
-        student_id, actor.department_id, actor.id
-    )
+    assessments = await AssessmentRepository(db).list_for_owner(student_id, actor.department_id, actor.id)
+    appointments = await AppointmentRepository(db).list_for_owner(student_id, actor.department_id, actor.id)
+    continuity = ContinuityRepository(db)
+    plans = await continuity.list_plans(student_id, actor.department_id, actor.id)
+    crisis_cases = await continuity.list_cases(student_id, actor.department_id, actor.id)
+    referrals = await continuity.list_referrals_for_owner(student_id, actor.department_id, actor.id)
+    risk_hints = await RiskHintRepository(db).list_hints(student_id, actor.department_id, actor.id)
     items = []
     for record in records:
         if record.record_kind == "manual":
@@ -971,6 +968,66 @@ async def list_timeline(db: AsyncSession, actor: User, student_id: int) -> list[
             "location": appointment.location,
         }
         for appointment in appointments
+    )
+    items.extend(
+        {
+            "id": plan.id,
+            "type": "plan_version",
+            "title": f"辅导方案 v{plan.version_no}",
+            "occurred_at": format_utc_datetime(plan.created_at),
+            "summary": plan.review_basis,
+            "stage_goals": plan.stage_goals,
+            "action_plan": plan.action_plan,
+            "source_record_id": plan.source_record_id,
+            "source_assessment_id": plan.source_assessment_id,
+        }
+        for plan in plans
+    )
+    items.extend(
+        {
+            "id": case.id,
+            "type": "crisis_case",
+            "title": "人工危机工单",
+            "occurred_at": format_utc_datetime(case.created_at),
+            "summary": case.status,
+            "crisis_status": case.status,
+            "protocol_id": case.protocol_id,
+            "deadline_at": format_utc_datetime(case.deadline_at),
+            "risk_event_id": case.risk_event_id,
+        }
+        for case in crisis_cases
+    )
+    items.extend(
+        {
+            "id": referral.id,
+            "type": "referral",
+            "title": "内部转介与回访",
+            "occurred_at": format_utc_datetime(referral.created_at),
+            "summary": referral.reason,
+            "referral_status": referral.status,
+            "authorization_status": referral.authorization_status,
+            "material_scope": referral.material_scope,
+            "follow_up_at": format_utc_datetime(referral.follow_up_at),
+            "follow_up_result": referral.follow_up_result,
+        }
+        for referral in referrals
+    )
+    items.extend(
+        {
+            "id": hint.id,
+            "type": "risk_hint",
+            "title": "AI 风险提示人工核实",
+            "occurred_at": format_utc_datetime(hint.reviewed_at or hint.created_at),
+            "summary": hint.decision_note or hint.evidence_summary,
+            "hint_status": hint.status,
+            "score": hint.score,
+            "evidence_summary": hint.evidence_summary,
+            "decision_note": hint.decision_note,
+            "evaluation_id": hint.evaluation_id,
+            "protocol_id": hint.protocol_id,
+        }
+        for hint in risk_hints
+        if hint.status != "pending_review"
     )
     items.extend(
         {

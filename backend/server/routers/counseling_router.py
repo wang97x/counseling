@@ -27,6 +27,17 @@ from counseling.assessments.service import (
     list_assessments,
     list_scale_catalog,
 )
+from counseling.continuity.service import (
+    ContinuityConflictError,
+    append_crisis_case_event,
+    complete_referral_follow_up,
+    create_crisis_case,
+    create_plan_version,
+    create_referral,
+    list_crisis_cases,
+    list_plan_versions,
+    list_referrals,
+)
 from counseling.documents.service import (
     ConsultationContent,
     CounselingConflictError,
@@ -54,6 +65,12 @@ from counseling.integrations.yuxi import (
     YuxiDocumentParserAdapter,
     YuxiGenerationAdapter,
     YuxiObjectStorageAdapter,
+)
+from counseling.risk_hints.service import (
+    RiskHintConflictError,
+    create_risk_hint,
+    list_risk_hints,
+    review_risk_hint,
 )
 from counseling.risks.service import RiskConflictError, create_risk_event, list_risk_events
 from counseling.students.service import (
@@ -278,6 +295,77 @@ class AppointmentStatusUpdate(BaseModel):
     status: Literal["arrived", "completed", "no_show", "canceled"]
 
 
+class PlanVersionCreate(BaseModel):
+    """追加辅导方案版本。"""
+
+    model_config = ConfigDict(extra="forbid")
+    request_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    stage_goals: list[str] = Field(min_length=1, max_length=20)
+    action_plan: list[str] = Field(min_length=1, max_length=20)
+    review_basis: str = Field(min_length=1, max_length=10000)
+    source_record_id: str | None = Field(default=None, max_length=64)
+    source_assessment_id: str | None = Field(default=None, max_length=64)
+
+
+class CrisisCaseCreate(BaseModel):
+    """从人工风险事件创建危机工单。"""
+
+    model_config = ConfigDict(extra="forbid")
+    request_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    risk_event_id: str = Field(min_length=1, max_length=64)
+    deadline_at: datetime
+    initial_measure: str = Field(min_length=1, max_length=10000)
+
+
+class CrisisCaseEventCreate(BaseModel):
+    """追加工单措施、复核或关闭记录。"""
+
+    model_config = ConfigDict(extra="forbid")
+    request_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    expected_version: int = Field(ge=1)
+    event_type: Literal["measure", "review", "close"]
+    note: str = Field(min_length=1, max_length=10000)
+
+
+class ReferralCreate(BaseModel):
+    """创建内部转介。"""
+
+    model_config = ConfigDict(extra="forbid")
+    request_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    reason: str = Field(min_length=1, max_length=10000)
+    authorization_status: Literal["granted", "denied"]
+    material_scope: list[Literal["student_metadata", "risk_level", "plan_summary"]] = Field(min_length=1, max_length=3)
+    follow_up_at: datetime | None = None
+
+
+class ReferralFollowUpCreate(BaseModel):
+    """完成已接收转介的回访。"""
+
+    model_config = ConfigDict(extra="forbid")
+    expected_version: int = Field(ge=1)
+    result: str = Field(min_length=1, max_length=10000)
+
+
+class RiskHintCreate(BaseModel):
+    """创建受质量与协议门禁的待核实风险提示。"""
+
+    model_config = ConfigDict(extra="forbid")
+    request_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    evaluation_id: str = Field(min_length=1, max_length=64)
+    source_work_item_id: str = Field(min_length=1, max_length=64)
+    source_run_id: str = Field(min_length=1, max_length=64)
+
+
+class RiskHintReview(BaseModel):
+    """由档案负责人采纳或拒绝风险提示。"""
+
+    model_config = ConfigDict(extra="forbid")
+    request_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    expected_version: int = Field(ge=1)
+    decision: Literal["accepted", "rejected"]
+    note: str = Field(min_length=1, max_length=10000)
+
+
 def _raise_counseling_error(exc: Exception) -> None:
     """把业务边界错误映射为稳定 HTTP 状态。"""
     if isinstance(exc, PermissionError):
@@ -292,6 +380,8 @@ def _raise_counseling_error(exc: Exception) -> None:
             AppointmentConflictError,
             AssessmentConflictError,
             CounselingConflictError,
+            ContinuityConflictError,
+            RiskHintConflictError,
             RiskConflictError,
             StudentConflictError,
         ),
@@ -674,6 +764,213 @@ async def update_appointment_route(
         _raise_counseling_error(exc)
 
 
+@counseling.post("/{student_id}/plans", status_code=status.HTTP_201_CREATED)
+async def create_plan_version_route(
+    student_id: int,
+    payload: PlanVersionCreate,
+    actor: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """追加负责人档案的辅导方案版本。"""
+    try:
+        return await create_plan_version(
+            db,
+            actor,
+            student_id,
+            request_id=payload.request_id,
+            stage_goals=payload.stage_goals,
+            action_plan=payload.action_plan,
+            review_basis=payload.review_basis,
+            source_record_id=payload.source_record_id,
+            source_assessment_id=payload.source_assessment_id,
+        )
+    except (PermissionError, LookupError, ValueError, ContinuityConflictError) as exc:
+        _raise_counseling_error(exc)
+
+
+@counseling.get("/{student_id}/plans")
+async def list_plan_versions_route(
+    student_id: int, actor: User = Depends(get_required_user), db: AsyncSession = Depends(get_db)
+):
+    """列出负责人档案的辅导方案历史。"""
+    try:
+        return await list_plan_versions(db, actor, student_id)
+    except (PermissionError, LookupError) as exc:
+        _raise_counseling_error(exc)
+
+
+@counseling.post("/{student_id}/crisis-cases", status_code=status.HTTP_201_CREATED)
+async def create_crisis_case_route(
+    student_id: int,
+    payload: CrisisCaseCreate,
+    actor: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """从人工风险事件创建危机工单。"""
+    try:
+        return await create_crisis_case(
+            db,
+            actor,
+            student_id,
+            request_id=payload.request_id,
+            risk_event_id=payload.risk_event_id,
+            deadline_at=payload.deadline_at,
+            initial_measure=payload.initial_measure,
+        )
+    except (PermissionError, LookupError, ValueError, ContinuityConflictError) as exc:
+        _raise_counseling_error(exc)
+
+
+@counseling.get("/{student_id}/crisis-cases")
+async def list_crisis_cases_route(
+    student_id: int, actor: User = Depends(get_required_user), db: AsyncSession = Depends(get_db)
+):
+    """列出负责人档案的危机工单。"""
+    try:
+        return await list_crisis_cases(db, actor, student_id)
+    except (PermissionError, LookupError) as exc:
+        _raise_counseling_error(exc)
+
+
+@counseling.post("/{student_id}/crisis-cases/{case_id}/events")
+async def append_crisis_case_event_route(
+    student_id: int,
+    case_id: str,
+    payload: CrisisCaseEventCreate,
+    actor: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """追加措施、复核或人工关闭记录。"""
+    try:
+        return await append_crisis_case_event(
+            db,
+            actor,
+            student_id,
+            case_id,
+            request_id=payload.request_id,
+            expected_version=payload.expected_version,
+            event_type=payload.event_type,
+            note=payload.note,
+        )
+    except (PermissionError, LookupError, ValueError, ContinuityConflictError) as exc:
+        _raise_counseling_error(exc)
+
+
+@counseling.post("/{student_id}/referrals", status_code=status.HTTP_201_CREATED)
+async def create_referral_route(
+    student_id: int,
+    payload: ReferralCreate,
+    actor: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """创建机构内部转介。"""
+    try:
+        return await create_referral(
+            db,
+            actor,
+            student_id,
+            request_id=payload.request_id,
+            reason=payload.reason,
+            authorization_status=payload.authorization_status,
+            material_scope=payload.material_scope,
+            follow_up_at=payload.follow_up_at,
+        )
+    except (PermissionError, LookupError, ValueError, ContinuityConflictError) as exc:
+        _raise_counseling_error(exc)
+
+
+@counseling.get("/{student_id}/referrals")
+async def list_referrals_route(
+    student_id: int, actor: User = Depends(get_required_user), db: AsyncSession = Depends(get_db)
+):
+    """列出负责人档案的转介与回访。"""
+    try:
+        return await list_referrals(db, actor, student_id)
+    except (PermissionError, LookupError) as exc:
+        _raise_counseling_error(exc)
+
+
+@counseling.post("/{student_id}/referrals/{referral_id}/follow-up")
+async def complete_referral_follow_up_route(
+    student_id: int,
+    referral_id: str,
+    payload: ReferralFollowUpCreate,
+    actor: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """记录已接收转介的回访结果。"""
+    try:
+        return await complete_referral_follow_up(
+            db,
+            actor,
+            student_id,
+            referral_id,
+            expected_version=payload.expected_version,
+            result=payload.result,
+        )
+    except (PermissionError, LookupError, ValueError, ContinuityConflictError) as exc:
+        _raise_counseling_error(exc)
+
+
+@counseling.post("/{student_id}/risk-hints", status_code=status.HTTP_201_CREATED)
+async def create_risk_hint_route(
+    student_id: int,
+    payload: RiskHintCreate,
+    actor: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """为负责人档案创建待人工核实的风险提示。"""
+    try:
+        return await create_risk_hint(
+            db,
+            actor,
+            student_id,
+            request_id=payload.request_id,
+            evaluation_id=payload.evaluation_id,
+            source_work_item_id=payload.source_work_item_id,
+            source_run_id=payload.source_run_id,
+        )
+    except (PermissionError, LookupError, ValueError, RiskHintConflictError) as exc:
+        _raise_counseling_error(exc)
+
+
+@counseling.get("/{student_id}/risk-hints")
+async def list_risk_hints_route(
+    student_id: int,
+    actor: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """列出负责人档案的风险提示与人工核实结果。"""
+    try:
+        return await list_risk_hints(db, actor, student_id)
+    except (PermissionError, LookupError) as exc:
+        _raise_counseling_error(exc)
+
+
+@counseling.post("/{student_id}/risk-hints/{hint_id}/review")
+async def review_risk_hint_route(
+    student_id: int,
+    hint_id: str,
+    payload: RiskHintReview,
+    actor: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """人工采纳或拒绝提示且不自动改变风险状态。"""
+    try:
+        return await review_risk_hint(
+            db,
+            actor,
+            student_id,
+            hint_id,
+            request_id=payload.request_id,
+            expected_version=payload.expected_version,
+            decision=payload.decision,
+            note=payload.note,
+        )
+    except (PermissionError, LookupError, ValueError, RiskHintConflictError) as exc:
+        _raise_counseling_error(exc)
+
+
 @counseling.post("/{student_id}/appointments/{appointment_id}/status")
 async def change_appointment_status_route(
     student_id: int,
@@ -757,9 +1054,7 @@ async def update_parsed_text_route(
 ):
     """人工核对并追加解析文本修订。"""
     try:
-        return await update_parsed_text(
-            db, actor, student_id, draft_id, payload.expected_version, payload.parsed_text
-        )
+        return await update_parsed_text(db, actor, student_id, draft_id, payload.expected_version, payload.parsed_text)
     except (PermissionError, LookupError, ValueError, CounselingConflictError) as exc:
         _raise_counseling_error(exc)
 

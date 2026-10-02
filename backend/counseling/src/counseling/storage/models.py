@@ -1,9 +1,11 @@
 """心理辅导档案与文书的 PostgreSQL 模型。"""
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Column,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -327,13 +329,213 @@ class CounselingAppointment(Base):
     updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
 
 
+class CounselingPlanVersion(Base):
+    """保存不可覆盖的辅导方案版本。"""
+
+    __tablename__ = "counseling_plan_versions"
+    __table_args__ = (
+        UniqueConstraint("student_id", "version_no", name="uq_counseling_plan_student_version"),
+        UniqueConstraint("counselor_id", "request_id", name="uq_counseling_plan_request"),
+        Index("ix_counseling_plan_student", "student_id", "version_no"),
+    )
+
+    id = Column(String(64), primary_key=True)
+    student_id = Column(Integer, ForeignKey("counseling_students.id"), nullable=False)
+    department_id = Column(Integer, ForeignKey("departments.id"), nullable=False)
+    counselor_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    version_no = Column(Integer, nullable=False)
+    stage_goals = Column(JSON_VALUE, nullable=False)
+    action_plan = Column(JSON_VALUE, nullable=False)
+    review_basis = Column(Text, nullable=False)
+    source_record_id = Column(String(64), ForeignKey("counseling_records.id"), nullable=True)
+    source_assessment_id = Column(String(64), ForeignKey("counseling_assessment_results.id"), nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    request_id = Column(String(64), nullable=False)
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+
+
+class CounselingCrisisProtocol(Base):
+    """保存业务管理员发布的部门危机协议版本。"""
+
+    __tablename__ = "counseling_crisis_protocols"
+    __table_args__ = (
+        UniqueConstraint("department_id", "version_no", name="uq_counseling_protocol_department_version"),
+        UniqueConstraint("department_id", "request_id", name="uq_counseling_protocol_request"),
+        CheckConstraint("expires_at IS NULL OR expires_at > effective_from", name="ck_counseling_protocol_window"),
+        Index("ix_counseling_protocol_active", "department_id", "effective_from"),
+    )
+
+    id = Column(String(64), primary_key=True)
+    department_id = Column(Integer, ForeignKey("departments.id"), nullable=False)
+    version_no = Column(Integer, nullable=False)
+    title = Column(String(200), nullable=False)
+    content = Column(Text, nullable=False)
+    effective_from = Column(DateTime, nullable=False)
+    expires_at = Column(DateTime, nullable=True)
+    published_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    request_id = Column(String(64), nullable=False)
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+
+
+class CounselingCrisisCase(Base):
+    """保存绑定人工风险事件和协议版本的危机工单。"""
+
+    __tablename__ = "counseling_crisis_cases"
+    __table_args__ = (
+        UniqueConstraint("counselor_id", "request_id", name="uq_counseling_crisis_case_request"),
+        UniqueConstraint("risk_event_id", name="uq_counseling_crisis_case_risk"),
+        CheckConstraint("status IN ('open', 'reviewed', 'closed')", name="ck_counseling_crisis_case_status"),
+        Index("ix_counseling_crisis_case_student", "student_id", "created_at"),
+    )
+
+    id = Column(String(64), primary_key=True)
+    student_id = Column(Integer, ForeignKey("counseling_students.id"), nullable=False)
+    department_id = Column(Integer, ForeignKey("departments.id"), nullable=False)
+    counselor_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    risk_event_id = Column(String(64), ForeignKey("counseling_risk_events.id"), nullable=False)
+    protocol_id = Column(String(64), ForeignKey("counseling_crisis_protocols.id"), nullable=False)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    deadline_at = Column(DateTime, nullable=False)
+    status = Column(String(16), nullable=False, default="open", server_default="open")
+    version = Column(Integer, nullable=False, default=1, server_default="1")
+    last_event_id = Column(String(64), nullable=True)
+    request_id = Column(String(64), nullable=False)
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+    updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
+
+
+class CounselingCrisisCaseEvent(Base):
+    """追加记录危机工单的措施、复核和关闭。"""
+
+    __tablename__ = "counseling_crisis_case_events"
+    __table_args__ = (
+        UniqueConstraint("actor_id", "request_id", name="uq_counseling_crisis_event_request"),
+        UniqueConstraint("case_id", "applied_case_version", name="uq_counseling_crisis_event_version"),
+        CheckConstraint("event_type IN ('measure', 'review', 'close')", name="ck_counseling_crisis_event_type"),
+        Index("ix_counseling_crisis_event_case", "case_id", "created_at"),
+    )
+
+    id = Column(String(64), primary_key=True)
+    case_id = Column(String(64), ForeignKey("counseling_crisis_cases.id"), nullable=False)
+    event_type = Column(String(16), nullable=False)
+    note = Column(Text, nullable=False)
+    actor_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    request_id = Column(String(64), nullable=False)
+    applied_case_version = Column(Integer, nullable=False)
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+
+
+class CounselingReferral(Base):
+    """保存内部转介与回访的独立状态。"""
+
+    __tablename__ = "counseling_referrals"
+    __table_args__ = (
+        UniqueConstraint("counselor_id", "request_id", name="uq_counseling_referral_request"),
+        CheckConstraint("authorization_status IN ('granted', 'denied')", name="ck_counseling_referral_authorization"),
+        CheckConstraint(
+            "status IN ('pending', 'accepted', 'rejected', 'completed')", name="ck_counseling_referral_status"
+        ),
+        Index("ix_counseling_referral_student", "student_id", "created_at"),
+        Index("ix_counseling_referral_department", "department_id", "status"),
+    )
+
+    id = Column(String(64), primary_key=True)
+    student_id = Column(Integer, ForeignKey("counseling_students.id"), nullable=False)
+    department_id = Column(Integer, ForeignKey("departments.id"), nullable=False)
+    counselor_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    reason = Column(Text, nullable=False)
+    authorization_status = Column(String(16), nullable=False)
+    material_scope = Column(JSON_VALUE, nullable=False)
+    status = Column(String(16), nullable=False, default="pending", server_default="pending")
+    decision_note = Column(Text, nullable=True)
+    decided_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    decided_at = Column(DateTime, nullable=True)
+    follow_up_at = Column(DateTime, nullable=True)
+    follow_up_result = Column(Text, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    version = Column(Integer, nullable=False, default=1, server_default="1")
+    request_id = Column(String(64), nullable=False)
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+    updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
+
+
+class CounselingRiskHintEvaluation(Base):
+    """保存不含样本正文的风险提示质量门禁结果。"""
+
+    __tablename__ = "counseling_risk_hint_evaluations"
+    __table_args__ = (
+        UniqueConstraint("department_id", "request_id", name="uq_counseling_risk_hint_eval_request"),
+        CheckConstraint("threshold >= 0 AND threshold <= 1", name="ck_counseling_risk_hint_eval_threshold"),
+        CheckConstraint("recall >= 0 AND recall <= 1", name="ck_counseling_risk_hint_eval_recall"),
+        CheckConstraint(
+            "false_positive_rate >= 0 AND false_positive_rate <= 1",
+            name="ck_counseling_risk_hint_eval_fpr",
+        ),
+        CheckConstraint(
+            "true_positive + false_negative > 0 AND false_positive + true_negative > 0",
+            name="ck_counseling_risk_hint_eval_classes",
+        ),
+        Index("ix_counseling_risk_hint_eval_department", "department_id", "created_at"),
+    )
+
+    id = Column(String(64), primary_key=True)
+    department_id = Column(Integer, ForeignKey("departments.id"), nullable=False)
+    dataset_reference = Column(String(256), nullable=False)
+    dataset_fingerprint = Column(String(64), nullable=False)
+    model_reference = Column(String(256), nullable=False)
+    threshold = Column(Float, nullable=False)
+    true_positive = Column(Integer, nullable=False)
+    false_negative = Column(Integer, nullable=False)
+    false_positive = Column(Integer, nullable=False)
+    true_negative = Column(Integer, nullable=False)
+    recall = Column(Float, nullable=False)
+    false_positive_rate = Column(Float, nullable=False)
+    passed = Column(Boolean, nullable=False)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    request_id = Column(String(64), nullable=False)
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+
+
+class CounselingRiskHint(Base):
+    """保存待辅导员人工核实且不自动干预的风险提示。"""
+
+    __tablename__ = "counseling_risk_hints"
+    __table_args__ = (
+        UniqueConstraint("counselor_id", "request_id", name="uq_counseling_risk_hint_request"),
+        UniqueConstraint("reviewed_by", "decision_request_id", name="uq_counseling_risk_hint_decision_request"),
+        UniqueConstraint("source_message_id", name="uq_counseling_risk_hint_source_message"),
+        CheckConstraint("score >= 0 AND score <= 1", name="ck_counseling_risk_hint_score"),
+        CheckConstraint("status IN ('pending_review', 'accepted', 'rejected')", name="ck_counseling_risk_hint_status"),
+        Index("ix_counseling_risk_hint_student", "student_id", "status", "created_at"),
+    )
+
+    id = Column(String(64), primary_key=True)
+    student_id = Column(Integer, ForeignKey("counseling_students.id"), nullable=False)
+    department_id = Column(Integer, ForeignKey("departments.id"), nullable=False)
+    counselor_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    evaluation_id = Column(String(64), ForeignKey("counseling_risk_hint_evaluations.id"), nullable=False)
+    protocol_id = Column(String(64), ForeignKey("counseling_crisis_protocols.id"), nullable=False)
+    source_work_item_id = Column(String(64), ForeignKey("counseling_ai_work_items.id"), nullable=False)
+    source_run_id = Column(String(64), ForeignKey("agent_runs.id"), nullable=False)
+    source_message_id = Column(Integer, ForeignKey("messages.id"), nullable=False)
+    score = Column(Float, nullable=False)
+    evidence_summary = Column(Text, nullable=False)
+    status = Column(String(16), nullable=False, default="pending_review", server_default="pending_review")
+    decision_note = Column(Text, nullable=True)
+    reviewed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    decision_request_id = Column(String(64), nullable=True)
+    version = Column(Integer, nullable=False, default=1, server_default="1")
+    request_id = Column(String(64), nullable=False)
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+    updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
+
+
 class CounselingDataUseAcknowledgment(Base):
     """保存业务用户对指定版本数据用途告知的阅读确认。"""
 
     __tablename__ = "counseling_data_use_acknowledgments"
-    __table_args__ = (
-        Index("ix_counseling_notice_user_time", "user_id", "acknowledged_at"),
-    )
+    __table_args__ = (Index("ix_counseling_notice_user_time", "user_id", "acknowledged_at"),)
 
     user_id = Column(Integer, ForeignKey("users.id"), primary_key=True)
     notice_version = Column(String(32), primary_key=True)
