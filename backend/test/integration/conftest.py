@@ -239,6 +239,50 @@ async def standard_user(test_client: httpx.AsyncClient, admin_headers: dict[str,
 
 
 @pytest_asyncio.fixture(scope="function")
+async def p3_users(test_client: httpx.AsyncClient, admin_headers: dict[str, str]) -> AsyncGenerator[dict, None]:
+    """创建 P3 真实 HTTP 测试所需的临时业务角色账号。"""
+    department_response = await test_client.get("/api/departments", headers=admin_headers)
+    if department_response.status_code != 200 or not department_response.json():
+        pytest.fail(f"No department available for P3 users: {department_response.text}")
+    department_id = department_response.json()[0]["id"]
+    users: dict[str, dict] = {}
+    try:
+        for role_name in ("counselor", "supervisor", "business_admin"):
+            username_role = "admin" if role_name == "business_admin" else role_name
+            username = f"p3_{username_role}_{uuid.uuid4().hex[:6]}"
+            password = f"Pw!{uuid.uuid4().hex[:12]}"
+            response = await test_client.post(
+                "/api/auth/users",
+                json={
+                    "username": username,
+                    "password": password,
+                    "role": "user",
+                    "business_roles": [role_name],
+                    "department_id": department_id,
+                },
+                headers=admin_headers,
+            )
+            if response.status_code != 200:
+                pytest.fail(f"Failed to create P3 {role_name} (status={response.status_code}): {response.text}")
+            user = response.json()
+            login = await test_client.post(
+                "/api/auth/token",
+                data={"username": user["uid"], "password": password},
+            )
+            if login.status_code != 200:
+                pytest.fail(f"Failed to authenticate P3 {role_name}: {login.text}")
+            users[role_name] = {
+                "user": user,
+                "password": password,
+                "headers": {"Authorization": f"Bearer {login.json()['access_token']}"},
+            }
+        yield users
+    finally:
+        for item in users.values():
+            await test_client.delete(f"/api/auth/users/{item['user']['id']}", headers=admin_headers)
+
+
+@pytest_asyncio.fixture(scope="function")
 async def knowledge_database(
     test_client: httpx.AsyncClient,
     admin_headers: dict[str, str],

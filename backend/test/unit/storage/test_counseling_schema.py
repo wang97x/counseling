@@ -55,7 +55,7 @@ def test_counseling_schema_v2_adds_minimal_workflow_guards() -> None:
     """v2 同时拥有风险历史、追加更正和数据库不可变保护。"""
     migration_sql = "\n".join(schema.COUNSELING_SCHEMA_V2_STATEMENTS)
 
-    assert schema.COUNSELING_SCHEMA_VERSION == 14
+    assert schema.COUNSELING_SCHEMA_VERSION == 16
     assert "current_risk_level" in migration_sql
     assert "counseling_risk_events" in migration_sql
     assert "counseling_record_corrections" in migration_sql
@@ -88,7 +88,7 @@ def test_counseling_schema_v6_adds_assessments_and_appointments() -> None:
     """v6 保存冻结量表结果与带乐观版本的内部预约。"""
     migration_sql = "\n".join(schema.COUNSELING_SCHEMA_V6_STATEMENTS)
 
-    assert schema.COUNSELING_SCHEMA_VERSION == 14
+    assert schema.COUNSELING_SCHEMA_VERSION == 16
     assert "counseling_assessment_results" in migration_sql
     assert "scale_code = 'phq9' AND scale_version = 1" in migration_sql
     assert "trg_counseling_assessments_immutable" in migration_sql

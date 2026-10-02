@@ -9,6 +9,7 @@ from server.routers.agent_invocation_eval_router import agent_invocation_eval_ro
 from server.routers.agent_router import agent_router
 from server.routers.chat_router import chat
 from server.routers.counseling_admin_router import counseling_admin
+from server.routers.counseling_collaboration_router import collaboration, external_claim
 from server.routers.counseling_governance_router import counseling_governance
 from server.routers.counseling_router import counseling
 from server.routers.dashboard_router import dashboard
@@ -42,6 +43,8 @@ router.include_router(chat)  # /api/chat/* 对话线程、消息历史与附件
 router.include_router(counseling_governance)  # /api/counseling/data-use-notice 与审计
 router.include_router(counseling)  # /api/counseling/students* 学生档案
 router.include_router(counseling_admin)  # /api/counseling/admin* 业务管理聚合
+router.include_router(collaboration)  # /api/counseling/collaboration* 授权协作与外发
+router.include_router(external_claim)  # /api/counseling/external-deliveries/claim 一次性领取
 router.include_router(projects)  # /api/projects* 项目创建与选择
 router.include_router(scheduled_agents)  # /api/scheduled-tasks* 用户自建 Agent 定时任务
 

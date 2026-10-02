@@ -3,19 +3,23 @@ export function resolveFrontendAccess(_userRole, businessRoles = []) {
   const roles = new Set(Array.isArray(businessRoles) ? businessRoles : [])
   const isSuperAdmin = roles.has('super_admin')
   const isCounselor = roles.has('counselor')
+  const isSupervisor = roles.has('supervisor')
   const isBusinessAdmin = roles.has('business_admin')
   const canAccessStudentRecords = isCounselor || isBusinessAdmin
   const canAccessStudentDetail = isCounselor
+  const canAccessCounselingCollaboration = isCounselor || isSupervisor || isBusinessAdmin
   const canAccessKnowledge = isCounselor || isBusinessAdmin
   const canUseTechnicalConsole = isSuperAdmin
   const canUsePlatformWorkspace = false
 
   return {
     isCounselor,
+    isSupervisor,
     isBusinessAdmin,
     isSuperAdmin,
     canAccessStudentRecords,
     canAccessStudentDetail,
+    canAccessCounselingCollaboration,
     canCreateStudentRecord: isCounselor,
     canAccessKnowledge,
     canUseTechnicalConsole,
@@ -24,11 +28,13 @@ export function resolveFrontendAccess(_userRole, businessRoles = []) {
     canManagePlatformUsers: isSuperAdmin,
     defaultHome: isSuperAdmin
       ? '/dashboard'
-      : canAccessStudentRecords
-        ? '/students'
-        : canUseTechnicalConsole
-          ? '/agent-manage'
-          : '/',
+      : isSupervisor && !canAccessStudentRecords
+        ? '/collaboration'
+        : canAccessStudentRecords
+          ? '/students'
+          : canUseTechnicalConsole
+            ? '/agent-manage'
+            : '/',
   }
 }
 
@@ -72,6 +78,9 @@ export async function resolveFrontendNavigationRedirect(to, access, loadConversa
 /** 返回角色不满足页面要求时的安全落点。 */
 export function resolveFrontendRouteRedirect(requirements, access) {
   if (requirements.requiresSuperAdmin && !access.canManagePlatformUsers) return access.defaultHome
+  if (requirements.requiresCounselingCollaboration && !access.canAccessCounselingCollaboration) {
+    return access.defaultHome
+  }
   if (requirements.requiresStudentRecords && !access.canAccessStudentRecords) return access.defaultHome
   if (requirements.requiresStudentDetail && !access.canAccessStudentDetail) return access.defaultHome
   if (requirements.requiresKnowledgeManagement && !access.canAccessKnowledge) return access.defaultHome

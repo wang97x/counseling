@@ -11,6 +11,7 @@ class BusinessRole(StrEnum):
     """第一版固定业务角色。"""
 
     COUNSELOR = "counselor"
+    SUPERVISOR = "supervisor"
     BUSINESS_ADMIN = "business_admin"
     SUPER_ADMIN = "super_admin"
 
@@ -21,6 +22,8 @@ class BusinessCapability(StrEnum):
     MANAGE_ASSIGNED_STUDENTS = "students.manage_assigned"
     CREATE_OWN_STUDENT_RECORD = "students.create_own"
     VIEW_DEPARTMENT_STUDENTS = "students.view_department"
+    VIEW_AUTHORIZED_SUPERVISION = "supervision.view_authorized"
+    WRITE_AUTHORIZED_SUPERVISION = "supervision.write_authorized"
     MANAGE_PERSONAL_KNOWLEDGE = "knowledge.personal.manage"
     READ_AUTHORIZED_TEAM_KNOWLEDGE = "knowledge.team.read_authorized"
     MANAGE_TEAM_KNOWLEDGE = "knowledge.team.manage"
@@ -29,6 +32,7 @@ class BusinessCapability(StrEnum):
 
 BUSINESS_ROLE_ORDER = (
     BusinessRole.COUNSELOR,
+    BusinessRole.SUPERVISOR,
     BusinessRole.BUSINESS_ADMIN,
     BusinessRole.SUPER_ADMIN,
 )
@@ -42,6 +46,12 @@ BUSINESS_ROLE_CAPABILITIES = {
             BusinessCapability.READ_AUTHORIZED_TEAM_KNOWLEDGE,
         }
     ),
+    BusinessRole.SUPERVISOR: frozenset(
+        {
+            BusinessCapability.VIEW_AUTHORIZED_SUPERVISION,
+            BusinessCapability.WRITE_AUTHORIZED_SUPERVISION,
+        }
+    ),
     BusinessRole.BUSINESS_ADMIN: frozenset(
         {
             BusinessCapability.VIEW_DEPARTMENT_STUDENTS,
@@ -50,6 +60,7 @@ BUSINESS_ROLE_CAPABILITIES = {
     ),
     BusinessRole.SUPER_ADMIN: frozenset({BusinessCapability.MANAGE_SYSTEM}),
 }
+
 
 def normalize_business_roles(values: Iterable[str | BusinessRole]) -> tuple[BusinessRole, ...]:
     """校验业务角色、去重并按固定顺序返回。"""

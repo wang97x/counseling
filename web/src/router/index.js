@@ -76,6 +76,18 @@ const router = createRouter({
       ]
     },
     {
+      path: '/collaboration',
+      component: AppLayout,
+      children: [
+        {
+          path: '',
+          name: 'CounselingCollaboration',
+          component: () => import('../domains/counseling/views/CollaborationView.vue'),
+          meta: { requiresAuth: true, requiresCounselingCollaboration: true }
+        }
+      ]
+    },
+    {
       path: '/students',
       component: AppLayout,
       children: [
@@ -226,7 +238,8 @@ router.beforeEach(async (to) => {
   if (accessRedirect && accessRedirect !== to.path) return accessRedirect
 
   const needsCounselingNotice = to.matched.some((record) => (
-    record.meta.requiresStudentRecords === true || record.meta.requiresStudentDetail === true
+    record.meta.requiresStudentRecords === true || record.meta.requiresStudentDetail === true ||
+    record.meta.requiresCounselingCollaboration === true
   ))
   const isCounselingNotice = to.matched.some(
     (record) => record.meta.isCounselingNotice === true

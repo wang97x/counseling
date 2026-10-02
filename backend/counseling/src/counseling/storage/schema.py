@@ -1,9 +1,10 @@
 """心理辅导领域的 PostgreSQL Schema 版本与迁移。"""
+# ruff: noqa: E501
 
 from sqlalchemy import text
 from yuxi.storage.postgres.manager import SCHEMA_VERSION_TABLE, PostgresManager, pg_manager
 
-COUNSELING_SCHEMA_VERSION = 14
+COUNSELING_SCHEMA_VERSION = 16
 COUNSELING_SCHEMA_V1_STATEMENTS = (
     """
     CREATE TABLE IF NOT EXISTS counseling_students (
@@ -1047,6 +1048,345 @@ COUNSELING_SCHEMA_V14_STATEMENTS = (
     """,
 )
 
+COUNSELING_SCHEMA_V15_STATEMENTS = (
+    "ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS business_roles JSONB",
+    "UPDATE users SET business_roles = '[]'::jsonb WHERE business_roles IS NULL",
+    "ALTER TABLE IF EXISTS users ALTER COLUMN business_roles SET DEFAULT '[]'::jsonb",
+    "ALTER TABLE IF EXISTS users ALTER COLUMN business_roles SET NOT NULL",
+    "ALTER TABLE users DROP CONSTRAINT IF EXISTS ck_users_business_roles",
+    """
+    ALTER TABLE users ADD CONSTRAINT ck_users_business_roles
+    CHECK (jsonb_typeof(business_roles) = 'array'
+           AND business_roles <@ '["counselor", "supervisor", "business_admin", "super_admin"]'::jsonb)
+    """,
+    """
+    CREATE TABLE counseling_supervision_authorizations (
+        id VARCHAR(64) PRIMARY KEY,
+        student_id INTEGER NOT NULL REFERENCES counseling_students(id),
+        department_id INTEGER NOT NULL REFERENCES departments(id),
+        counselor_id INTEGER NOT NULL REFERENCES users(id),
+        supervisor_id INTEGER NOT NULL REFERENCES users(id),
+        scopes JSONB NOT NULL,
+        purpose VARCHAR(500) NOT NULL,
+        effective_from TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        expires_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        status VARCHAR(16) NOT NULL DEFAULT 'pending',
+        version INTEGER NOT NULL DEFAULT 1,
+        approved_by INTEGER REFERENCES users(id),
+        approved_at TIMESTAMP WITHOUT TIME ZONE,
+        rejected_by INTEGER REFERENCES users(id),
+        rejected_at TIMESTAMP WITHOUT TIME ZONE,
+        revoked_by INTEGER REFERENCES users(id),
+        revoked_at TIMESTAMP WITHOUT TIME ZONE,
+        decision_note VARCHAR(1000),
+        request_id VARCHAR(64) NOT NULL,
+        created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+        CONSTRAINT uq_counseling_supervision_auth_request UNIQUE (counselor_id, request_id),
+        CONSTRAINT ck_counseling_supervision_auth_status CHECK (status IN ('pending', 'active', 'rejected', 'revoked')),
+        CONSTRAINT ck_counseling_supervision_auth_window CHECK (expires_at > effective_from),
+        CONSTRAINT ck_counseling_supervision_auth_scopes CHECK (
+            jsonb_typeof(scopes) = 'array' AND jsonb_array_length(scopes) > 0
+            AND scopes <@ '["case_overview", "supervision_feedback", "supervision_summary"]'::jsonb
+        ),
+        CONSTRAINT ck_counseling_supervision_auth_metadata CHECK (
+            (status = 'pending' AND approved_by IS NULL AND rejected_by IS NULL AND revoked_by IS NULL)
+            OR (status = 'active' AND approved_by IS NOT NULL AND approved_at IS NOT NULL AND rejected_by IS NULL AND revoked_by IS NULL)
+            OR (status = 'rejected' AND rejected_by IS NOT NULL AND rejected_at IS NOT NULL AND approved_by IS NULL AND revoked_by IS NULL)
+            OR (status = 'revoked' AND revoked_by IS NOT NULL AND revoked_at IS NOT NULL)
+        )
+    )
+    """,
+    "CREATE INDEX ix_counseling_supervision_auth_supervisor ON counseling_supervision_authorizations(supervisor_id, status, expires_at)",
+    "CREATE INDEX ix_counseling_supervision_auth_student ON counseling_supervision_authorizations(student_id, created_at)",
+    """
+    CREATE TABLE counseling_supervision_materials (
+        id VARCHAR(64) PRIMARY KEY,
+        authorization_id VARCHAR(64) NOT NULL REFERENCES counseling_supervision_authorizations(id),
+        student_id INTEGER NOT NULL REFERENCES counseling_students(id),
+        version_no INTEGER NOT NULL,
+        case_alias VARCHAR(32) NOT NULL,
+        stage VARCHAR(32) NOT NULL,
+        concern_tags JSONB NOT NULL,
+        session_count INTEGER NOT NULL,
+        assessment_count INTEGER NOT NULL,
+        risk_event_count INTEGER NOT NULL,
+        created_by INTEGER NOT NULL REFERENCES users(id),
+        request_id VARCHAR(64) NOT NULL,
+        created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+        CONSTRAINT uq_counseling_supervision_material_version UNIQUE (authorization_id, version_no),
+        CONSTRAINT uq_counseling_supervision_material_request UNIQUE (created_by, request_id),
+        CONSTRAINT ck_counseling_supervision_material_stage CHECK (stage IN ('engagement', 'assessment', 'intervention', 'review', 'closure')),
+        CONSTRAINT ck_counseling_supervision_material_counts CHECK (session_count >= 0 AND assessment_count >= 0 AND risk_event_count >= 0),
+        CONSTRAINT ck_counseling_supervision_material_tags CHECK (
+            jsonb_typeof(concern_tags) = 'array'
+            AND concern_tags <@ '["adjustment", "anxiety", "mood", "relationships", "study", "sleep", "risk", "other"]'::jsonb)
+    )
+    """,
+    """
+    CREATE TABLE counseling_supervision_feedback (
+        id VARCHAR(64) PRIMARY KEY,
+        authorization_id VARCHAR(64) NOT NULL REFERENCES counseling_supervision_authorizations(id),
+        material_id VARCHAR(64) NOT NULL REFERENCES counseling_supervision_materials(id),
+        supervisor_id INTEGER NOT NULL REFERENCES users(id),
+        focus_area VARCHAR(32) NOT NULL,
+        comment TEXT NOT NULL,
+        request_id VARCHAR(64) NOT NULL,
+        created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+        CONSTRAINT uq_counseling_supervision_feedback_request UNIQUE (supervisor_id, request_id),
+        CONSTRAINT ck_counseling_supervision_feedback_focus CHECK (focus_area IN ('case_conceptualization', 'process', 'ethics', 'risk', 'referral'))
+    )
+    """,
+    "CREATE INDEX ix_counseling_supervision_feedback_auth ON counseling_supervision_feedback(authorization_id, created_at)",
+    """
+    CREATE TABLE counseling_supervision_summaries (
+        id VARCHAR(64) PRIMARY KEY,
+        authorization_id VARCHAR(64) NOT NULL REFERENCES counseling_supervision_authorizations(id),
+        material_id VARCHAR(64) NOT NULL REFERENCES counseling_supervision_materials(id),
+        feedback_count INTEGER NOT NULL CHECK (feedback_count >= 0),
+        focus_areas JSONB NOT NULL,
+        counselor_id INTEGER NOT NULL REFERENCES users(id),
+        request_id VARCHAR(64) NOT NULL,
+        created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+        CONSTRAINT uq_counseling_supervision_summary_request UNIQUE (counselor_id, request_id)
+    )
+    """,
+    """
+    CREATE TABLE counseling_external_recipients (
+        id VARCHAR(64) PRIMARY KEY,
+        department_id INTEGER NOT NULL REFERENCES departments(id),
+        recipient_code VARCHAR(64) NOT NULL,
+        display_name VARCHAR(200) NOT NULL,
+        purpose VARCHAR(500) NOT NULL,
+        active BOOLEAN NOT NULL DEFAULT TRUE,
+        verified_by INTEGER NOT NULL REFERENCES users(id),
+        request_id VARCHAR(64) NOT NULL,
+        created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+        CONSTRAINT uq_counseling_external_recipient_code UNIQUE (department_id, recipient_code),
+        CONSTRAINT uq_counseling_external_recipient_request UNIQUE (department_id, request_id)
+    )
+    """,
+    """
+    CREATE TABLE counseling_external_authorizations (
+        id VARCHAR(64) PRIMARY KEY,
+        student_id INTEGER NOT NULL REFERENCES counseling_students(id),
+        department_id INTEGER NOT NULL REFERENCES departments(id),
+        counselor_id INTEGER NOT NULL REFERENCES users(id),
+        recipient_id VARCHAR(64) NOT NULL REFERENCES counseling_external_recipients(id),
+        scopes JSONB NOT NULL,
+        effective_from TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        expires_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        status VARCHAR(16) NOT NULL DEFAULT 'pending',
+        version INTEGER NOT NULL DEFAULT 1,
+        approved_by INTEGER REFERENCES users(id),
+        approved_at TIMESTAMP WITHOUT TIME ZONE,
+        rejected_by INTEGER REFERENCES users(id),
+        rejected_at TIMESTAMP WITHOUT TIME ZONE,
+        revoked_by INTEGER REFERENCES users(id),
+        revoked_at TIMESTAMP WITHOUT TIME ZONE,
+        decision_note VARCHAR(1000),
+        request_id VARCHAR(64) NOT NULL,
+        created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+        CONSTRAINT uq_counseling_external_auth_request UNIQUE (counselor_id, request_id),
+        CONSTRAINT ck_counseling_external_auth_status CHECK (status IN ('pending', 'active', 'rejected', 'revoked')),
+        CONSTRAINT ck_counseling_external_auth_window CHECK (expires_at > effective_from),
+        CONSTRAINT ck_counseling_external_auth_scopes CHECK (
+            jsonb_typeof(scopes) = 'array' AND jsonb_array_length(scopes) > 0
+            AND scopes <@ '["resource_catalog", "referral_status"]'::jsonb
+        ),
+        CONSTRAINT ck_counseling_external_auth_metadata CHECK (
+            (status = 'pending' AND approved_by IS NULL AND rejected_by IS NULL AND revoked_by IS NULL)
+            OR (status = 'active' AND approved_by IS NOT NULL AND approved_at IS NOT NULL AND rejected_by IS NULL AND revoked_by IS NULL)
+            OR (status = 'rejected' AND rejected_by IS NOT NULL AND rejected_at IS NOT NULL AND approved_by IS NULL AND revoked_by IS NULL)
+            OR (status = 'revoked' AND revoked_by IS NOT NULL AND revoked_at IS NOT NULL)
+        )
+    )
+    """,
+    """
+    CREATE TABLE counseling_external_deliveries (
+        id VARCHAR(64) PRIMARY KEY,
+        authorization_id VARCHAR(64) NOT NULL REFERENCES counseling_external_authorizations(id),
+        student_id INTEGER NOT NULL REFERENCES counseling_students(id),
+        counselor_id INTEGER NOT NULL REFERENCES users(id),
+        recipient_id VARCHAR(64) NOT NULL REFERENCES counseling_external_recipients(id),
+        scopes JSONB NOT NULL,
+        resource_codes JSONB NOT NULL,
+        referral_id VARCHAR(64) REFERENCES counseling_referrals(id),
+        token_hash VARCHAR(64) NOT NULL,
+        token_expires_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+        status VARCHAR(16) NOT NULL DEFAULT 'ready',
+        version INTEGER NOT NULL DEFAULT 1,
+        failed_attempts INTEGER NOT NULL DEFAULT 0,
+        last_error VARCHAR(200),
+        delivered_at TIMESTAMP WITHOUT TIME ZONE,
+        withdrawn_at TIMESTAMP WITHOUT TIME ZONE,
+        request_id VARCHAR(64) NOT NULL,
+        created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+        CONSTRAINT uq_counseling_external_delivery_request UNIQUE (counselor_id, request_id),
+        CONSTRAINT uq_counseling_external_delivery_token UNIQUE (token_hash),
+        CONSTRAINT ck_counseling_external_delivery_status CHECK (status IN ('ready', 'delivered', 'failed', 'withdrawn')),
+        CONSTRAINT ck_counseling_external_delivery_window CHECK (token_expires_at > created_at),
+        CONSTRAINT ck_counseling_external_delivery_attempts CHECK (failed_attempts >= 0),
+        CONSTRAINT ck_counseling_external_delivery_scopes CHECK (
+            jsonb_typeof(scopes) = 'array' AND jsonb_array_length(scopes) > 0
+            AND scopes <@ '["resource_catalog", "referral_status"]'::jsonb
+        ),
+        CONSTRAINT ck_counseling_external_delivery_resources CHECK (
+            jsonb_typeof(resource_codes) = 'array' AND jsonb_array_length(resource_codes) <= 20)
+    )
+    """,
+    """
+    CREATE OR REPLACE FUNCTION reject_counseling_p3_append_mutation() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+    BEGIN
+        RAISE EXCEPTION 'counseling P3 append-only record is immutable';
+    END;
+    $$
+    """,
+    "CREATE TRIGGER trg_counseling_supervision_material_immutable BEFORE UPDATE OR DELETE ON counseling_supervision_materials FOR EACH ROW EXECUTE FUNCTION reject_counseling_p3_append_mutation()",
+    "CREATE TRIGGER trg_counseling_supervision_feedback_immutable BEFORE UPDATE OR DELETE ON counseling_supervision_feedback FOR EACH ROW EXECUTE FUNCTION reject_counseling_p3_append_mutation()",
+    "CREATE TRIGGER trg_counseling_supervision_summary_immutable BEFORE UPDATE OR DELETE ON counseling_supervision_summaries FOR EACH ROW EXECUTE FUNCTION reject_counseling_p3_append_mutation()",
+    """
+    CREATE OR REPLACE FUNCTION enforce_counseling_authorization_transition() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+    BEGIN
+        IF NEW.student_id IS DISTINCT FROM OLD.student_id
+           OR NEW.department_id IS DISTINCT FROM OLD.department_id
+           OR NEW.counselor_id IS DISTINCT FROM OLD.counselor_id
+           OR NEW.scopes IS DISTINCT FROM OLD.scopes
+           OR NEW.effective_from IS DISTINCT FROM OLD.effective_from
+           OR NEW.expires_at IS DISTINCT FROM OLD.expires_at
+           OR NEW.request_id IS DISTINCT FROM OLD.request_id
+           OR NEW.version <> OLD.version + 1 THEN
+            RAISE EXCEPTION 'counseling authorization origin or version is invalid';
+        END IF;
+        IF TG_TABLE_NAME = 'counseling_supervision_authorizations' THEN
+            IF NEW.supervisor_id IS DISTINCT FROM OLD.supervisor_id OR NEW.purpose IS DISTINCT FROM OLD.purpose THEN
+                RAISE EXCEPTION 'counseling supervision authorization target is immutable';
+            END IF;
+        ELSIF TG_TABLE_NAME = 'counseling_external_authorizations' THEN
+            IF NEW.recipient_id IS DISTINCT FROM OLD.recipient_id THEN
+                RAISE EXCEPTION 'counseling external authorization recipient is immutable';
+            END IF;
+        END IF;
+        IF OLD.status = 'pending' AND NEW.status IN ('active', 'rejected') THEN
+            RETURN NEW;
+        ELSIF OLD.status = 'active' AND NEW.status = 'revoked' THEN
+            RETURN NEW;
+        END IF;
+        RAISE EXCEPTION 'counseling authorization transition is invalid';
+    END;
+    $$
+    """,
+    "CREATE TRIGGER trg_counseling_supervision_auth_transition BEFORE UPDATE ON counseling_supervision_authorizations FOR EACH ROW EXECUTE FUNCTION enforce_counseling_authorization_transition()",
+    "CREATE TRIGGER trg_counseling_external_auth_transition BEFORE UPDATE ON counseling_external_authorizations FOR EACH ROW EXECUTE FUNCTION enforce_counseling_authorization_transition()",
+    """
+    CREATE OR REPLACE FUNCTION enforce_counseling_delivery_transition() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+    BEGIN
+        IF NEW.authorization_id IS DISTINCT FROM OLD.authorization_id
+           OR NEW.student_id IS DISTINCT FROM OLD.student_id
+           OR NEW.counselor_id IS DISTINCT FROM OLD.counselor_id
+           OR NEW.recipient_id IS DISTINCT FROM OLD.recipient_id
+           OR NEW.scopes IS DISTINCT FROM OLD.scopes
+           OR NEW.resource_codes IS DISTINCT FROM OLD.resource_codes
+           OR NEW.referral_id IS DISTINCT FROM OLD.referral_id
+           OR NEW.request_id IS DISTINCT FROM OLD.request_id
+           OR NEW.version <> OLD.version + 1 THEN
+            RAISE EXCEPTION 'counseling delivery origin or version is invalid';
+        END IF;
+        IF OLD.status = 'ready' AND NEW.status IN ('delivered', 'failed', 'withdrawn') THEN
+            RETURN NEW;
+        ELSIF OLD.status = 'failed' AND NEW.status IN ('ready', 'withdrawn') THEN
+            RETURN NEW;
+        ELSIF OLD.status = 'delivered' AND NEW.status = 'delivered'
+              AND OLD.withdrawn_at IS NULL AND NEW.withdrawn_at IS NOT NULL THEN
+            RETURN NEW;
+        END IF;
+        RAISE EXCEPTION 'counseling delivery transition is invalid';
+    END;
+    $$
+    """,
+    "CREATE TRIGGER trg_counseling_external_delivery_transition BEFORE UPDATE ON counseling_external_deliveries FOR EACH ROW EXECUTE FUNCTION enforce_counseling_delivery_transition()",
+)
+
+
+COUNSELING_SCHEMA_V16_STATEMENTS = (
+    """
+    CREATE OR REPLACE FUNCTION enforce_counseling_authorization_metadata() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+    BEGIN
+        IF NEW.status = 'pending' AND (NEW.approved_by IS NOT NULL OR NEW.rejected_by IS NOT NULL OR NEW.revoked_by IS NOT NULL) THEN
+            RAISE EXCEPTION 'counseling pending authorization metadata is invalid';
+        ELSIF NEW.status = 'active' AND (NEW.approved_by IS NULL OR NEW.approved_at IS NULL OR NEW.rejected_by IS NOT NULL OR NEW.revoked_by IS NOT NULL) THEN
+            RAISE EXCEPTION 'counseling active authorization metadata is invalid';
+        ELSIF NEW.status = 'rejected' AND (NEW.rejected_by IS NULL OR NEW.rejected_at IS NULL OR NEW.approved_by IS NOT NULL OR NEW.revoked_by IS NOT NULL) THEN
+            RAISE EXCEPTION 'counseling rejected authorization metadata is invalid';
+        ELSIF NEW.status = 'revoked' AND (NEW.revoked_by IS NULL OR NEW.revoked_at IS NULL OR NEW.rejected_by IS NOT NULL) THEN
+            RAISE EXCEPTION 'counseling revoked authorization metadata is invalid';
+        END IF;
+        RETURN NEW;
+    END;
+    $$
+    """,
+    "CREATE TRIGGER trg_counseling_supervision_auth_metadata BEFORE INSERT OR UPDATE ON counseling_supervision_authorizations FOR EACH ROW EXECUTE FUNCTION enforce_counseling_authorization_metadata()",
+    "CREATE TRIGGER trg_counseling_external_auth_metadata BEFORE INSERT OR UPDATE ON counseling_external_authorizations FOR EACH ROW EXECUTE FUNCTION enforce_counseling_authorization_metadata()",
+    """
+    CREATE OR REPLACE FUNCTION enforce_counseling_p3_relation_consistency() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+    DECLARE
+        expected_student INTEGER;
+        expected_counselor INTEGER;
+        expected_recipient VARCHAR(64);
+        expected_authorization VARCHAR(64);
+        expected_department INTEGER;
+    BEGIN
+        IF TG_TABLE_NAME = 'counseling_supervision_materials' THEN
+            SELECT student_id INTO expected_student
+            FROM counseling_supervision_authorizations WHERE id = NEW.authorization_id;
+            IF expected_student IS NULL OR NEW.student_id <> expected_student THEN
+                RAISE EXCEPTION 'counseling supervision material relation is invalid';
+            END IF;
+        ELSIF TG_TABLE_NAME = 'counseling_supervision_feedback' THEN
+            SELECT authorization_id INTO expected_authorization
+            FROM counseling_supervision_materials WHERE id = NEW.material_id;
+            IF expected_authorization IS NULL OR NEW.authorization_id <> expected_authorization THEN
+                RAISE EXCEPTION 'counseling supervision feedback relation is invalid';
+            END IF;
+        ELSIF TG_TABLE_NAME = 'counseling_supervision_summaries' THEN
+            SELECT authorization_id INTO expected_authorization
+            FROM counseling_supervision_materials WHERE id = NEW.material_id;
+            IF expected_authorization IS NULL OR NEW.authorization_id <> expected_authorization THEN
+                RAISE EXCEPTION 'counseling supervision summary relation is invalid';
+            END IF;
+        ELSIF TG_TABLE_NAME = 'counseling_external_deliveries' THEN
+            SELECT student_id, counselor_id, recipient_id, department_id
+              INTO expected_student, expected_counselor, expected_recipient, expected_department
+            FROM counseling_external_authorizations WHERE id = NEW.authorization_id;
+            IF expected_student IS NULL
+               OR NEW.student_id <> expected_student
+               OR NEW.counselor_id <> expected_counselor
+               OR NEW.recipient_id <> expected_recipient
+               OR NOT EXISTS (
+                   SELECT 1 FROM counseling_external_recipients
+                   WHERE id = NEW.recipient_id AND department_id = expected_department
+               ) THEN
+                RAISE EXCEPTION 'counseling external delivery relation is invalid';
+            END IF;
+        END IF;
+        RETURN NEW;
+    END;
+    $$
+    """,
+    "CREATE TRIGGER trg_counseling_supervision_material_relation BEFORE INSERT OR UPDATE ON counseling_supervision_materials FOR EACH ROW EXECUTE FUNCTION enforce_counseling_p3_relation_consistency()",
+    "CREATE TRIGGER trg_counseling_supervision_feedback_relation BEFORE INSERT OR UPDATE ON counseling_supervision_feedback FOR EACH ROW EXECUTE FUNCTION enforce_counseling_p3_relation_consistency()",
+    "CREATE TRIGGER trg_counseling_supervision_summary_relation BEFORE INSERT OR UPDATE ON counseling_supervision_summaries FOR EACH ROW EXECUTE FUNCTION enforce_counseling_p3_relation_consistency()",
+    "CREATE TRIGGER trg_counseling_external_delivery_relation BEFORE INSERT OR UPDATE ON counseling_external_deliveries FOR EACH ROW EXECUTE FUNCTION enforce_counseling_p3_relation_consistency()",
+)
+
+
 COUNSELING_SCHEMA_STATEMENTS = (
     COUNSELING_SCHEMA_V1_STATEMENTS
     + COUNSELING_SCHEMA_V2_STATEMENTS
@@ -1062,6 +1402,8 @@ COUNSELING_SCHEMA_STATEMENTS = (
     + COUNSELING_SCHEMA_V12_STATEMENTS
     + COUNSELING_SCHEMA_V13_STATEMENTS
     + COUNSELING_SCHEMA_V14_STATEMENTS
+    + COUNSELING_SCHEMA_V15_STATEMENTS
+    + COUNSELING_SCHEMA_V16_STATEMENTS
 )
 
 
@@ -1094,7 +1436,7 @@ async def migrate_schema() -> None:
             if actual is not None and actual not in supported_versions:
                 raise RuntimeError(
                     "Unsupported counseling schema version: "
-                    f"{actual}; supported upgrade sources are empty or v1 through v13"
+                    f"{actual}; supported upgrade sources are empty or v1 through v15"
                 )
             if actual != COUNSELING_SCHEMA_VERSION:
                 if actual is None:
@@ -1115,6 +1457,8 @@ async def migrate_schema() -> None:
                         COUNSELING_SCHEMA_V12_STATEMENTS,
                         COUNSELING_SCHEMA_V13_STATEMENTS,
                         COUNSELING_SCHEMA_V14_STATEMENTS,
+                        COUNSELING_SCHEMA_V15_STATEMENTS,
+                        COUNSELING_SCHEMA_V16_STATEMENTS,
                     )
                     statements = tuple(statement for migration in migrations[actual:] for statement in migration)
                 async with pg_manager.async_engine.begin() as connection:

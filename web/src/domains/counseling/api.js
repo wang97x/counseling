@@ -8,8 +8,68 @@ const consultationDraftRoot = (studentId) => `${studentRoot(studentId)}/consulta
 const consultationDraftUrl = (studentId, draftId) => (
   `${consultationDraftRoot(studentId)}/${encodeURIComponent(draftId)}`
 )
+const collaborationRoot = '/api/counseling/collaboration'
+const encoded = (value) => encodeURIComponent(value)
 
 export const counselingApi = {
+  listSupervisionAuthorizations: (studentId) => apiGet(
+    `${collaborationRoot}/supervision-authorizations${studentId ? `?student_id=${encoded(studentId)}` : ''}`,
+  ),
+  createSupervisionAuthorization: (studentId, payload) => apiPost(
+    `${collaborationRoot}/students/${encoded(studentId)}/supervision-authorizations`, payload,
+  ),
+  decideSupervisionAuthorization: (authorizationId, payload) => apiPost(
+    `${collaborationRoot}/supervision-authorizations/${encoded(authorizationId)}/decision`, payload,
+  ),
+  revokeSupervisionAuthorization: (authorizationId, payload) => apiPost(
+    `${collaborationRoot}/supervision-authorizations/${encoded(authorizationId)}/revoke`, payload,
+  ),
+  listSupervisionMaterials: (authorizationId) => apiGet(
+    `${collaborationRoot}/supervision-authorizations/${encoded(authorizationId)}/materials`,
+  ),
+  publishSupervisionMaterial: (studentId, authorizationId, payload) => apiPost(
+    `${collaborationRoot}/students/${encoded(studentId)}/supervision-authorizations/${encoded(authorizationId)}/materials`,
+    payload,
+  ),
+  listSupervisionFeedback: (authorizationId) => apiGet(
+    `${collaborationRoot}/supervision-authorizations/${encoded(authorizationId)}/feedback`,
+  ),
+  createSupervisionFeedback: (authorizationId, payload) => apiPost(
+    `${collaborationRoot}/supervision-authorizations/${encoded(authorizationId)}/feedback`, payload,
+  ),
+  createSupervisionSummary: (authorizationId, payload) => apiPost(
+    `${collaborationRoot}/supervision-authorizations/${encoded(authorizationId)}/summaries`, payload,
+  ),
+  getQualityDashboard: (window = 'quarter') => apiGet(
+    `${collaborationRoot}/quality-dashboard?window=${encoded(window)}`,
+  ),
+  listExternalRecipients: () => apiGet(`${collaborationRoot}/external-recipients`),
+  createExternalRecipient: (payload) => apiPost(`${collaborationRoot}/external-recipients`, payload),
+  listExternalAuthorizations: (studentId) => apiGet(
+    `${collaborationRoot}/external-authorizations${studentId ? `?student_id=${encoded(studentId)}` : ''}`,
+  ),
+  createExternalAuthorization: (studentId, payload) => apiPost(
+    `${collaborationRoot}/students/${encoded(studentId)}/external-authorizations`, payload,
+  ),
+  decideExternalAuthorization: (authorizationId, payload) => apiPost(
+    `${collaborationRoot}/external-authorizations/${encoded(authorizationId)}/decision`, payload,
+  ),
+  revokeExternalAuthorization: (authorizationId, payload) => apiPost(
+    `${collaborationRoot}/external-authorizations/${encoded(authorizationId)}/revoke`, payload,
+  ),
+  listExternalDeliveries: (studentId) => apiGet(
+    `${collaborationRoot}/students/${encoded(studentId)}/external-deliveries`,
+  ),
+  createExternalDelivery: (studentId, authorizationId, payload) => apiPost(
+    `${collaborationRoot}/students/${encoded(studentId)}/external-authorizations/${encoded(authorizationId)}/deliveries`,
+    payload,
+  ),
+  retryExternalDelivery: (deliveryId, payload) => apiPost(
+    `${collaborationRoot}/external-deliveries/${encoded(deliveryId)}/retry`, payload,
+  ),
+  withdrawExternalDelivery: (deliveryId, payload) => apiPost(
+    `${collaborationRoot}/external-deliveries/${encoded(deliveryId)}/withdraw`, payload,
+  ),
   listStudents: () => apiGet(root),
   listScales: () => apiGet(`${root}/scales`),
   listAssessments: (studentId) => apiGet(`${studentRoot(studentId)}/assessments`),

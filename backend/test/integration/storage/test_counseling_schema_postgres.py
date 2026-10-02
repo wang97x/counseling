@@ -186,7 +186,7 @@ async def test_counseling_v2_migrator_publishes_v9_after_converting_roles(
             risk_hints_exist = await connection.scalar(
                 text("SELECT to_regclass('counseling_risk_hints') IS NOT NULL")
             )
-        assert published_version == 14
+        assert published_version == 16
         assert notice_exists
         assert ai_work_exists and materials_exist
         assert assessments_exist and appointments_exist
@@ -270,7 +270,7 @@ async def test_counseling_v6_rows_upgrade_to_v9_with_frozen_creation_intent(
                     )
                 )
             ).one()
-        assert version == 14
+        assert version == 16
         assert row[5:] == row[:5]
 
         async with scoped_engine.begin() as connection:

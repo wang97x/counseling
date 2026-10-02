@@ -158,6 +158,15 @@ const mainList = computed(() => {
     })
   }
 
+  if (userStore.frontendAccess.canAccessCounselingCollaboration) {
+    items.push({
+      name: '授权协作',
+      path: '/collaboration',
+      icon: ClipboardList,
+      activeIcon: ClipboardList
+    })
+  }
+
   if (userStore.canUseTechnicalConsole) {
     items.push({
       name: '智能体与模型',

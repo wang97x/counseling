@@ -33,6 +33,7 @@ def _require_business_user(actor: User) -> frozenset[BusinessCapability]:
         {
             BusinessCapability.MANAGE_ASSIGNED_STUDENTS,
             BusinessCapability.VIEW_DEPARTMENT_STUDENTS,
+            BusinessCapability.VIEW_AUTHORIZED_SUPERVISION,
         }
     ):
         raise PermissionError("需要心理辅导业务权限")
