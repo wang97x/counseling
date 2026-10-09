@@ -1,4 +1,4 @@
-"""知伴应用对 Yuxi 平台端口的唯一装配入口。"""
+"""心舟应用对 Yuxi 平台端口的唯一装配入口。"""
 
 from counseling.integrations.capabilities import CounselingBusinessCapabilityMapper
 from counseling.integrations.conversation_access import CounselingConversationAccessPolicy

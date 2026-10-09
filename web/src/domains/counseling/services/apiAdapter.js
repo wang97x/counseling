@@ -6,20 +6,12 @@ import {
   mapApiTimelineNode,
   toApiStudentPatch,
 } from './apiMapping.js'
-import { validateCounselingUpload } from './uploadValidation.js'
 
 /** 创建真实接口适配器；缺失能力不会回退到演示数据。 */
 export function createCounselingApiAdapter() {
   return {
-    mode: 'api',
-
     async createStudent(payload) {
       return { status: 'ok', data: await counselingApi.createStudent(payload) }
-    },
-
-    async createConversation(payload) {
-      const { student_id: studentId, ...request } = payload
-      return { status: 'ok', data: await counselingApi.createConversation(studentId, request) }
     },
 
     async listStudents(filters = {}) {
@@ -198,64 +190,6 @@ export function createCounselingApiAdapter() {
       return {
         status: 'ok',
         data: await counselingApi.publishRiskHintEvaluation(payload),
-      }
-    },
-
-    async createRecordDraft(studentId, file, requestId) {
-      const validationError = validateCounselingUpload(file)
-      if (validationError) return validationError
-      return { status: 'ok', data: mapApiRecordDraft(await counselingApi.createRecordDraft(studentId, file, requestId)) }
-    },
-
-    async listRecordDrafts(studentId) {
-      const response = await counselingApi.listRecordDrafts(studentId)
-      const items = response?.drafts || response?.items || response || []
-      return { status: 'ok', data: items.map(mapApiRecordDraft) }
-    },
-
-    async updateParsedText(studentId, draftId, expectedVersion, parsedText) {
-      const data = await counselingApi.updateRecordParsedText(studentId, draftId, {
-        expected_version: expectedVersion,
-        parsed_text: parsedText,
-      })
-      return { status: 'ok', data: mapApiRecordDraft(data) }
-    },
-
-    async generateSummary(studentId, draftId, expectedVersion, requestId) {
-      const data = await counselingApi.generateRecordSummary(studentId, draftId, {
-        expected_version: expectedVersion,
-        request_id: requestId,
-      })
-      return { status: 'ok', data: mapApiRecordDraft(data) }
-    },
-
-    async updateSummary(studentId, draftId, expectedVersion, summary) {
-      const data = await counselingApi.updateRecordSummary(studentId, draftId, {
-        expected_version: expectedVersion,
-        summary: {
-          schema_version: 1,
-          sections: summary.sections.map(({ title, content }) => ({ title, content })),
-        },
-      })
-      return { status: 'ok', data: mapApiRecordDraft(data) }
-    },
-
-    async buildArchivePreview(studentId, draftId, expectedVersion) {
-      return {
-        status: 'ok',
-        data: await counselingApi.previewRecordArchive(studentId, draftId, {
-          expected_version: expectedVersion,
-        }),
-      }
-    },
-
-    async confirmRecordDraft(studentId, draftId, expectedVersion, confirmationKey) {
-      return {
-        status: 'ok',
-        data: await counselingApi.confirmRecordDraft(studentId, draftId, {
-          expected_version: expectedVersion,
-          confirmation_key: confirmationKey,
-        }),
       }
     },
 

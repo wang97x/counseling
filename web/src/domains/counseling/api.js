@@ -3,7 +3,6 @@ import { apiGet, apiPost, apiPut } from '@/apis/base'
 const root = '/api/counseling/students'
 const studentRoot = (id) => `${root}/${encodeURIComponent(id)}`
 const draftRoot = (studentId) => `${studentRoot(studentId)}/record-drafts`
-const draftUrl = (studentId, draftId) => `${draftRoot(studentId)}/${encodeURIComponent(draftId)}`
 const consultationDraftRoot = (studentId) => `${studentRoot(studentId)}/consultation-drafts`
 const consultationDraftUrl = (studentId, draftId) => (
   `${consultationDraftRoot(studentId)}/${encodeURIComponent(draftId)}`
@@ -123,7 +122,6 @@ export const counselingApi = {
   getDataUseNotice: () => apiGet('/api/counseling/data-use-notice'),
   acknowledgeDataUseNotice: (version) => apiPost(
     '/api/counseling/data-use-notice/acknowledgments', { version }),
-  createConversation: (studentId, payload) => apiPost(`${studentRoot(studentId)}/conversations`, payload),
   createAIWorkItem: (studentId, payload) => apiPost(`${studentRoot(studentId)}/ai-work-items`, payload),
   preflightMaterial: (studentId, workItemId, payload) => apiPost(
     `${studentRoot(studentId)}/ai-work-items/${encodeURIComponent(workItemId)}/materials/preflight`,
@@ -165,26 +163,4 @@ export const counselingApi = {
   createRiskEvent: (studentId, payload) => apiPost(`${studentRoot(studentId)}/risk-events`, payload),
   getDepartmentSummary: () => apiGet('/api/counseling/admin/summary'),
   listRecordDrafts: (studentId) => apiGet(draftRoot(studentId)),
-  getRecordDraft: (studentId, draftId) => apiGet(draftUrl(studentId, draftId)),
-  createRecordDraft(studentId, file, requestId) {
-    const body = new FormData()
-    body.append('file', file)
-    body.append('request_id', requestId)
-    return apiPost(draftRoot(studentId), body)
-  },
-  updateRecordParsedText: (studentId, draftId, payload) => (
-    apiPut(`${draftUrl(studentId, draftId)}/parsed-text`, payload)
-  ),
-  generateRecordSummary: (studentId, draftId, payload) => (
-    apiPost(`${draftUrl(studentId, draftId)}/summary`, payload)
-  ),
-  updateRecordSummary: (studentId, draftId, payload) => (
-    apiPut(`${draftUrl(studentId, draftId)}/summary`, payload)
-  ),
-  previewRecordArchive: (studentId, draftId, payload) => (
-    apiPost(`${draftUrl(studentId, draftId)}/archive-preview`, payload)
-  ),
-  confirmRecordDraft: (studentId, draftId, payload) => (
-    apiPost(`${draftUrl(studentId, draftId)}/confirm`, payload)
-  ),
 }

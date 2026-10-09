@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "zhiban-counseling"
 version = "0.1.0"
-description = "知伴心理辅导业务包"
+description = "心舟心理辅导业务包"
 requires-python = ">=3.12,<3.14"
 dependencies = [
     "fastapi>=0.121",

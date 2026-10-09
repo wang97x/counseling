@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ArrowRight, Plus, RefreshCw, RotateCcw, Search, UserRound } from '@lucide/vue'
+import { ArrowRight, Plus, RefreshCw, Search, UserRound } from '@lucide/vue'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import RiskTag from '../components/RiskTag.vue'
 import { counselingWorkspaceService } from '../workspaceService.js'
@@ -74,14 +74,7 @@ async function createStudent() {
   }
 }
 
-async function resetDemo() {
-  await service.resetDemo()
-  Object.assign(filters, { query: '', riskLevel: undefined, status: undefined })
-  await loadStudents()
-}
-
 function canOpen(item) {
-  if (service.mode === 'demo') return true
   return userStore.businessRoles.includes('counselor') &&
     Number(item.counselorId) === Number(userStore.userId)
 }
@@ -98,7 +91,7 @@ function openStudent(item) {
 }
 
 function clearFilters() {
-  Object.assign(filters, { query: '', riskLevel: undefined, status: undefined, appointment: undefined })
+  Object.assign(filters, { query: '', riskLevel: undefined, status: undefined })
   void loadStudents()
 }
 
@@ -108,15 +101,11 @@ onMounted(loadStudents)
 <template>
   <div class="records-page">
     <PageHeader title="心理辅导档案" :loading="loading" :show-border="true">
-      <template #info><a-tag v-if="service.mode === 'demo'" color="gold">演示数据</a-tag></template>
       <template #actions>
-        <a-button v-if="service.mode === 'demo'" aria-label="重置演示数据" title="重置演示数据" @click="resetDemo">
-          <template #icon><RotateCcw :size="15" /></template>重置演示
-        </a-button>
         <a-button aria-label="刷新档案列表" title="刷新档案列表" :disabled="loading" @click="loadStudents">
           <template #icon><RefreshCw :size="15" /></template>刷新
         </a-button>
-        <a-button v-if="service.mode === 'api' && userStore.canCreateStudentRecord" type="primary" aria-label="新建档案" title="新建档案" @click="openCreate">
+        <a-button v-if="userStore.canCreateStudentRecord" type="primary" aria-label="新建档案" title="新建档案" @click="openCreate">
           <template #icon><Plus :size="15" /></template>新建档案
         </a-button>
       </template>
@@ -142,16 +131,8 @@ onMounted(loadStudents)
         <article><span>待跟进风险事件</span><strong>{{ departmentSummary.open_risk_event_count }}</strong></article>
       </section>
 
-      <a-alert
-        v-if="service.mode === 'demo'"
-        type="warning"
-        show-icon
-        message="当前为演示数据模式"
-        description="所有姓名与记录均为虚构内容，变化仅保存在本机浏览器，不构成生产档案或后端完成证据。"
-      />
-
       <section class="filter-bar" aria-label="档案筛选">
-        <a-input v-model:value="filters.query" allow-clear :placeholder="service.mode === 'api' ? '搜索编号或负责人' : '搜索编号、姓名、主诉或负责人'" @pressEnter="loadStudents">
+        <a-input v-model:value="filters.query" allow-clear placeholder="搜索编号或负责人" @pressEnter="loadStudents">
           <template #prefix><Search :size="16" /></template>
         </a-input>
         <a-select v-model:value="filters.riskLevel" allow-clear placeholder="风险" @change="loadStudents">
@@ -162,7 +143,6 @@ onMounted(loadStudents)
         </a-select>
         <a-select v-model:value="filters.status" allow-clear placeholder="状态" @change="loadStudents">
           <a-select-option value="active">辅导中</a-select-option>
-          <a-select-option v-if="service.mode === 'demo'" value="paused">已暂停</a-select-option>
           <a-select-option value="closed">阶段结束</a-select-option>
         </a-select>
         <a-button type="primary" @click="loadStudents">筛选</a-button>
@@ -199,7 +179,7 @@ onMounted(loadStudents)
           </header>
           <div class="card-facts">
             <div><span>当前次数</span><strong>{{ item.sessionCount == null ? '详情可见' : '第 ' + item.sessionCount + ' 次' }}</strong></div>
-            <div><span>状态</span><strong>{{ item.status === 'closed' ? '阶段结束' : item.status === 'paused' ? '已暂停' : '辅导中' }}</strong></div>
+            <div><span>状态</span><strong>{{ item.status === 'closed' ? '阶段结束' : '辅导中' }}</strong></div>
             <div><span>负责人</span><strong>{{ displayCounselor(item) }}</strong></div>
           </div>
           <footer>

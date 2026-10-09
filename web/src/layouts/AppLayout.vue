@@ -134,7 +134,7 @@ const activeConversationThreadId = computed(() => {
   return route.path.startsWith('/agent') ? currentThreadId.value : null
 })
 const organizationName = computed(() => {
-  return infoStore.organization.name || infoStore.branding.name || '知伴'
+  return infoStore.organization.name || infoStore.branding.name || '心舟'
 })
 
 const mainList = computed(() => {

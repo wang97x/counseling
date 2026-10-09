@@ -18,10 +18,9 @@ test('心理辅导前端代码收敛到独立领域目录', () => {
   for (const path of oldPaths) assert.equal(existsSync(new URL(path, import.meta.url)), false, path)
 })
 
-test('档案会话通过业务 API 创建而不直连通用线程入口', () => {
+test('档案 AI 协作通过业务 API 发起而不直连通用线程入口', () => {
   const api = source('../../src/domains/counseling/api.js')
 
-  assert.match(api, /studentRoot\(studentId\).*\/conversations/)
   assert.match(api, /studentRoot\(studentId\).*\/ai-work-items/)
   assert.match(api, /materials\/import/)
   assert.doesNotMatch(api, /\/api\/chat\/thread/)

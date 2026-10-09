@@ -3,15 +3,15 @@
 
 # 组织信息
 organization:
-  name: "知伴"               # 完整组织名称
+  name: "心舟"               # 完整组织名称
   logo: "/favicon.svg"       # Logo文件路径（放在 web/public 目录下）
   avatar: "/favicon.svg"      # 头像文件路径（放在 web/public 目录下）
   login_bg: "/login-bg.jpg"  # 登录背景图片路径（放在 web/public 目录下）
 
 # 项目信息
 branding:
-  name: "知伴"
-  title: "知伴 · 心理辅导工作台"     # 系统标题
+  name: "心舟"
+  title: "心舟 · 心理辅导工作台"     # 系统标题
   subtitle: "从了解情况开始，让知识支持每一次辅导"   # 副标题（subtitles 为空时使用）
   subtitles:
     - "从了解情况开始，让知识支持每一次辅导"
@@ -20,6 +20,6 @@ branding:
 
 # 页脚信息
 footer:
-  copyright: "© 知伴 2026 v{{YUXI_VERSION}}"
+  copyright: "© 心舟 2026 v{{YUXI_VERSION}}"
   user_agreement_url: "/protocols/user-agreement.template.html"
   privacy_policy_url: "/protocols/privacy-policy.template.html"

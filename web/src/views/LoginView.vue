@@ -42,7 +42,7 @@
             <header class="form-header">
               <!-- 如果是在初始化，显示特定标题 -->
               <h2 v-if="isFirstRun" class="init-title">系统初始化，请创建超级管理员</h2>
-              <p v-else class="welcome-text">欢迎登录知伴</p>
+              <p v-else class="welcome-text">欢迎登录心舟</p>
             </header>
 
             <div class="login-content" :class="{ 'is-initializing': isFirstRun }">
@@ -310,7 +310,7 @@ const brandOrgName = computed(() => {
 })
 const brandName = computed(() => {
   const orgName = brandOrgName.value
-  const brandNameRaw = infoStore.branding?.name?.trim() || '知伴'
+  const brandNameRaw = infoStore.branding?.name?.trim() || '心舟'
 
   if (orgName && brandNameRaw && orgName !== brandNameRaw) {
     return brandNameRaw

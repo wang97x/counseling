@@ -14,25 +14,12 @@ export function mapApiStudent(item) {
       : 'unknown',
     status: item.status === 'closed' ? 'closed' : 'active',
     sessionCount: item.conversation_count == null ? null : Number(item.conversation_count),
-    nextAppointment: undefined,
     recentActivity: item.updated_at ? '档案更新于 ' + item.updated_at.slice(0, 10) : '动态仅负责人可查看',
     counselorId: item.counselor_id == null ? null : Number(item.counselor_id),
     counselor: item.counselor_name || item.counselor_username || (item.counselor_id ? '负责人 #' + item.counselor_id : '未分配'),
     version: Number(item.version || 1),
     closureNote: item.closure_note || '',
     closedAt: item.closed_at || '',
-  }
-}
-
-/** 将档案关联会话映射为可继续的时间轴节点。 */
-export function mapApiConversation(item) {
-  return {
-    id: String(item.id),
-    conversationId: String(item.id),
-    occurredAt: item.created_at || '',
-    title: item.title || '辅导会话',
-    summary: item.summary || '暂无摘要',
-    source: 'assistant',
   }
 }
 
@@ -110,7 +97,6 @@ export function filterApiStudents(items, filters = {}) {
       .some((value) => String(value).toLowerCase().includes(query)))
     .filter((item) => !filters.riskLevel || item.riskLevel === filters.riskLevel)
     .filter((item) => !filters.status || item.status === filters.status)
-    .filter((item) => filters.appointment !== 'upcoming' || item.nextAppointment)
 }
 
 /** 将工作台可编辑字段收敛为现有更新接口契约。 */

@@ -989,7 +989,7 @@ const steeringRequestIds = reactive(new Set())
 let sendCooldownTimer = null
 // 预设的打招呼文本
 const greetingMessages = [
-  '欢迎使用知伴',
+  '欢迎使用心舟',
   '从了解情况开始，逐步梳理辅导思路',
   '先核对已有信息，再讨论下一步',
   '整理已有资料，为辅导工作提供参考',

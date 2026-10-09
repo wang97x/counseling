@@ -1,4 +1,4 @@
-"""知伴业务角色及其能力映射。"""
+"""心舟业务角色及其能力映射。"""
 
 from __future__ import annotations
 
